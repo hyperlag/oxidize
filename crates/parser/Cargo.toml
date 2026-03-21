@@ -1,0 +1,16 @@
+[package]
+name = "parser"
+description = "Java source → Java AST using tree-sitter-java"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+ir = { path = "../ir" }
+tree-sitter = { workspace = true }
+tree-sitter-java = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }

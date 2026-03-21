@@ -1,0 +1,16 @@
+[package]
+name = "codegen"
+description = "Lowers typed IR to Rust token streams via proc-macro2 + quote"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+ir = { path = "../ir" }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }

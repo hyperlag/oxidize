@@ -1,0 +1,32 @@
+# Rust build artefacts
+/target/
+**/*.rs.bk
+
+# Cargo lock is committed for binaries, not libraries — keep it for the workspace
+# Cargo.lock  # uncomment to ignore
+
+# Editor & IDE
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Generated Rust output from jtrans
+out/
+
+# Java build artefacts (for running differential tests locally)
+**/*.class
+**/*.jar
+
+# OS
+Thumbs.db

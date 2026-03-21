@@ -1,0 +1,22 @@
+[package]
+name = "jtrans"
+description = "Command-line driver for the Java→Rust translator"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "jtrans"
+path = "src/main.rs"
+
+[dependencies]
+parser = { path = "../parser" }
+ir = { path = "../ir" }
+typeck = { path = "../typeck" }
+codegen = { path = "../codegen" }
+java-compat = { path = "../runtime" }
+clap = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
