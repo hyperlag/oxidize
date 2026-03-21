@@ -3,10 +3,6 @@
 //! This crate is responsible for:
 //! 1. Invoking the tree-sitter Java parser to produce a concrete syntax tree.
 //! 2. Walking that CST and emitting [`ir::IrModule`] nodes.
-//!
-//! At Stage 0 the walker is minimal — it only confirms a file can be parsed
-//! without errors (used by the smoke test). Full lowering is implemented in
-//! Stage 1.
 
 pub mod from_node;
 pub mod walker;

@@ -13,3 +13,4 @@ typeck = { path = "../typeck" }
 codegen = { path = "../codegen" }
 java-compat = { path = "../runtime" }
 anyhow = { workspace = true }
+serde_json = { workspace = true }

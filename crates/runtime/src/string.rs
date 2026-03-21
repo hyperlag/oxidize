@@ -80,6 +80,13 @@ impl fmt::Display for JString {
     }
 }
 
+impl Default for JString {
+    /// The empty string — mirrors `new String()` in Java.
+    fn default() -> Self {
+        JString::new("")
+    }
+}
+
 /// Java's `+` string-concatenation operator.
 impl Add for JString {
     type Output = JString;
