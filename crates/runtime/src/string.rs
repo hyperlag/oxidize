@@ -97,6 +97,12 @@ impl Add for JString {
     }
 }
 
+impl Default for JString {
+    fn default() -> Self {
+        JString::new("")
+    }
+}
+
 impl Add<&str> for JString {
     type Output = JString;
 

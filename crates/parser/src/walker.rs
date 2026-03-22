@@ -1,7 +1,7 @@
 //! Top-level parse entry point and CST → IR lowering.
 
 use ir::{
-    decl::{IrClass, IrConstructor, IrField, IrMethod, IrParam, Visibility},
+    decl::{IrClass, IrConstructor, IrField, IrInterface, IrMethod, IrParam, Visibility},
     expr::{BinOp, UnOp},
     stmt::{CatchClause, SwitchCase},
     IrDecl, IrExpr, IrModule, IrStmt, IrType,
@@ -101,6 +101,9 @@ fn lower_program(node: Node<'_>, src: &[u8]) -> Result<IrModule, ParseError> {
             "class_declaration" => {
                 module.decls.push(IrDecl::Class(lower_class(child, src)?));
             }
+            "interface_declaration" => {
+                module.decls.push(IrDecl::Interface(lower_interface(child, src)?));
+            }
             _ => {} // skip unknown top-level nodes for Stage 1
         }
     }
@@ -139,8 +142,18 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<IrClass, ParseError> {
 
     let interfaces: Vec<String> = child_by_field(node, "interfaces")
         .map(|ifaces_node| {
+            // tree-sitter-java: super_interfaces → interface_type_list → type_identifier
+            // We flatten one extra level to handle the intermediate wrapper node.
             named_children(ifaces_node)
                 .into_iter()
+                .flat_map(|n| {
+                    if n.kind() == "type_identifier" || n.kind() == "generic_type" {
+                        vec![n]
+                    } else {
+                        // unwrap interface_type_list or similar container
+                        named_children(n)
+                    }
+                })
                 .filter(|n| n.kind() == "type_identifier" || n.kind() == "generic_type")
                 .map(|n| text(n, src).to_owned())
                 .collect()
@@ -180,6 +193,44 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<IrClass, ParseError> {
         fields,
         methods,
         constructors,
+    })
+}
+
+// ─── interface ──────────────────────────────────────────────────────────────
+
+fn lower_interface(node: Node<'_>, src: &[u8]) -> Result<IrInterface, ParseError> {
+    let name = child_by_field(node, "name")
+        .map(|n| text(n, src).to_owned())
+        .unwrap_or_default();
+    let visibility = extract_visibility(node, src);
+
+    // extends clause (interface can extend multiple interfaces)
+    let extends: Vec<String> = child_by_field(node, "extends_interfaces")
+        .map(|ext_node| {
+            named_children(ext_node)
+                .into_iter()
+                .filter(|n| n.kind() == "type_identifier" || n.kind() == "generic_type")
+                .map(|n| text(n, src).to_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let mut methods = Vec::new();
+    if let Some(body) = child_by_field(node, "body") {
+        let mut cur = body.walk();
+        for child in body.named_children(&mut cur) {
+            if child.kind() == "method_declaration" {
+                methods.push(lower_method(child, src)?);
+            }
+        }
+    }
+
+    Ok(IrInterface {
+        name,
+        visibility,
+        type_params: vec![],
+        extends,
+        methods,
     })
 }
 
@@ -698,6 +749,33 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
             let expr = lower_expr(expr_node, src)?;
             Ok(vec![IrStmt::Expr(expr)])
         }
+        // super(...) or this(...) constructor delegation
+        "explicit_constructor_invocation" => {
+            // Distinguish super() vs this() by inspecting unnamed children
+            let is_super = named_children(node)
+                .iter()
+                .any(|ch| ch.kind() == "super")
+                || {
+                    // Also check unnamed children for the "super" keyword token
+                    let src_text = text(node, src);
+                    src_text.trim_start().starts_with("super")
+                };
+            if is_super {
+                let args = child_by_field(node, "arguments")
+                    .map(|args_node| {
+                        let mut c = args_node.walk();
+                        args_node
+                            .named_children(&mut c)
+                            .map(|n| lower_expr(n, src))
+                            .collect::<Result<Vec<_>, _>>()
+                    })
+                    .transpose()?
+                    .unwrap_or_default();
+                Ok(vec![IrStmt::SuperConstructorCall { args }])
+            } else {
+                Ok(vec![]) // this(args) — deferred
+            }
+        }
         // empty statement or not yet handled
         _ => Ok(vec![]),
     }
@@ -773,6 +851,10 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
         }
         "this" => Ok(IrExpr::Var {
             name: "self".to_owned(),
+            ty: IrType::Unknown,
+        }),
+        "super" => Ok(IrExpr::Var {
+            name: "_super".to_owned(),
             ty: IrType::Unknown,
         }),
 

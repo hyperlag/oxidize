@@ -2,7 +2,7 @@
 //! string using `proc-macro2` and `quote`.
 
 use ir::{
-    decl::{IrClass, IrConstructor, IrMethod, IrParam},
+    decl::{IrClass, IrConstructor, IrInterface, IrMethod, IrParam},
     expr::{BinOp, UnOp},
     stmt::SwitchCase,
     IrDecl, IrExpr, IrModule, IrStmt, IrType,
@@ -29,6 +29,31 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
         use java_compat::{JString, JArray, JObject, JNull};
     });
 
+    // Build maps so emit_class can find parent class info and interface methods.
+    let class_map: std::collections::HashMap<String, &IrClass> = module
+        .decls
+        .iter()
+        .filter_map(|d| {
+            if let IrDecl::Class(c) = d {
+                Some((c.name.clone(), c))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let interface_map: std::collections::HashMap<String, &IrInterface> = module
+        .decls
+        .iter()
+        .filter_map(|d| {
+            if let IrDecl::Interface(i) = d {
+                Some((i.name.clone(), i))
+            } else {
+                None
+            }
+        })
+        .collect();
+
     // Collect class names so we know what to emit a main() for
     let mut main_class: Option<String> = None;
 
@@ -38,9 +63,11 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
                 if cls.methods.iter().any(|m| m.name == "main" && m.is_static) {
                     main_class = Some(cls.name.clone());
                 }
-                items.push(emit_class(cls)?);
+                items.push(emit_class(cls, &class_map, &interface_map)?);
             }
-            IrDecl::Interface(_) => {} // Stage 2
+            IrDecl::Interface(iface) => {
+                items.push(emit_interface(iface)?);
+            }
         }
     }
 
@@ -72,45 +99,88 @@ fn format_tokens(ts: TokenStream) -> String {
     }
 }
 
-// ─── class ──────────────────────────────────────────────────────────────────
+// ─── interface ──────────────────────────────────────────────────────────────
 
-fn emit_class(cls: &IrClass) -> Result<TokenStream, CodegenError> {
-    let name = ident(&cls.name);
-
-    // Fields → struct fields
-    let struct_fields: Vec<TokenStream> = cls
-        .fields
+fn emit_interface(iface: &IrInterface) -> Result<TokenStream, CodegenError> {
+    let name = ident(&iface.name);
+    let method_sigs: Vec<TokenStream> = iface
+        .methods
         .iter()
-        .filter(|f| !f.is_static)
-        .map(|f| {
-            let fname = ident(&f.name);
-            let fty = emit_type(&f.ty);
-            quote! { pub #fname: #fty, }
+        .filter(|m| !m.is_static)
+        .map(|m| {
+            let mname = ident(&m.name);
+            let params = emit_params_sig(&m.params);
+            let ret_ty = emit_type(&m.return_ty);
+            if m.return_ty == IrType::Void {
+                quote! { fn #mname(&mut self, #(#params),*); }
+            } else {
+                quote! { fn #mname(&mut self, #(#params),*) -> #ret_ty; }
+            }
         })
         .collect();
+    Ok(quote! {
+        pub trait #name {
+            #(#method_sigs)*
+        }
+    })
+}
+
+// ─── class ──────────────────────────────────────────────────────────────────
+
+fn emit_class(
+    cls: &IrClass,
+    class_map: &std::collections::HashMap<String, &IrClass>,
+    interface_map: &std::collections::HashMap<String, &IrInterface>,
+) -> Result<TokenStream, CodegenError> {
+    let name = ident(&cls.name);
+
+    // Collect the set of method names that a class implements via interfaces.
+    // Those methods will be emitted only inside `impl Interface for Class`
+    // blocks, not in `impl Class`.
+    let interface_methods: std::collections::HashSet<String> = cls
+        .interfaces
+        .iter()
+        .filter_map(|iname| interface_map.get(iname))
+        .flat_map(|iface| iface.methods.iter().map(|m| m.name.clone()))
+        .collect();
+
+    // Own instance fields (not static, not in a parent)
+    let own_instance_fields: Vec<&ir::decl::IrField> =
+        cls.fields.iter().filter(|f| !f.is_static).collect();
+
+    // Struct fields = optional parent struct + own instance fields
+    let mut struct_fields: Vec<TokenStream> = Vec::new();
+    if let Some(parent_name) = &cls.superclass {
+        let parent_ident = ident(parent_name);
+        struct_fields.push(quote! { pub _super: #parent_ident, });
+    }
+    for f in &own_instance_fields {
+        let fname = ident(&f.name);
+        let fty = emit_type(&f.ty);
+        struct_fields.push(quote! { pub #fname: #fty, });
+    }
 
     let struct_def = if struct_fields.is_empty() {
         quote! {
-            #[derive(Debug, Clone)]
+            #[derive(Debug, Clone, Default)]
             pub struct #name;
         }
     } else {
         quote! {
-            #[derive(Debug, Clone)]
+            #[derive(Debug, Clone, Default)]
             pub struct #name {
                 #(#struct_fields)*
             }
         }
     };
 
-    // Static fields → const / static items
+    // Static fields → const items
     let static_items: Vec<TokenStream> = cls
         .fields
         .iter()
         .filter(|f| f.is_static)
         .filter_map(|f| {
             if f.is_final {
-                // emit as a const — only for literal initialisers
                 if let Some(init) = &f.init {
                     if let Some(lit) = as_const_literal(init) {
                         let fname = ident(&f.name.to_uppercase());
@@ -125,25 +195,50 @@ fn emit_class(cls: &IrClass) -> Result<TokenStream, CodegenError> {
         })
         .collect();
 
-    // Methods
+    // Collect non-overriding ancestor methods that need delegation stubs
+    let own_method_names: std::collections::HashSet<String> =
+        cls.methods.iter().map(|m| m.name.clone()).collect();
+
+    let mut delegation_methods: Vec<TokenStream> = Vec::new();
+    if let Some(parent_name) = &cls.superclass {
+        let ancestors = collect_all_ancestor_methods(parent_name, class_map);
+        for ancestor_method in &ancestors {
+            if ancestor_method.is_static {
+                continue;
+            }
+            if own_method_names.contains(&ancestor_method.name) {
+                continue;
+            }
+            if interface_methods.contains(&ancestor_method.name) {
+                continue;
+            }
+            delegation_methods.push(emit_delegation_method(ancestor_method)?);
+        }
+    }
+
+    // Constructors and own methods (excluding interface-implemented methods)
     let mut method_tokens: Vec<TokenStream> = Vec::new();
 
-    // Default constructor if no constructors defined and there are fields
-    if cls.constructors.is_empty() && !struct_fields.is_empty() {
-        // nothing needed — users must call struct literal
+    // Always emit a `pub fn new() -> Self` even when no explicit constructor
+    // exists, so that `new Foo()` calls in the generated code compile.
+    if cls.constructors.is_empty() {
+        method_tokens.push(quote! {
+            pub fn new() -> Self {
+                Self::default()
+            }
+        });
     }
-
-    // Constructors → `new` associated functions
     for ctor in &cls.constructors {
-        method_tokens.push(emit_constructor(ctor, &cls.name)?);
+        method_tokens.push(emit_constructor(ctor, cls)?);
     }
-
-    // Methods
     for method in &cls.methods {
-        method_tokens.push(emit_method(method, &cls.name)?);
+        if !interface_methods.contains(&method.name) {
+            method_tokens.push(emit_method(method, &cls.name)?);
+        }
     }
+    method_tokens.extend(delegation_methods);
 
-    let impl_block = if !method_tokens.is_empty() || !cls.constructors.is_empty() {
+    let impl_block = if !method_tokens.is_empty() {
         quote! {
             impl #name {
                 #(#method_tokens)*
@@ -153,24 +248,205 @@ fn emit_class(cls: &IrClass) -> Result<TokenStream, CodegenError> {
         quote! {}
     };
 
+    // `impl Interface for Class` blocks
+    let mut trait_impls: Vec<TokenStream> = Vec::new();
+    for iface_name in &cls.interfaces {
+        if let Some(iface) = interface_map.get(iface_name) {
+            let iface_ident = ident(iface_name);
+            let impl_methods: Vec<TokenStream> = iface
+                .methods
+                .iter()
+                .filter(|m| !m.is_static)
+                .map(|iface_method| {
+                    // Find the matching implementation in cls.methods
+                    let body_method = cls
+                        .methods
+                        .iter()
+                        .find(|m| m.name == iface_method.name);
+                    match body_method {
+                        Some(m) => emit_trait_method(m),
+                        None => {
+                            // Provide a panic stub for unimplemented methods
+                            let mname = ident(&iface_method.name);
+                            let params = emit_params(&iface_method.params);
+                            let ret_ty = emit_type(&iface_method.return_ty);
+                            if iface_method.return_ty == IrType::Void {
+                                Ok(quote! {
+                                    fn #mname(&mut self, #(#params),*) {
+                                        unimplemented!()
+                                    }
+                                })
+                            } else {
+                                Ok(quote! {
+                                    fn #mname(&mut self, #(#params),*) -> #ret_ty {
+                                        unimplemented!()
+                                    }
+                                })
+                            }
+                        }
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            trait_impls.push(quote! {
+                impl #iface_ident for #name {
+                    #(#impl_methods)*
+                }
+            });
+        }
+    }
+
     Ok(quote! {
         #struct_def
         #(#static_items)*
         #impl_block
+        #(#trait_impls)*
     })
 }
 
-fn emit_constructor(ctor: &IrConstructor, _class_name: &str) -> Result<TokenStream, CodegenError> {
+/// Collect all non-overridden ancestor instance methods accessible through the
+/// `_super` chain.  Returns each method paired with how many `_super` hops are
+/// needed to call it (for delegation).
+fn collect_all_ancestor_methods<'a>(
+    parent_name: &str,
+    class_map: &'a std::collections::HashMap<String, &'a IrClass>,
+) -> Vec<&'a IrMethod> {
+    let Some(parent_cls) = class_map.get(parent_name) else {
+        return vec![];
+    };
+    let mut result: Vec<&IrMethod> = parent_cls
+        .methods
+        .iter()
+        .filter(|m| !m.is_static)
+        .collect();
+
+    // Recursively collect ancestors and add their methods if not already
+    // shadowed by a closer ancestor.
+    if let Some(grandparent_name) = &parent_cls.superclass {
+        let ancestor_methods = collect_all_ancestor_methods(grandparent_name, class_map);
+        let already: std::collections::HashSet<&str> =
+            result.iter().map(|m| m.name.as_str()).collect();
+        for m in ancestor_methods {
+            if !already.contains(m.name.as_str()) {
+                result.push(m);
+            }
+        }
+    }
+    result
+}
+
+/// Emit a delegation stub that forwards a call to `self._super.method(args)`.
+fn emit_delegation_method(method: &IrMethod) -> Result<TokenStream, CodegenError> {
+    let name = ident(&method.name);
+    let params = emit_params(&method.params);
+    let param_names: Vec<TokenStream> = method
+        .params
+        .iter()
+        .map(|p| {
+            let n = ident(&p.name);
+            quote! { #n }
+        })
+        .collect();
+    let ret_ty = emit_type(&method.return_ty);
+    if method.return_ty == IrType::Void {
+        Ok(quote! {
+            pub fn #name(&mut self, #(#params),*) {
+                self._super.#name(#(#param_names),*);
+            }
+        })
+    } else {
+        Ok(quote! {
+            pub fn #name(&mut self, #(#params),*) -> #ret_ty {
+                self._super.#name(#(#param_names),*)
+            }
+        })
+    }
+}
+
+fn emit_constructor(ctor: &IrConstructor, cls: &IrClass) -> Result<TokenStream, CodegenError> {
+    let class_ident = ident(&cls.name);
     let params = emit_params(&ctor.params);
-    let body = emit_stmts(&ctor.body)?;
+
+    // Split body into: optional super() call, then remaining statements.
+    let (super_args, rest_stmts): (Option<Vec<IrExpr>>, Vec<IrStmt>) =
+        split_super_call(&ctor.body);
+
+    // Build the struct initializer.
+    let super_field_init: Option<TokenStream> = if let Some(parent_name) = &cls.superclass {
+        let parent_ident = ident(parent_name);
+        let super_arg_ts: Vec<TokenStream> = super_args
+            .as_ref()
+            .map(|args| args.iter().map(emit_expr).collect::<Result<Vec<_>, _>>())
+            .transpose()?
+            .unwrap_or_default();
+        Some(quote! { _super: #parent_ident::new(#(#super_arg_ts),*), })
+    } else {
+        None
+    };
+
+    // Own field initializers (zero/default values — the constructor body will
+    // overwrite them via `__self__.field = ...` assignments below).
+    let own_field_inits: Vec<TokenStream> = cls
+        .fields
+        .iter()
+        .filter(|f| !f.is_static)
+        .map(|f| {
+            let fname = ident(&f.name);
+            let default_val = field_default_val(&f.ty);
+            quote! { #fname: #default_val, }
+        })
+        .collect();
+
+    let struct_init = quote! {
+        let mut __self__: #class_ident = #class_ident {
+            #super_field_init
+            #(#own_field_inits)*
+        };
+    };
+
+    let body = emit_stmts(&rest_stmts)?;
+
     Ok(quote! {
         pub fn new(#(#params),*) -> Self {
+            #struct_init
             #(#body)*
+            __self__
         }
     })
 }
 
+/// Return the default / zero value for a type, used in constructor struct init.
+fn field_default_val(ty: &IrType) -> TokenStream {
+    match ty {
+        IrType::Bool => quote! { false },
+        IrType::Byte | IrType::Short | IrType::Int | IrType::Long => quote! { 0 },
+        IrType::Float | IrType::Double => quote! { 0.0 },
+        IrType::Char => quote! { '\0' },
+        IrType::String => quote! { JString::from("") },
+        _ => quote! { Default::default() },
+    }
+}
+
+/// Pull the first `SuperConstructorCall` out of a constructor body, returning
+/// `(super_args, remaining_stmts)`.
+fn split_super_call(
+    stmts: &[IrStmt],
+) -> (Option<Vec<IrExpr>>, Vec<IrStmt>) {
+    if let Some(IrStmt::SuperConstructorCall { args }) = stmts.first() {
+        (Some(args.clone()), stmts[1..].to_vec())
+    } else {
+        (None, stmts.to_vec())
+    }
+}
+
 fn emit_method(method: &IrMethod, _class_name: &str) -> Result<TokenStream, CodegenError> {
+    emit_method_with_pub(method, true)
+}
+
+fn emit_trait_method(method: &IrMethod) -> Result<TokenStream, CodegenError> {
+    emit_method_with_pub(method, false)
+}
+
+fn emit_method_with_pub(method: &IrMethod, pub_vis: bool) -> Result<TokenStream, CodegenError> {
     let name = ident(&method.name);
     let params = emit_params(&method.params);
     let ret_ty = emit_type(&method.return_ty);
@@ -178,7 +454,7 @@ fn emit_method(method: &IrMethod, _class_name: &str) -> Result<TokenStream, Code
     let self_param = if method.is_static {
         quote! {}
     } else {
-        quote! { &self, }
+        quote! { &mut self, }
     };
 
     let body = match &method.body {
@@ -192,11 +468,19 @@ fn emit_method(method: &IrMethod, _class_name: &str) -> Result<TokenStream, Code
         quote! { -> #ret_ty }
     };
 
-    Ok(quote! {
-        pub fn #name(#self_param #(#params),*) #ret_clause {
-            #(#body)*
-        }
-    })
+    if pub_vis {
+        Ok(quote! {
+            pub fn #name(#self_param #(#params),*) #ret_clause {
+                #(#body)*
+            }
+        })
+    } else {
+        Ok(quote! {
+            fn #name(#self_param #(#params),*) #ret_clause {
+                #(#body)*
+            }
+        })
+    }
 }
 
 fn emit_params(params: &[IrParam]) -> Vec<TokenStream> {
@@ -206,6 +490,19 @@ fn emit_params(params: &[IrParam]) -> Vec<TokenStream> {
             let name = ident(&p.name);
             let ty = emit_type(&p.ty);
             quote! { mut #name: #ty }
+        })
+        .collect()
+}
+
+/// Like `emit_params` but without `mut` — required for trait method signatures
+/// (Rust does not allow patterns in function declarations without bodies).
+fn emit_params_sig(params: &[IrParam]) -> Vec<TokenStream> {
+    params
+        .iter()
+        .map(|p| {
+            let name = ident(&p.name);
+            let ty = emit_type(&p.ty);
+            quote! { #name: #ty }
         })
         .collect()
 }
@@ -412,6 +709,10 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
             let ts = emit_expr(e)?;
             Ok(quote! { panic!("{:?}", #ts); })
         }
+        IrStmt::SuperConstructorCall { .. } => {
+            // Already consumed by emit_constructor; should not appear here.
+            Ok(quote! {})
+        }
         IrStmt::TryCatch { body, .. } => {
             // Stage 1: emit body only; full exception handling is Stage 4
             let body_ts = emit_stmts(body)?;
@@ -437,6 +738,24 @@ fn emit_switch_case(case: &SwitchCase) -> Result<TokenStream, CodegenError> {
 }
 
 // ─── expressions ─────────────────────────────────────────────────────────────
+
+/// Emit an expression as a place (lvalue) — never adds `.clone()`.
+fn emit_place(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
+    match expr {
+        IrExpr::FieldAccess { receiver, field_name, .. } => {
+            if let IrExpr::Var { name, .. } = receiver.as_ref() {
+                if name == "System" {
+                    let stream = ident(field_name);
+                    return Ok(quote! { std::io::#stream });
+                }
+            }
+            let recv = emit_expr(receiver)?;
+            let field = ident(field_name);
+            Ok(quote! { (#recv).#field })
+        }
+        _ => emit_expr(expr),
+    }
+}
 
 fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
     match expr {
@@ -487,7 +806,11 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 }
             }
             let field = ident(field_name);
-            Ok(quote! { (#recv).#field })
+            // Non-Copy types (JString, class instances) must be cloned when read
+            match ty {
+                IrType::String | IrType::Class(_) => Ok(quote! { (#recv).#field.clone() }),
+                _ => Ok(quote! { (#recv).#field }),
+            }
         }
 
         IrExpr::MethodCall {
@@ -597,13 +920,13 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 let val = emit_expr(rhs)?;
                 return Ok(quote! { (#arr).set(#idx, #val) });
             }
-            let l = emit_expr(lhs)?;
+            let l = emit_place(lhs)?;
             let r = emit_expr(rhs)?;
             Ok(quote! { #l = #r })
         }
 
         IrExpr::CompoundAssign { op, lhs, rhs, .. } => {
-            let l = emit_expr(lhs)?;
+            let l = emit_place(lhs)?;
             let r = emit_expr(rhs)?;
             let compound = match op {
                 BinOp::Add | BinOp::Concat => quote! { += },

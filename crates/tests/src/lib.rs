@@ -248,4 +248,47 @@ mod tests {
     fn test_reverse_int() {
         check("ReverseInt.java", "54321\n1");
     }
+
+    // ── Stage 2: OOP ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_oop_counter() {
+        check("OopCounter.java", "2");
+    }
+
+    #[test]
+    fn test_oop_bank_account() {
+        check("OopBankAccount.java", "Alice\n1300.0");
+    }
+
+    #[test]
+    fn test_oop_inheritance() {
+        check("OopInheritance.java", "Rex\nWoof\nWhiskers\nMeow");
+    }
+
+    #[test]
+    fn test_oop_shapes() {
+        check("OopShapes.java", "Circle\n78.53975\nRectangle\n24.0");
+    }
+
+    #[test]
+    fn test_oop_multi_level() {
+        check(
+            "OopMultiLevel.java",
+            "Toyota\n2020\n4\nToyota car\nTesla\n400\nTesla electric",
+        );
+    }
+
+    #[test]
+    fn test_oop_interface() {
+        check(
+            "OopInterface.java",
+            "Good day, Alice\nFarewell, Alice\nHey Bob!",
+        );
+    }
+
+    #[test]
+    fn test_oop_super_field() {
+        check("OopSuperField.java", "3\n4\nred\nred(3,4)\nred(4,6)");
+    }
 }

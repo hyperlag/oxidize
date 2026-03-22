@@ -42,7 +42,7 @@ pub fn type_check(mut module: IrModule) -> Result<IrModule, TypeckError> {
     for decl in &mut module.decls {
         match decl {
             IrDecl::Class(cls) => check_class(cls, &class_map)?,
-            IrDecl::Interface(_) => {} // interfaces have no bodies at Stage 1
+            IrDecl::Interface(_) => {} // interface methods are abstract — no bodies to check
         }
     }
     Ok(module)
@@ -52,21 +52,16 @@ fn check_class(
     cls: &mut IrClass,
     class_map: &HashMap<String, IrClass>,
 ) -> Result<(), TypeckError> {
-    // Snapshot the class env before mutably iterating
-    let class_env: HashMap<String, IrType> = cls
-        .fields
-        .iter()
-        .map(|f| (f.name.clone(), f.ty.clone()))
-        .collect();
-
-    // Clone what we need to avoid simultaneous mutable+immutable borrows
     let cls_snapshot = cls.clone();
 
     for method in &mut cls.methods {
-        check_method(method, &cls_snapshot, class_map, &class_env)?;
+        check_method(method, &cls_snapshot, class_map)?;
     }
     for ctor in &mut cls.constructors {
-        let mut local_env = class_env.clone();
+        // Constructors use "__self__" as the self-reference name so codegen
+        // can distinguish them from regular methods (which use "self").
+        let mut local_env: HashMap<String, IrType> = HashMap::new();
+        local_env.insert("__self__".to_owned(), IrType::Class(cls_snapshot.name.clone()));
         for p in &ctor.params {
             local_env.insert(p.name.clone(), p.ty.clone());
         }
@@ -75,10 +70,11 @@ fn check_class(
         }
     }
 
-    // annotate field initialisers
+    // annotate field initialisers (static context — no self)
+    let static_env: HashMap<String, IrType> = HashMap::new();
     for field in &mut cls.fields {
         if let Some(init) = &mut field.init {
-            *init = check_expr(init.clone(), &cls_snapshot, class_map, &class_env)?;
+            *init = check_expr(init.clone(), &cls_snapshot, class_map, &static_env)?;
         }
     }
     Ok(())
@@ -88,12 +84,16 @@ fn check_method(
     method: &mut IrMethod,
     cls: &IrClass,
     class_map: &HashMap<String, IrClass>,
-    class_env: &HashMap<String, IrType>,
 ) -> Result<(), TypeckError> {
     let Some(body) = &mut method.body else {
         return Ok(());
     };
-    let mut env = class_env.clone();
+    let mut env: HashMap<String, IrType> = HashMap::new();
+    if !method.is_static {
+        // Add "self" so that bare field references inside instance methods get
+        // rewritten to explicit field-access expressions.
+        env.insert("self".to_owned(), IrType::Class(cls.name.clone()));
+    }
     for p in &method.params {
         env.insert(p.name.clone(), p.ty.clone());
     }
@@ -101,6 +101,73 @@ fn check_method(
         check_stmt(stmt, cls, class_map, &mut env)?;
     }
     Ok(())
+}
+
+/// Returns `"self"`, `"__self__"`, or `""` depending on which self-binding
+/// is currently in scope.
+fn current_self(env: &HashMap<String, IrType>) -> &'static str {
+    if env.contains_key("__self__") {
+        "__self__"
+    } else if env.contains_key("self") {
+        "self"
+    } else {
+        ""
+    }
+}
+
+/// Look up `field_name` in `cls` and its superclass chain.  Returns
+/// `Some((field_type, super_hops))` where `super_hops` is the count of
+/// `_super` field de-references needed to reach the owning class.
+fn lookup_field_with_path(
+    field_name: &str,
+    cls: &IrClass,
+    class_map: &HashMap<String, IrClass>,
+) -> Option<(IrType, Vec<String>)> {
+    if let Some(f) = cls.fields.iter().find(|f| f.name == field_name && !f.is_static) {
+        return Some((f.ty.clone(), vec![]));
+    }
+    if let Some(parent_name) = &cls.superclass {
+        if let Some(parent_cls) = class_map.get(parent_name) {
+            if let Some((ty, mut path)) =
+                lookup_field_with_path(field_name, parent_cls, class_map)
+            {
+                path.insert(0, "_super".to_owned());
+                return Some((ty, path));
+            }
+        }
+    }
+    None
+}
+
+/// Look up method return type in `cls` and its superclass chain.
+fn lookup_method_return_type(
+    method_name: &str,
+    cls: &IrClass,
+    class_map: &HashMap<String, IrClass>,
+) -> Option<IrType> {
+    if let Some(m) = cls.methods.iter().find(|m| m.name == method_name) {
+        return Some(m.return_ty.clone());
+    }
+    if let Some(parent_name) = &cls.superclass {
+        if let Some(parent_cls) = class_map.get(parent_name) {
+            return lookup_method_return_type(method_name, parent_cls, class_map);
+        }
+    }
+    None
+}
+
+/// Build a receiver expression starting from `self_name` and applying
+/// `super_path` hops (each hop adds a `._super` field access).
+fn build_self_path(self_name: &str, super_path: &[String]) -> IrExpr {
+    let base = IrExpr::Var {
+        name: self_name.to_owned(),
+        ty: IrType::Unknown,
+    };
+    super_path.iter().fold(base, |recv, hop| IrExpr::FieldAccess {
+        receiver: Box::new(recv),
+        field_name: hop.clone(),
+        ty: IrType::Unknown,
+    })
 }
 
 fn check_stmt(
@@ -231,6 +298,11 @@ fn check_stmt(
                 }
             }
         }
+        IrStmt::SuperConstructorCall { args } => {
+            for a in args.iter_mut() {
+                *a = check_expr(a.clone(), cls, class_map, env)?;
+            }
+        }
         IrStmt::Break(_) | IrStmt::Continue(_) => {}
     }
     Ok(())
@@ -254,25 +326,67 @@ fn check_expr(
         | IrExpr::LitNull => Ok(expr),
 
         // Variable references
-        IrExpr::Var { name, ty: _ } => {
-            // Check fields and locals
+        IrExpr::Var { ref name, .. } => {
+            let name = name.clone();
+
+            // `super` keyword (lowered as "_super") → rewrite to self._super
+            if name == "_super" {
+                let self_name = current_self(env);
+                if !self_name.is_empty() {
+                    let super_ty = cls
+                        .superclass
+                        .as_ref()
+                        .map(|s| IrType::Class(s.clone()))
+                        .unwrap_or(IrType::Unknown);
+                    return Ok(IrExpr::FieldAccess {
+                        receiver: Box::new(IrExpr::Var {
+                            name: self_name.to_owned(),
+                            ty: IrType::Unknown,
+                        }),
+                        field_name: "_super".to_owned(),
+                        ty: super_ty,
+                    });
+                }
+            }
+
+            // Java `this` in a constructor body got lowered to `self` but we
+            // renamed the self-binding to `__self__` → patch it up.
+            if name == "self" && env.contains_key("__self__") && !env.contains_key("self") {
+                return Ok(IrExpr::Var {
+                    name: "__self__".to_owned(),
+                    ty: IrType::Class(cls.name.clone()),
+                });
+            }
+
+            // Lookup in local env (params, locals, self, __self__)
             if let Some(t) = env.get(&name) {
-                Ok(IrExpr::Var {
+                return Ok(IrExpr::Var {
                     ty: t.clone(),
                     name,
-                })
-            } else if let Some(field) = cls.fields.iter().find(|f| f.name == name) {
-                Ok(IrExpr::Var {
-                    ty: field.ty.clone(),
-                    name,
-                })
-            } else {
-                // Could be a class name (e.g. System) — leave as Unknown
-                Ok(IrExpr::Var {
-                    ty: IrType::Unknown,
-                    name,
-                })
+                });
             }
+
+            // Bare instance-field reference (e.g. `count` for `this.count`) —
+            // rewrite to an explicit field-access expression.
+            let self_name = current_self(env);
+            if !self_name.is_empty() {
+                if let Some((field_ty, super_path)) =
+                    lookup_field_with_path(&name, cls, class_map)
+                {
+                    let receiver = build_self_path(self_name, &super_path);
+                    return Ok(IrExpr::FieldAccess {
+                        receiver: Box::new(receiver),
+                        field_name: name,
+                        ty: field_ty,
+                    });
+                }
+            }
+
+            // Could be a class name (e.g. System) — leave as Unknown
+            Ok(IrExpr::Var {
+                ty: IrType::Unknown,
+                name,
+            })
         }
 
         IrExpr::FieldAccess {
@@ -281,7 +395,64 @@ fn check_expr(
             ..
         } => {
             let receiver = check_expr(*receiver, cls, class_map, env)?;
-            // Special-case: System.out is a PrintStream (treat as void-output sink)
+
+            // The synthetic `_super` field is not in IrClass.fields; handle it
+            // specially so we always get the parent class type.
+            if field_name == "_super" {
+                let super_ty = cls
+                    .superclass
+                    .as_ref()
+                    .map(|s| IrType::Class(s.clone()))
+                    .unwrap_or(IrType::Unknown);
+                return Ok(IrExpr::FieldAccess {
+                    receiver: Box::new(receiver),
+                    field_name,
+                    ty: super_ty,
+                });
+            }
+
+            // When the receiver has a known class type, try to resolve the
+            // field through the inheritance chain and insert `_super` hops as
+            // needed.
+            let recv_ty = receiver.ty().clone();
+            if let IrType::Class(class_name) = &recv_ty {
+                // Use the live `cls` for the current class (not the snapshot in
+                // class_map, though they have the same fields).
+                let lookup_in = if class_name == &cls.name {
+                    cls
+                } else {
+                    match class_map.get(class_name.as_str()) {
+                        Some(c) => c,
+                        None => {
+                            let ty = resolve_field_type(&receiver, &field_name, class_map);
+                            return Ok(IrExpr::FieldAccess {
+                                receiver: Box::new(receiver),
+                                field_name,
+                                ty,
+                            });
+                        }
+                    }
+                };
+
+                if let Some((field_ty, super_path)) =
+                    lookup_field_with_path(&field_name, lookup_in, class_map)
+                {
+                    let new_receiver = super_path.iter().fold(receiver, |r, hop| {
+                        IrExpr::FieldAccess {
+                            receiver: Box::new(r),
+                            field_name: hop.clone(),
+                            ty: IrType::Unknown,
+                        }
+                    });
+                    return Ok(IrExpr::FieldAccess {
+                        receiver: Box::new(new_receiver),
+                        field_name,
+                        ty: field_ty,
+                    });
+                }
+            }
+
+            // Fall back to old resolution (System.out, array.length, etc.)
             let ty = resolve_field_type(&receiver, &field_name, class_map);
             Ok(IrExpr::FieldAccess {
                 receiver: Box::new(receiver),
@@ -463,7 +634,7 @@ fn resolve_field_type(
             IrType::Class("PrintStream".to_owned())
         }
         _ => {
-            // Look up in class map
+            // Look up in class map by variable name
             if let IrExpr::Var { name, .. } = receiver {
                 if let Some(cls) = class_map.get(name.as_str()) {
                     if let Some(f) = cls.fields.iter().find(|f| f.name == field_name) {
@@ -511,20 +682,23 @@ fn resolve_method_return_type(
         _ => {}
     }
 
-    // Look up in the same class
+    // Unqualified call (no receiver) → look in same class first, then traversing
+    // its superclass chain.
     if receiver.is_none() {
-        if let Some(m) = cls.methods.iter().find(|m| m.name == method_name) {
-            return m.return_ty.clone();
+        if let Some(ty) = lookup_method_return_type(method_name, cls, class_map) {
+            return ty;
         }
     }
 
-    // Look up on receiver class
+    // Qualified call — look in the receiver's class.
     if let Some(recv) = receiver {
         let recv_ty = recv.ty();
         if let IrType::Class(class_name) = recv_ty {
             if let Some(recv_cls) = class_map.get(class_name) {
-                if let Some(m) = recv_cls.methods.iter().find(|m| m.name == method_name) {
-                    return m.return_ty.clone();
+                if let Some(ty) =
+                    lookup_method_return_type(method_name, recv_cls, class_map)
+                {
+                    return ty;
                 }
             }
         }
@@ -545,4 +719,3 @@ mod tests {
         assert!(result.is_ok());
     }
 }
-

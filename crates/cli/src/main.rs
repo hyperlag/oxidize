@@ -35,6 +35,7 @@ fn main() -> anyhow::Result<()> {
             tracing_subscriber::EnvFilter::from_default_env()
                 .add_directive("jtrans=info".parse().unwrap()),
         )
+        .with_writer(std::io::stderr)
         .init();
 
     let cli = Cli::parse();
