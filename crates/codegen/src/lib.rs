@@ -259,10 +259,7 @@ fn emit_class(
                 .filter(|m| !m.is_static)
                 .map(|iface_method| {
                     // Find the matching implementation in cls.methods
-                    let body_method = cls
-                        .methods
-                        .iter()
-                        .find(|m| m.name == iface_method.name);
+                    let body_method = cls.methods.iter().find(|m| m.name == iface_method.name);
                     match body_method {
                         Some(m) => emit_trait_method(m),
                         None => {
@@ -313,11 +310,7 @@ fn collect_all_ancestor_methods<'a>(
     let Some(parent_cls) = class_map.get(parent_name) else {
         return vec![];
     };
-    let mut result: Vec<&IrMethod> = parent_cls
-        .methods
-        .iter()
-        .filter(|m| !m.is_static)
-        .collect();
+    let mut result: Vec<&IrMethod> = parent_cls.methods.iter().filter(|m| !m.is_static).collect();
 
     // Recursively collect ancestors and add their methods if not already
     // shadowed by a closer ancestor.
@@ -367,8 +360,7 @@ fn emit_constructor(ctor: &IrConstructor, cls: &IrClass) -> Result<TokenStream, 
     let params = emit_params(&ctor.params);
 
     // Split body into: optional super() call, then remaining statements.
-    let (super_args, rest_stmts): (Option<Vec<IrExpr>>, Vec<IrStmt>) =
-        split_super_call(&ctor.body);
+    let (super_args, rest_stmts): (Option<Vec<IrExpr>>, Vec<IrStmt>) = split_super_call(&ctor.body);
 
     // Build the struct initializer.
     let super_field_init: Option<TokenStream> = if let Some(parent_name) = &cls.superclass {
@@ -428,9 +420,7 @@ fn field_default_val(ty: &IrType) -> TokenStream {
 
 /// Pull the first `SuperConstructorCall` out of a constructor body, returning
 /// `(super_args, remaining_stmts)`.
-fn split_super_call(
-    stmts: &[IrStmt],
-) -> (Option<Vec<IrExpr>>, Vec<IrStmt>) {
+fn split_super_call(stmts: &[IrStmt]) -> (Option<Vec<IrExpr>>, Vec<IrStmt>) {
     if let Some(IrStmt::SuperConstructorCall { args }) = stmts.first() {
         (Some(args.clone()), stmts[1..].to_vec())
     } else {
@@ -516,7 +506,7 @@ fn emit_stmts(stmts: &[IrStmt]) -> Result<Vec<TokenStream>, CodegenError> {
 /// Returns true if `stmts` (at the outermost level, not inside nested loops)
 /// contains a bare `continue` that targets the enclosing for-loop.
 fn for_body_has_continue(stmts: &[IrStmt]) -> bool {
-    stmts.iter().any(|s| for_stmt_has_continue(s))
+    stmts.iter().any(for_stmt_has_continue)
 }
 
 fn for_stmt_has_continue(stmt: &IrStmt) -> bool {
@@ -684,11 +674,15 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
                 }
             })
         }
-        IrStmt::Switch { expr, cases, default } => {
+        IrStmt::Switch {
+            expr,
+            cases,
+            default,
+        } => {
             let expr_ts = emit_expr(expr)?;
             let case_arms = cases
                 .iter()
-                .map(|c| emit_switch_case(c))
+                .map(emit_switch_case)
                 .collect::<Result<Vec<_>, _>>()?;
             let default_arm = if let Some(def) = default {
                 let def_ts = emit_stmts(def)?;
@@ -742,7 +736,11 @@ fn emit_switch_case(case: &SwitchCase) -> Result<TokenStream, CodegenError> {
 /// Emit an expression as a place (lvalue) — never adds `.clone()`.
 fn emit_place(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
     match expr {
-        IrExpr::FieldAccess { receiver, field_name, .. } => {
+        IrExpr::FieldAccess {
+            receiver,
+            field_name,
+            ..
+        } => {
             if let IrExpr::Var { name, .. } = receiver.as_ref() {
                 if name == "System" {
                     let stream = ident(field_name);
@@ -819,10 +817,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             args,
             ..
         } => {
-            let args_ts: Vec<TokenStream> = args
-                .iter()
-                .map(emit_expr)
-                .collect::<Result<_, _>>()?;
+            let args_ts: Vec<TokenStream> = args.iter().map(emit_expr).collect::<Result<_, _>>()?;
 
             // System.out.println(x) → println!("{}", x)  /  System.err.println → eprintln!
             if let Some(recv) = receiver {
@@ -839,7 +834,12 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             } else {
                                 "eprintln"
                             };
-                            return emit_print_call(macro_name, method_name, &args_ts, args.first().map(|e| e.ty()));
+                            return emit_print_call(
+                                macro_name,
+                                method_name,
+                                &args_ts,
+                                args.first().map(|e| e.ty()),
+                            );
                         }
                     }
                 }
@@ -939,7 +939,11 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 BinOp::BitXor => quote! { ^= },
                 BinOp::Shl => quote! { <<= },
                 BinOp::Shr => quote! { >>= },
-                _ => return Err(CodegenError::Unsupported(format!("{op:?} is not a compound-assignment operator"))),
+                _ => {
+                    return Err(CodegenError::Unsupported(format!(
+                        "{op:?} is not a compound-assignment operator"
+                    )))
+                }
             };
             Ok(quote! { #l #compound #r })
         }
@@ -1082,7 +1086,13 @@ fn ident(name: &str) -> Ident {
     // Sanitise name: replace illegal chars with _
     let sanitised: String = name
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     // Avoid clashing with Rust keywords
     let sanitised = match sanitised.as_str() {
@@ -1137,4 +1147,3 @@ mod tests {
         assert!(result.is_ok(), "empty module should generate without error");
     }
 }
-

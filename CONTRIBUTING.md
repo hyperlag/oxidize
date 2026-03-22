@@ -53,7 +53,7 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
 | `chore` | Build system, CI, dependency updates |
 | `docs` | Documentation only |
 | `perf` | Performance improvement |
-| `style` | Code style (whitespace, formatting) — no logic change |
+| `style` | Code style (whitespace, formatting): no logic change |
 
 ### Scopes
 

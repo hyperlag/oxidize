@@ -48,10 +48,7 @@ pub fn type_check(mut module: IrModule) -> Result<IrModule, TypeckError> {
     Ok(module)
 }
 
-fn check_class(
-    cls: &mut IrClass,
-    class_map: &HashMap<String, IrClass>,
-) -> Result<(), TypeckError> {
+fn check_class(cls: &mut IrClass, class_map: &HashMap<String, IrClass>) -> Result<(), TypeckError> {
     let cls_snapshot = cls.clone();
 
     for method in &mut cls.methods {
@@ -61,7 +58,10 @@ fn check_class(
         // Constructors use "__self__" as the self-reference name so codegen
         // can distinguish them from regular methods (which use "self").
         let mut local_env: HashMap<String, IrType> = HashMap::new();
-        local_env.insert("__self__".to_owned(), IrType::Class(cls_snapshot.name.clone()));
+        local_env.insert(
+            "__self__".to_owned(),
+            IrType::Class(cls_snapshot.name.clone()),
+        );
         for p in &ctor.params {
             local_env.insert(p.name.clone(), p.ty.clone());
         }
@@ -123,13 +123,16 @@ fn lookup_field_with_path(
     cls: &IrClass,
     class_map: &HashMap<String, IrClass>,
 ) -> Option<(IrType, Vec<String>)> {
-    if let Some(f) = cls.fields.iter().find(|f| f.name == field_name && !f.is_static) {
+    if let Some(f) = cls
+        .fields
+        .iter()
+        .find(|f| f.name == field_name && !f.is_static)
+    {
         return Some((f.ty.clone(), vec![]));
     }
     if let Some(parent_name) = &cls.superclass {
         if let Some(parent_cls) = class_map.get(parent_name) {
-            if let Some((ty, mut path)) =
-                lookup_field_with_path(field_name, parent_cls, class_map)
+            if let Some((ty, mut path)) = lookup_field_with_path(field_name, parent_cls, class_map)
             {
                 path.insert(0, "_super".to_owned());
                 return Some((ty, path));
@@ -163,11 +166,13 @@ fn build_self_path(self_name: &str, super_path: &[String]) -> IrExpr {
         name: self_name.to_owned(),
         ty: IrType::Unknown,
     };
-    super_path.iter().fold(base, |recv, hop| IrExpr::FieldAccess {
-        receiver: Box::new(recv),
-        field_name: hop.clone(),
-        ty: IrType::Unknown,
-    })
+    super_path
+        .iter()
+        .fold(base, |recv, hop| IrExpr::FieldAccess {
+            receiver: Box::new(recv),
+            field_name: hop.clone(),
+            ty: IrType::Unknown,
+        })
 }
 
 fn check_stmt(
@@ -245,7 +250,11 @@ fn check_stmt(
                 check_stmt(s, cls, class_map, &mut loop_env)?;
             }
         }
-        IrStmt::Switch { expr, cases, default } => {
+        IrStmt::Switch {
+            expr,
+            cases,
+            default,
+        } => {
             *expr = check_expr(expr.clone(), cls, class_map, env)?;
             for case in cases.iter_mut() {
                 case.value = check_expr(case.value.clone(), cls, class_map, env)?;
@@ -283,9 +292,7 @@ fn check_stmt(
                 let mut catch_env = env.clone();
                 catch_env.insert(
                     catch.var.clone(),
-                    IrType::Class(
-                        catch.exception_types.first().cloned().unwrap_or_default(),
-                    ),
+                    IrType::Class(catch.exception_types.first().cloned().unwrap_or_default()),
                 );
                 for s in catch.body.iter_mut() {
                     check_stmt(s, cls, class_map, &mut catch_env)?;
@@ -370,8 +377,7 @@ fn check_expr(
             // rewrite to an explicit field-access expression.
             let self_name = current_self(env);
             if !self_name.is_empty() {
-                if let Some((field_ty, super_path)) =
-                    lookup_field_with_path(&name, cls, class_map)
+                if let Some((field_ty, super_path)) = lookup_field_with_path(&name, cls, class_map)
                 {
                     let receiver = build_self_path(self_name, &super_path);
                     return Ok(IrExpr::FieldAccess {
@@ -437,13 +443,14 @@ fn check_expr(
                 if let Some((field_ty, super_path)) =
                     lookup_field_with_path(&field_name, lookup_in, class_map)
                 {
-                    let new_receiver = super_path.iter().fold(receiver, |r, hop| {
-                        IrExpr::FieldAccess {
-                            receiver: Box::new(r),
-                            field_name: hop.clone(),
-                            ty: IrType::Unknown,
-                        }
-                    });
+                    let new_receiver =
+                        super_path
+                            .iter()
+                            .fold(receiver, |r, hop| IrExpr::FieldAccess {
+                                receiver: Box::new(r),
+                                field_name: hop.clone(),
+                                ty: IrType::Unknown,
+                            });
                     return Ok(IrExpr::FieldAccess {
                         receiver: Box::new(new_receiver),
                         field_name,
@@ -474,7 +481,13 @@ fn check_expr(
                 .into_iter()
                 .map(|a| check_expr(a, cls, class_map, env))
                 .collect::<Result<Vec<_>, _>>()?;
-            let ty = resolve_method_return_type(receiver.as_deref(), &method_name, &args, cls, class_map);
+            let ty = resolve_method_return_type(
+                receiver.as_deref(),
+                &method_name,
+                &args,
+                cls,
+                class_map,
+            );
             Ok(IrExpr::MethodCall {
                 receiver,
                 method_name,
@@ -597,8 +610,14 @@ fn check_expr(
 
 fn binop_type(op: &BinOp, lhs: &IrType, rhs: &IrType) -> IrType {
     match op {
-        BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge
-        | BinOp::And | BinOp::Or => IrType::Bool,
+        BinOp::Eq
+        | BinOp::Ne
+        | BinOp::Lt
+        | BinOp::Le
+        | BinOp::Gt
+        | BinOp::Ge
+        | BinOp::And
+        | BinOp::Or => IrType::Bool,
         BinOp::Concat => IrType::String,
         BinOp::Add if lhs == &IrType::String || rhs == &IrType::String => IrType::String,
         _ => widen_numeric(lhs, rhs),
@@ -672,8 +691,8 @@ fn resolve_method_return_type(
         "charAt" => return IrType::Char,
         "substring" | "toString" | "trim" | "toLowerCase" | "toUpperCase" | "concat"
         | "replace" | "valueOf" => return IrType::String,
-        "equals" | "equalsIgnoreCase" | "contains" | "startsWith" | "endsWith"
-        | "isEmpty" | "matches" => return IrType::Bool,
+        "equals" | "equalsIgnoreCase" | "contains" | "startsWith" | "endsWith" | "isEmpty"
+        | "matches" => return IrType::Bool,
         "indexOf" | "lastIndexOf" | "compareTo" => return IrType::Int,
         "parseInt" => return IrType::Int,
         "parseLong" => return IrType::Long,
@@ -695,9 +714,7 @@ fn resolve_method_return_type(
         let recv_ty = recv.ty();
         if let IrType::Class(class_name) = recv_ty {
             if let Some(recv_cls) = class_map.get(class_name) {
-                if let Some(ty) =
-                    lookup_method_return_type(method_name, recv_cls, class_map)
-                {
+                if let Some(ty) = lookup_method_return_type(method_name, recv_cls, class_map) {
                     return ty;
                 }
             }

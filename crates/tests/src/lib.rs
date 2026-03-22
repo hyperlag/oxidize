@@ -28,16 +28,16 @@ mod tests {
     /// generated Rust, run it, and return its stdout.
     fn translate_and_run(java_file: &str) -> Result<String, String> {
         let java_path = java_dir().join(java_file);
-        let source = fs::read_to_string(&java_path)
-            .map_err(|e| format!("Cannot read {java_file}: {e}"))?;
+        let source =
+            fs::read_to_string(&java_path).map_err(|e| format!("Cannot read {java_file}: {e}"))?;
 
         // ── Translate ─────────────────────────────────────────────────────
-        let module = parser::parse_to_ir(&source)
-            .map_err(|e| format!("Parse error in {java_file}: {e}"))?;
+        let module =
+            parser::parse_to_ir(&source).map_err(|e| format!("Parse error in {java_file}: {e}"))?;
         let module = typeck::type_check(module)
             .map_err(|e| format!("Type-check error in {java_file}: {e}"))?;
-        let rust_code = codegen::generate(&module)
-            .map_err(|e| format!("Codegen error in {java_file}: {e}"))?;
+        let rust_code =
+            codegen::generate(&module).map_err(|e| format!("Codegen error in {java_file}: {e}"))?;
 
         // ── Build temporary Cargo project ─────────────────────────────────
         let tmp = TempDir::new().map_err(|e| e.to_string())?;

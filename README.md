@@ -5,43 +5,42 @@ A source-to-source translator that ingests Java code and produces idiomatic, mem
 ## Goals
 
 - Translate arbitrary Java programs to Rust that compiles without `unsafe` blocks
-- Preserve functional equivalence — translated programs pass the original Java test suite
+- Preserve functional equivalence: translated programs produce identical output to the original Java
 - Emit clean, formatted Rust (`rustfmt` + `clippy`-clean output)
 
 ## Architecture
 
 ```
 Java source (.java)
-      │
+      |
   Java Parser          (tree-sitter-java)
-      │  Java AST
-  Type Resolver        (symbol table, type inference)
-      │  Typed IR
-  IR Lowering          (reflection, generics, lambdas)
-      │  Normalised IR
-  Rust Codegen         (trait mapping, lifetime elision)
-      │  Rust tokens
-  Post-process         (rustfmt, clippy auto-fix)
-      │
-Rust source (.rs) + Cargo.toml
+      |  Java AST
+  IR Lowering          (walker -> typed IR)
+      |  Typed IR
+  Type Checker         (symbol table, inheritance resolution)
+      |  Annotated IR
+  Rust Codegen         (trait mapping, struct composition)
+      |  Rust tokens
+  Post-process         (rustfmt)
+      |
+Rust source (.rs)
 ```
 
 ## Crates
 
 | Crate | Purpose |
 |---|---|
-| `parser` | Wraps `tree-sitter-java`; parses `.java` source into a typed IR |
-| `ir` | Core intermediate representation — `IrType`, `IrExpr`, `IrStmt`, `IrDecl` |
+| `parser` | Wraps `tree-sitter-java`; parses `.java` source into typed IR |
+| `ir` | Core intermediate representation: `IrType`, `IrExpr`, `IrStmt`, `IrDecl` |
 | `typeck` | Type-checking and symbol-resolution pass over the IR |
-| `codegen` | Lowers normalised IR to Rust token streams via `proc-macro2` / `quote` |
+| `codegen` | Lowers annotated IR to Rust token streams via `proc-macro2` / `quote` |
 | `runtime` | `java-compat` crate: `JObject`, `JString`, `JArray<T>`, collection wrappers |
-| `cli` | `jtrans` binary — command-line entry point |
-| `tests` | Differential test suite (Java output vs. translated Rust output) |
+| `cli` | `jtrans` binary: command-line entry point |
+| `tests` | Differential test suite (translated Rust output vs. expected output) |
 
 ## Requirements
 
 - Rust stable toolchain (`rustup` recommended)
-- Java 17+ (for running differential tests)
 
 ## Building
 
@@ -52,7 +51,7 @@ cargo build --release
 The `jtrans` binary will be placed at `target/release/jtrans`. You can also run it directly without installing:
 
 ```bash
-cargo run -p jtrans -- [OPTIONS] <file.java>
+cargo run --bin jtrans -- [OPTIONS] <file.java>
 ```
 
 ## Usage
@@ -77,7 +76,7 @@ Options:
 jtrans HelloWorld.java
 ```
 
-This writes `out/helloworld.rs` — a self-contained Rust source file that depends only on the
+This writes `out/helloworld.rs`: a self-contained Rust source file that depends only on the
 `java-compat` runtime crate (part of this repository).
 
 ### Build and run the translated program
@@ -122,7 +121,7 @@ jtrans Foo.java Bar.java Baz.java --output out/
 
 ### Debug the IR
 
-Use `--dump-ir` to print the typed intermediate representation as JSON — useful when
+Use `--dump-ir` to print the typed intermediate representation as JSON, useful when
 diagnosing translation problems:
 
 ```bash
@@ -137,13 +136,12 @@ Build and run the full workspace unit tests:
 cargo test
 ```
 
-The differential integration tests in `crates/tests` compile and run each Java program
-with `javac`/`java`, then compile and run the translated Rust, and assert the stdout
-matches exactly. They require a JDK on `PATH`:
+The differential integration tests in `crates/tests` compile and run each translated Rust
+program, then assert that stdout matches the expected output. No JDK is required to run
+the tests:
 
 ```bash
-# Run only the differential tests, one at a time to keep system load low
-cargo test -p tests --test-threads=1
+cargo test -p tests --test-threads=4
 ```
 
 ## Project Status
@@ -152,14 +150,14 @@ The project follows a staged delivery plan:
 
 | Stage | Description | Status |
 |---|---|---|
-| 0 | Foundation & tooling — workspace, CI, tree-sitter smoke test | ✅ Complete |
-| 1 | Core language — primitives, control flow, static methods, arrays | ✅ Complete (32/32 differential tests pass) |
-| 2 | Object-oriented core — classes, inheritance, interfaces | Planned |
-| 3 | Generics & collections | Planned |
-| 4 | Concurrency — `synchronized`, `Thread`, `java.util.concurrent` | Planned |
-| 5 | Reflection & dynamic dispatch | Planned |
+| 0 | Foundation and tooling: workspace, CI, tree-sitter smoke test | Complete |
+| 1 | Core language: primitives, control flow, static methods, arrays | Complete (32/32 differential tests pass) |
+| 2 | Object-oriented core: classes, inheritance, interfaces | Complete (39/39 differential tests pass) |
+| 3 | Generics and collections | Planned |
+| 4 | Concurrency: `synchronized`, `Thread`, `java.util.concurrent` | Planned |
+| 5 | Reflection and dynamic dispatch | Planned |
 
-### Stage 1 — Supported Java features
+### Stage 1: Supported Java features
 
 - Primitive types: `int`, `long`, `double`, `float`, `boolean`, `char`, `byte`, `short`
 - `String` literals and concatenation (including mixed primitive + String)
@@ -173,7 +171,21 @@ The project follows a staged delivery plan:
 - `System.out.println` / `System.out.print` / `System.err.println`
 - Ternary expressions
 
-### Java → Rust type mapping
+### Stage 2: Supported Java features
+
+- Instance fields and instance methods
+- Constructors (default and parameterized)
+- Single inheritance (`extends`) with `super(args)` constructor delegation
+- Inherited field and method access through the superclass chain
+- Interface declarations (`interface`) and `implements`
+- Method overriding
+- `this` reference in instance methods and constructors
+- `super` reference for delegating to parent class methods and constructors
+- Classes are translated to Rust `struct`s with a `pub _super: ParentClass` composition field
+- Interface methods are translated to Rust `trait` methods
+- Delegation methods are auto-generated for inherited non-overridden methods
+
+### Java to Rust type mapping
 
 | Java | Rust |
 |---|---|
@@ -187,6 +199,7 @@ The project follows a staged delivery plan:
 | `short` | `i16` |
 | `String` | `java_compat::JString` |
 | `T[]` | `java_compat::JArray<T>` |
+| `ClassName` | `ClassName` (generated struct) |
 
 ## Contributing
 

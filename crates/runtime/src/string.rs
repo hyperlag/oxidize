@@ -33,6 +33,7 @@ impl JString {
     }
 
     /// Java `String.isEmpty()`.
+    #[allow(non_snake_case)]
     pub fn isEmpty(&self) -> bool {
         self.0.is_empty()
     }
