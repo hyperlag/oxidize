@@ -53,7 +53,7 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
 | `chore` | Build system, CI, dependency updates |
 | `docs` | Documentation only |
 | `perf` | Performance improvement |
-| `style` | Code style (whitespace, formatting) — no logic change |
+| `style` | Code style (whitespace, formatting): no logic change |
 
 ### Scopes
 
@@ -109,6 +109,64 @@ cargo test --all-targets
 # 5. Install cargo-nextest (faster test runner, used in differential tests)
 cargo install cargo-nextest --locked
 ```
+
+---
+
+## Making a Release
+
+Releases are automated via `.github/workflows/release.yml`. Pushing a `v*` tag triggers a four-platform build (Linux x86_64, Windows x86_64, macOS Intel, macOS Apple Silicon) and creates a GitHub Release with the binaries attached.
+
+### Version scheme
+
+We follow [Semantic Versioning](https://semver.org/): `vMAJOR.MINOR.PATCH`.
+
+Pre-release suffixes (`alpha`, `beta`, `rc`) are automatically marked as GitHub pre-releases:
+- `v0.3.0-alpha.1` — early preview, may be unstable
+- `v0.3.0-beta.1` — feature-complete, still being tested
+- `v0.3.0-rc.1` — release candidate; only critical fixes accepted
+- `v0.3.0` — stable release
+
+### Release checklist
+
+1. **Ensure `main` is green.** All CI checks on `main` must pass before tagging.
+
+2. **Update `Cargo.toml` versions.** Bump the `version` field in the root `Cargo.toml` (and any crate `Cargo.toml` files that are published independently):
+   ```bash
+   # Example: bump to 0.3.0
+   sed -i 's/^version = ".*"/version = "0.3.0"/' Cargo.toml
+   cargo build --all-targets   # make sure Cargo.lock updates cleanly
+   ```
+
+3. **Commit the version bump.**
+   ```bash
+   git add Cargo.toml Cargo.lock
+   git commit -m "chore: bump version to 0.3.0"
+   git push origin main
+   ```
+
+4. **Tag and push.**
+   ```bash
+   git tag v0.3.0
+   git push origin v0.3.0
+   ```
+   For a pre-release:
+   ```bash
+   git tag v0.3.0-alpha.1
+   git push origin v0.3.0-alpha.1
+   ```
+
+5. **Verify the release.** GitHub Actions will run the release workflow. Once it completes (typically 10–15 minutes), check the [Releases page](../../releases) to confirm all four binaries are attached and the release notes were generated.
+
+6. **Announce** (if this is a stable release): update the README badge if the `latest-release` badge version is hard-coded, and post a note in any relevant discussion channels.
+
+### Hotfixes
+
+If a critical bug is found in a released version:
+
+1. Branch from the release tag: `git checkout -b fix/critical-bug v0.3.0`
+2. Apply the fix, add a test, commit.
+3. Merge back into `main` (and `dev`) via PR.
+4. Tag a patch release: `v0.3.1`.
 
 ---
 

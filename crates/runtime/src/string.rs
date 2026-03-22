@@ -33,6 +33,7 @@ impl JString {
     }
 
     /// Java `String.isEmpty()`.
+    #[allow(non_snake_case)]
     pub fn isEmpty(&self) -> bool {
         self.0.is_empty()
     }
@@ -94,6 +95,12 @@ impl Add for JString {
         s.push_str(&self.0);
         s.push_str(&rhs.0);
         JString(Arc::from(s.as_str()))
+    }
+}
+
+impl Default for JString {
+    fn default() -> Self {
+        JString::new("")
     }
 }
 

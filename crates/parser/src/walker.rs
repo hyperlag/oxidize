@@ -1,14 +1,17 @@
 //! Top-level parse entry point and CST → IR lowering.
 
 use ir::{
-    decl::{IrClass, IrConstructor, IrField, IrMethod, IrParam, Visibility},
+    decl::{IrClass, IrConstructor, IrField, IrInterface, IrMethod, IrParam, Visibility},
     expr::{BinOp, UnOp},
     stmt::{CatchClause, SwitchCase},
     IrDecl, IrExpr, IrModule, IrStmt, IrType,
 };
 use tree_sitter::{Language, Node, Parser};
 
-use crate::{from_node::{node_kind_to_ir_type, primitive_keyword_to_ir_type}, ParseError};
+use crate::{
+    from_node::{node_kind_to_ir_type, primitive_keyword_to_ir_type},
+    ParseError,
+};
 
 /// Parse `source` as Java and return the tree-sitter tree.
 ///
@@ -101,6 +104,11 @@ fn lower_program(node: Node<'_>, src: &[u8]) -> Result<IrModule, ParseError> {
             "class_declaration" => {
                 module.decls.push(IrDecl::Class(lower_class(child, src)?));
             }
+            "interface_declaration" => {
+                module
+                    .decls
+                    .push(IrDecl::Interface(lower_interface(child, src)?));
+            }
             _ => {} // skip unknown top-level nodes for Stage 1
         }
     }
@@ -120,17 +128,14 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<IrClass, ParseError> {
     let mut is_final = false;
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        match child.kind() {
-            "modifiers" => {
-                let mods = text(child, src);
-                if mods.contains("abstract") {
-                    is_abstract = true;
-                }
-                if mods.contains("final") {
-                    is_final = true;
-                }
+        if child.kind() == "modifiers" {
+            let mods = text(child, src);
+            if mods.contains("abstract") {
+                is_abstract = true;
             }
-            _ => {}
+            if mods.contains("final") {
+                is_final = true;
+            }
         }
     }
 
@@ -139,8 +144,18 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<IrClass, ParseError> {
 
     let interfaces: Vec<String> = child_by_field(node, "interfaces")
         .map(|ifaces_node| {
+            // tree-sitter-java: super_interfaces → interface_type_list → type_identifier
+            // We flatten one extra level to handle the intermediate wrapper node.
             named_children(ifaces_node)
                 .into_iter()
+                .flat_map(|n| {
+                    if n.kind() == "type_identifier" || n.kind() == "generic_type" {
+                        vec![n]
+                    } else {
+                        // unwrap interface_type_list or similar container
+                        named_children(n)
+                    }
+                })
                 .filter(|n| n.kind() == "type_identifier" || n.kind() == "generic_type")
                 .map(|n| text(n, src).to_owned())
                 .collect()
@@ -180,6 +195,44 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<IrClass, ParseError> {
         fields,
         methods,
         constructors,
+    })
+}
+
+// ─── interface ──────────────────────────────────────────────────────────────
+
+fn lower_interface(node: Node<'_>, src: &[u8]) -> Result<IrInterface, ParseError> {
+    let name = child_by_field(node, "name")
+        .map(|n| text(n, src).to_owned())
+        .unwrap_or_default();
+    let visibility = extract_visibility(node, src);
+
+    // extends clause (interface can extend multiple interfaces)
+    let extends: Vec<String> = child_by_field(node, "extends_interfaces")
+        .map(|ext_node| {
+            named_children(ext_node)
+                .into_iter()
+                .filter(|n| n.kind() == "type_identifier" || n.kind() == "generic_type")
+                .map(|n| text(n, src).to_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let mut methods = Vec::new();
+    if let Some(body) = child_by_field(node, "body") {
+        let mut cur = body.walk();
+        for child in body.named_children(&mut cur) {
+            if child.kind() == "method_declaration" {
+                methods.push(lower_method(child, src)?);
+            }
+        }
+    }
+
+    Ok(IrInterface {
+        name,
+        visibility,
+        type_params: vec![],
+        extends,
+        methods,
     })
 }
 
@@ -608,15 +661,11 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
             Ok(vec![IrStmt::Return(expr)])
         }
         "break_statement" => {
-            let label = node
-                .named_child(0)
-                .map(|n| text(n, src).to_owned());
+            let label = node.named_child(0).map(|n| text(n, src).to_owned());
             Ok(vec![IrStmt::Break(label)])
         }
         "continue_statement" => {
-            let label = node
-                .named_child(0)
-                .map(|n| text(n, src).to_owned());
+            let label = node.named_child(0).map(|n| text(n, src).to_owned());
             Ok(vec![IrStmt::Continue(label)])
         }
         "throw_statement" => {
@@ -698,6 +747,30 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
             let expr = lower_expr(expr_node, src)?;
             Ok(vec![IrStmt::Expr(expr)])
         }
+        // super(...) or this(...) constructor delegation
+        "explicit_constructor_invocation" => {
+            // Distinguish super() vs this() by inspecting unnamed children
+            let is_super = named_children(node).iter().any(|ch| ch.kind() == "super") || {
+                // Also check unnamed children for the "super" keyword token
+                let src_text = text(node, src);
+                src_text.trim_start().starts_with("super")
+            };
+            if is_super {
+                let args = child_by_field(node, "arguments")
+                    .map(|args_node| {
+                        let mut c = args_node.walk();
+                        args_node
+                            .named_children(&mut c)
+                            .map(|n| lower_expr(n, src))
+                            .collect::<Result<Vec<_>, _>>()
+                    })
+                    .transpose()?
+                    .unwrap_or_default();
+                Ok(vec![IrStmt::SuperConstructorCall { args }])
+            } else {
+                Ok(vec![]) // this(args) — deferred
+            }
+        }
         // empty statement or not yet handled
         _ => Ok(vec![]),
     }
@@ -725,7 +798,9 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
         "true" => Ok(IrExpr::LitBool(true)),
         "false" => Ok(IrExpr::LitBool(false)),
         "null_literal" => Ok(IrExpr::LitNull),
-        "decimal_integer_literal" | "hex_integer_literal" | "octal_integer_literal"
+        "decimal_integer_literal"
+        | "hex_integer_literal"
+        | "octal_integer_literal"
         | "binary_integer_literal" => {
             let raw = text(node, src).to_lowercase();
             if raw.ends_with('l') {
@@ -775,6 +850,10 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
             name: "self".to_owned(),
             ty: IrType::Unknown,
         }),
+        "super" => Ok(IrExpr::Var {
+            name: "_super".to_owned(),
+            ty: IrType::Unknown,
+        }),
 
         // ── parenthesized ─────────────────────────────────────────────────
         "parenthesized_expression" => {
@@ -801,7 +880,8 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
         // ── unary expressions ─────────────────────────────────────────────
         "unary_expression" => {
             let op_text = operator_text(node, src);
-            let operand_node = child_by_field(node, "operand").unwrap_or(node.named_child(0).unwrap_or(node));
+            let operand_node =
+                child_by_field(node, "operand").unwrap_or(node.named_child(0).unwrap_or(node));
             let operand = lower_expr(operand_node, src)?;
             let op = match op_text.as_str() {
                 "-" => UnOp::Neg,
@@ -989,7 +1069,8 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
             let target = child_by_field(node, "type")
                 .map(|n| lower_type(n, src))
                 .unwrap_or(IrType::Unknown);
-            let expr_node = child_by_field(node, "value").unwrap_or(node.named_child(1).unwrap_or(node));
+            let expr_node =
+                child_by_field(node, "value").unwrap_or(node.named_child(1).unwrap_or(node));
             let expr = lower_expr(expr_node, src)?;
             Ok(IrExpr::Cast {
                 target,
@@ -999,7 +1080,8 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
 
         // ── instanceof ────────────────────────────────────────────────────
         "instanceof_expression" => {
-            let expr_node = child_by_field(node, "left").unwrap_or(node.named_child(0).unwrap_or(node));
+            let expr_node =
+                child_by_field(node, "left").unwrap_or(node.named_child(0).unwrap_or(node));
             let check_type = child_by_field(node, "right")
                 .map(|n| lower_type(n, src))
                 .unwrap_or(IrType::Unknown);

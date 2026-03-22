@@ -66,6 +66,13 @@ pub enum IrStmt {
         finally: Option<Vec<IrStmt>>,
     },
 
+    // ── OOP ───────────────────────────────────────────────────────────────
+    /// Super constructor invocation: `super(args)` — only valid as the first
+    /// statement in a sub-class constructor body.
+    SuperConstructorCall {
+        args: Vec<IrExpr>,
+    },
+
     // ── Expressions as statements ─────────────────────────────────────────
     /// Expression statement (method call, assignment, etc.)
     Expr(IrExpr),

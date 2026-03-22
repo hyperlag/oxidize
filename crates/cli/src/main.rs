@@ -35,6 +35,7 @@ fn main() -> anyhow::Result<()> {
             tracing_subscriber::EnvFilter::from_default_env()
                 .add_directive("jtrans=info".parse().unwrap()),
         )
+        .with_writer(std::io::stderr)
         .init();
 
     let cli = Cli::parse();
@@ -48,14 +49,14 @@ fn main() -> anyhow::Result<()> {
             parser::parse_to_ir(&source).with_context(|| format!("parsing {input:?}"))?;
 
         if cli.dump_ir {
-            let json = serde_json::to_string_pretty(&ir_module)
-                .context("serialising IR to JSON")?;
+            let json =
+                serde_json::to_string_pretty(&ir_module).context("serialising IR to JSON")?;
             println!("{json}");
         }
 
         info!("type-checking {input:?}");
-        let typed_module = typeck::type_check(ir_module)
-            .with_context(|| format!("type-checking {input:?}"))?;
+        let typed_module =
+            typeck::type_check(ir_module).with_context(|| format!("type-checking {input:?}"))?;
 
         info!("generating Rust for {input:?}");
         let rust_src = codegen::generate(&typed_module)
