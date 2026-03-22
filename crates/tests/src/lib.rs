@@ -56,6 +56,7 @@ mod tests {
         let output = Command::new("cargo")
             .args(["run", "--quiet"])
             .current_dir(tmp.path())
+            .env("RUSTFLAGS", "") // don't propagate -D warnings into generated code
             .output()
             .map_err(|e| format!("Failed to spawn cargo: {e}"))?;
 
