@@ -11,7 +11,7 @@
 pub mod from_node;
 pub mod walker;
 
-pub use walker::parse_source;
+pub use walker::{parse_source, parse_to_ir};
 
 use thiserror::Error;
 

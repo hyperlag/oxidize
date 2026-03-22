@@ -99,4 +99,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for branching strategy, commit convention
 
 ## License
 
-Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT License](LICENSE-MIT) at your option.
+Licensed under the [GNU General Public License v3.0](LICENSE).

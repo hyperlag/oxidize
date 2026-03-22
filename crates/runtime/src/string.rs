@@ -33,6 +33,11 @@ impl JString {
     }
 
     /// Java `String.isEmpty()`.
+    pub fn isEmpty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Java `String.isEmpty()` — snake_case alias.
     pub fn is_empty_java(&self) -> bool {
         self.0.is_empty()
     }
