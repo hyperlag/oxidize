@@ -292,4 +292,9 @@ mod tests {
     fn test_oop_super_field() {
         check("OopSuperField.java", "3\n4\nred\nred(3,4)\nred(4,6)");
     }
+
+    #[test]
+    fn test_oop_instanceof() {
+        check("OopInstanceof.java", "true\ntrue\nfalse\ntrue");
+    }
 }

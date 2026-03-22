@@ -238,6 +238,28 @@ fn emit_class(
     }
     method_tokens.extend(delegation_methods);
 
+    // `_instanceof` — enables the Java `instanceof` operator.
+    // Checks own class name, each implemented interface name, then delegates
+    // up the `_super` composition chain for inherited types.
+    {
+        let own_name_str = &cls.name;
+        let iface_checks: Vec<TokenStream> = cls
+            .interfaces
+            .iter()
+            .map(|iname| quote! { || type_name == #iname })
+            .collect();
+        let super_check = if cls.superclass.is_some() {
+            quote! { || self._super._instanceof(type_name) }
+        } else {
+            quote! {}
+        };
+        method_tokens.push(quote! {
+            pub fn _instanceof(&self, type_name: &str) -> bool {
+                type_name == #own_name_str #(#iface_checks)* #super_check
+            }
+        });
+    }
+
     let impl_block = if !method_tokens.is_empty() {
         quote! {
             impl #name {
@@ -955,10 +977,15 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
         }
 
         IrExpr::InstanceOf { expr, check_type } => {
-            // No real downcasting at Stage 1 — emit a type-id check stub
-            let _ = check_type;
             let inner = emit_expr(expr)?;
-            Ok(quote! { { let _ = &#inner; true } })
+            let type_name_str = match check_type {
+                IrType::Class(name) => name.clone(),
+                IrType::String => "String".to_string(),
+                // instanceof with a primitive type is a Java compile error;
+                // emit false as a safe fallback.
+                _ => return Ok(quote! { { let _ = &#inner; false } }),
+            };
+            Ok(quote! { #inner._instanceof(#type_name_str) })
         }
     }
 }
