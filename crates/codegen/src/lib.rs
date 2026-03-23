@@ -902,9 +902,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             // Map Java collection constructors to their JList/JMap/JSet equivalents.
             match class.as_str() {
                 "ArrayList" | "LinkedList" | "ArrayDeque" => Ok(quote! { JList::new() }),
-                "HashMap" | "LinkedHashMap" | "TreeMap" | "Hashtable" => {
-                    Ok(quote! { JMap::new() })
-                }
+                "HashMap" | "LinkedHashMap" | "TreeMap" | "Hashtable" => Ok(quote! { JMap::new() }),
                 "HashSet" | "LinkedHashSet" | "TreeSet" => Ok(quote! { JSet::new() }),
                 _ => {
                     let cls = ident(class);
