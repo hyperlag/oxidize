@@ -297,4 +297,21 @@ mod tests {
     fn test_oop_instanceof() {
         check("OopInstanceof.java", "true\ntrue\nfalse\ntrue");
     }
+
+    // ── Stage 3: Generics & Collections ───────────────────────────────────
+
+    #[test]
+    fn test_list_basic() {
+        check("ListBasic.java", "3\n20\n60");
+    }
+
+    #[test]
+    fn test_map_basic() {
+        check("MapBasic.java", "2\n95\ntrue\nfalse");
+    }
+
+    #[test]
+    fn test_generic_class() {
+        check("GenericClass.java", "42\nhello");
+    }
 }

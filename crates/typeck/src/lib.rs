@@ -701,6 +701,16 @@ fn resolve_method_return_type(
         _ => {}
     }
 
+    // Collection methods (JList / JMap / JSet)
+    match method_name {
+        "size" => return IrType::Int,
+        "isEmpty" | "containsKey" | "containsValue" | "contains" | "add" | "remove" => {
+            return IrType::Bool
+        }
+        "clear" | "put" => return IrType::Void,
+        _ => {}
+    }
+
     // Unqualified call (no receiver) → look in same class first, then traversing
     // its superclass chain.
     if receiver.is_none() {

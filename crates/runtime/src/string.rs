@@ -80,6 +80,13 @@ impl From<String> for JString {
     }
 }
 
+impl Default for JString {
+    /// Returns an empty string — the natural zero-value for `java.lang.String`.
+    fn default() -> Self {
+        JString::from("")
+    }
+}
+
 impl fmt::Display for JString {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
@@ -95,12 +102,6 @@ impl Add for JString {
         s.push_str(&self.0);
         s.push_str(&rhs.0);
         JString(Arc::from(s.as_str()))
-    }
-}
-
-impl Default for JString {
-    fn default() -> Self {
-        JString::new("")
     }
 }
 
