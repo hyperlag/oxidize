@@ -142,6 +142,23 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<IrClass, ParseError> {
     let superclass = child_by_field(node, "superclass")
         .map(|n| text(n, src).trim_start_matches("extends").trim().to_owned());
 
+    // Generic type parameters: `class Box<T>` → type_params = ["T"]
+    let type_params: Vec<String> = child_by_field(node, "type_parameters")
+        .map(|tp_node| {
+            named_children(tp_node)
+                .into_iter()
+                .filter(|n| n.kind() == "type_parameter")
+                .filter_map(|tp| {
+                    // First named child of type_parameter is the type_identifier
+                    named_children(tp)
+                        .into_iter()
+                        .find(|n| n.kind() == "type_identifier")
+                        .map(|n| text(n, src).to_owned())
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
     let interfaces: Vec<String> = child_by_field(node, "interfaces")
         .map(|ifaces_node| {
             // tree-sitter-java: super_interfaces → interface_type_list → type_identifier
@@ -189,7 +206,7 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<IrClass, ParseError> {
         visibility,
         is_abstract,
         is_final,
-        type_params: vec![],
+        type_params,
         superclass,
         interfaces,
         fields,
@@ -227,10 +244,26 @@ fn lower_interface(node: Node<'_>, src: &[u8]) -> Result<IrInterface, ParseError
         }
     }
 
+    // Generic type parameters: `interface Comparable<T>` → type_params = ["T"]
+    let type_params: Vec<String> = child_by_field(node, "type_parameters")
+        .map(|tp_node| {
+            named_children(tp_node)
+                .into_iter()
+                .filter(|n| n.kind() == "type_parameter")
+                .filter_map(|tp| {
+                    named_children(tp)
+                        .into_iter()
+                        .find(|n| n.kind() == "type_identifier")
+                        .map(|n| text(n, src).to_owned())
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
     Ok(IrInterface {
         name,
         visibility,
-        type_params: vec![],
+        type_params,
         extends,
         methods,
     })
@@ -335,13 +368,29 @@ fn lower_method(node: Node<'_>, src: &[u8]) -> Result<IrMethod, ParseError> {
         })
         .unwrap_or_default();
 
+    // Generic type parameters: `<T> T identity(T x)` → type_params = ["T"]
+    let type_params: Vec<String> = child_by_field(node, "type_parameters")
+        .map(|tp_node| {
+            named_children(tp_node)
+                .into_iter()
+                .filter(|n| n.kind() == "type_parameter")
+                .filter_map(|tp| {
+                    named_children(tp)
+                        .into_iter()
+                        .find(|n| n.kind() == "type_identifier")
+                        .map(|n| text(n, src).to_owned())
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
     Ok(IrMethod {
         name,
         visibility: vis,
         is_static,
         is_abstract,
         is_final,
-        type_params: vec![],
+        type_params,
         params,
         return_ty,
         body,
@@ -991,8 +1040,21 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
 
         // ── object creation ───────────────────────────────────────────────
         "object_creation_expression" => {
+            // For `new ArrayList<>()` or `new Wrapper<Integer>()`, the type node
+            // is a generic_type.  Extract only the base class name so that
+            // IrExpr::New.class is always a plain identifier like "ArrayList".
             let class = child_by_field(node, "type")
-                .map(|n| text(n, src).to_owned())
+                .map(|n| {
+                    if n.kind() == "generic_type" {
+                        // First named child is the base type_identifier
+                        n.named_child(0)
+                            .map(|base| text(base, src))
+                            .unwrap_or_else(|| text(n, src))
+                    } else {
+                        text(n, src)
+                    }
+                    .to_owned()
+                })
                 .unwrap_or_default();
             let args = child_by_field(node, "arguments")
                 .map(|args_node| {

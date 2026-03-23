@@ -26,7 +26,7 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
     // Emit a use for the runtime crate
     items.push(quote! {
         #[allow(unused_imports)]
-        use java_compat::{JString, JArray, JObject, JNull};
+        use java_compat::{JString, JArray, JObject, JNull, JList, JMap, JSet};
     });
 
     // Build maps so emit_class can find parent class info and interface methods.
@@ -134,6 +134,22 @@ fn emit_class(
 ) -> Result<TokenStream, CodegenError> {
     let name = ident(&cls.name);
 
+    // Generic type parameters: `struct Foo<T>` / `impl<T: Clone + Default + Debug> Foo<T>`
+    let (struct_generics, impl_generics) = if cls.type_params.is_empty() {
+        (quote! {}, quote! {})
+    } else {
+        let names: Vec<_> = cls.type_params.iter().map(|tp| ident(tp)).collect();
+        let bounds: Vec<_> = cls
+            .type_params
+            .iter()
+            .map(|tp| {
+                let id = ident(tp);
+                quote! { #id: Clone + Default + ::std::fmt::Debug }
+            })
+            .collect();
+        (quote! { <#(#names),*> }, quote! { <#(#bounds),*> })
+    };
+
     // Collect the set of method names that a class implements via interfaces.
     // Those methods will be emitted only inside `impl Interface for Class`
     // blocks, not in `impl Class`.
@@ -163,12 +179,12 @@ fn emit_class(
     let struct_def = if struct_fields.is_empty() {
         quote! {
             #[derive(Debug, Clone, Default)]
-            pub struct #name;
+            pub struct #name #struct_generics;
         }
     } else {
         quote! {
             #[derive(Debug, Clone, Default)]
-            pub struct #name {
+            pub struct #name #struct_generics {
                 #(#struct_fields)*
             }
         }
@@ -262,7 +278,7 @@ fn emit_class(
 
     let impl_block = if !method_tokens.is_empty() {
         quote! {
-            impl #name {
+            impl #impl_generics #name #struct_generics {
                 #(#method_tokens)*
             }
         }
@@ -307,7 +323,7 @@ fn emit_class(
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             trait_impls.push(quote! {
-                impl #iface_ident for #name {
+                impl #impl_generics #iface_ident for #name #struct_generics {
                     #(#impl_methods)*
                 }
             });
@@ -378,7 +394,6 @@ fn emit_delegation_method(method: &IrMethod) -> Result<TokenStream, CodegenError
 }
 
 fn emit_constructor(ctor: &IrConstructor, cls: &IrClass) -> Result<TokenStream, CodegenError> {
-    let class_ident = ident(&cls.name);
     let params = emit_params(&ctor.params);
 
     // Split body into: optional super() call, then remaining statements.
@@ -410,8 +425,9 @@ fn emit_constructor(ctor: &IrConstructor, cls: &IrClass) -> Result<TokenStream, 
         })
         .collect();
 
+    // Use `Self` so this works for both plain and generic structs.
     let struct_init = quote! {
-        let mut __self__: #class_ident = #class_ident {
+        let mut __self__: Self = Self {
             #super_field_init
             #(#own_field_inits)*
         };
@@ -826,9 +842,13 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 }
             }
             let field = ident(field_name);
-            // Non-Copy types (JString, class instances) must be cloned when read
+            // Non-Copy types must be cloned when read as a value.
             match ty {
-                IrType::String | IrType::Class(_) => Ok(quote! { (#recv).#field.clone() }),
+                IrType::String
+                | IrType::Class(_)
+                | IrType::TypeVar(_)
+                | IrType::Generic { .. }
+                | IrType::Array(_) => Ok(quote! { (#recv).#field.clone() }),
                 _ => Ok(quote! { (#recv).#field }),
             }
         }
@@ -878,9 +898,19 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
         }
 
         IrExpr::New { class, args, .. } => {
-            let cls = ident(class);
             let args_ts: Vec<TokenStream> = args.iter().map(emit_expr).collect::<Result<_, _>>()?;
-            Ok(quote! { #cls::new(#(#args_ts),*) })
+            // Map Java collection constructors to their JList/JMap/JSet equivalents.
+            match class.as_str() {
+                "ArrayList" | "LinkedList" | "ArrayDeque" => Ok(quote! { JList::new() }),
+                "HashMap" | "LinkedHashMap" | "TreeMap" | "Hashtable" => {
+                    Ok(quote! { JMap::new() })
+                }
+                "HashSet" | "LinkedHashSet" | "TreeSet" => Ok(quote! { JSet::new() }),
+                _ => {
+                    let cls = ident(class);
+                    Ok(quote! { #cls::new(#(#args_ts),*) })
+                }
+            }
         }
 
         IrExpr::NewArray { elem_ty, len, .. } => {
@@ -1091,14 +1121,49 @@ fn emit_type(ty: &IrType) -> TokenStream {
             quote! { JArray<#t> }
         }
         IrType::Class(name) => {
-            let id = ident(name);
-            quote! { #id }
+            // Map Java boxed / well-known types to their Rust equivalents.
+            match name.as_str() {
+                "Integer" => quote! { i32 },
+                "Long" => quote! { i64 },
+                "Double" => quote! { f64 },
+                "Float" => quote! { f32 },
+                "Boolean" => quote! { bool },
+                "Character" => quote! { char },
+                "Byte" => quote! { i8 },
+                "Short" => quote! { i16 },
+                "String" | "CharSequence" => quote! { JString },
+                _ => {
+                    let id = ident(name);
+                    quote! { #id }
+                }
+            }
         }
         IrType::TypeVar(name) => {
             let id = ident(name);
             quote! { #id }
         }
         IrType::Generic { base, args } => {
+            // Map Java collection generics to JList / JMap / JSet.
+            if let IrType::Class(base_name) = base.as_ref() {
+                match base_name.as_str() {
+                    "List" | "ArrayList" | "LinkedList" | "Collection" | "Iterable"
+                    | "ArrayDeque" => {
+                        let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
+                        return quote! { JList<#a> };
+                    }
+                    "Map" | "HashMap" | "LinkedHashMap" | "TreeMap" | "Hashtable" => {
+                        let k = emit_type(args.first().unwrap_or(&IrType::Unknown));
+                        let v = emit_type(args.get(1).unwrap_or(&IrType::Unknown));
+                        return quote! { JMap<#k, #v> };
+                    }
+                    "Set" | "HashSet" | "LinkedHashSet" | "TreeSet" => {
+                        let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
+                        return quote! { JSet<#a> };
+                    }
+                    _ => {}
+                }
+            }
+            // Passthrough for user-defined generics, e.g. Wrapper<T>.
             let b = emit_type(base);
             let a: Vec<TokenStream> = args.iter().map(emit_type).collect();
             quote! { #b<#(#a),*> }
