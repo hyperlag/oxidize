@@ -711,6 +711,13 @@ fn resolve_method_return_type(
         _ => {}
     }
 
+    // Exception methods (JException)
+    match method_name {
+        "getMessage" | "toString" => return IrType::String,
+        "getClass" | "getClassName" => return IrType::String,
+        _ => {}
+    }
+
     // Unqualified call (no receiver) → look in same class first, then traversing
     // its superclass chain.
     if receiver.is_none() {

@@ -26,7 +26,7 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
     // Emit a use for the runtime crate
     items.push(quote! {
         #[allow(unused_imports)]
-        use java_compat::{JString, JArray, JObject, JNull, JList, JMap, JSet};
+        use java_compat::{JString, JArray, JObject, JNull, JList, JMap, JSet, JException};
     });
 
     // Build maps so emit_class can find parent class info and interface methods.
@@ -737,20 +737,44 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
         }
         IrStmt::Break(_) => Ok(quote! { break; }),
         IrStmt::Continue(_) => Ok(quote! { continue; }),
-        IrStmt::Throw(e) => {
-            let ts = emit_expr(e)?;
-            Ok(quote! { panic!("{:?}", #ts); })
-        }
+        IrStmt::Throw(e) => emit_throw(e),
         IrStmt::SuperConstructorCall { .. } => {
             // Already consumed by emit_constructor; should not appear here.
             Ok(quote! {})
         }
-        IrStmt::TryCatch { body, .. } => {
-            // Stage 1: emit body only; full exception handling is Stage 4
-            let body_ts = emit_stmts(body)?;
+        IrStmt::TryCatch {
+            body,
+            catches,
+            finally,
+        } => {
+            let body_stmts = emit_stmts(body)?;
+            let catch_chain = emit_catch_chain(catches)?;
+            let finally_block = if let Some(fin) = finally {
+                let fs = emit_stmts(fin)?;
+                quote! { #(#fs)* }
+            } else {
+                quote! {}
+            };
             Ok(quote! {
-                {
-                    #(#body_ts)*
+                let __try_result =
+                    ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| {
+                        #(#body_stmts)*
+                    }));
+                let __rethrow = match __try_result {
+                    Ok(_) => None,
+                    Err(__panic_val) => {
+                        let __ex_opt =
+                            JException::from_panic_payload(&__panic_val);
+                        if let Some(ref __ex) = __ex_opt {
+                            #catch_chain
+                        } else {
+                            Some(__panic_val)
+                        }
+                    }
+                };
+                #finally_block
+                if let Some(__ex) = __rethrow {
+                    ::std::panic::resume_unwind(__ex);
                 }
             })
         }
@@ -767,6 +791,72 @@ fn emit_switch_case(case: &SwitchCase) -> Result<TokenStream, CodegenError> {
     Ok(quote! {
         #val => { #(#body)* }
     })
+}
+
+/// Emit a `throw` statement.
+///
+/// `throw new SomeException("msg")` → `panic!("JException:SomeException:{msg}")`
+/// `throw e` (rethrow of caught var) → `panic!("{}", e.to_panic_string())`
+fn emit_throw(e: &IrExpr) -> Result<TokenStream, CodegenError> {
+    match e {
+        IrExpr::New { class, args, .. } => {
+            let class_str = class.as_str();
+            if let Some(msg_expr) = args.first() {
+                let msg_ts = emit_expr(msg_expr)?;
+                Ok(quote! { panic!("JException:{}:{}", #class_str, #msg_ts) })
+            } else {
+                Ok(quote! { panic!("JException:{}:", #class_str) })
+            }
+        }
+        IrExpr::Var { name, .. } => {
+            let var_id = ident(name);
+            Ok(quote! { panic!("{}", #var_id.to_panic_string()) })
+        }
+        _ => {
+            let ts = emit_expr(e)?;
+            Ok(quote! { panic!("{}", #ts) })
+        }
+    }
+}
+
+/// Build a nested if-else chain that matches a `JException` against catch
+/// clauses, returning `None` if handled or `Some(__panic_val)` to rethrow.
+fn emit_catch_chain(catches: &[ir::stmt::CatchClause]) -> Result<TokenStream, CodegenError> {
+    // Start with the "no match → rethrow" base case.
+    let mut chain = quote! { Some(__panic_val) };
+
+    for catch in catches.iter().rev() {
+        let var = ident(&catch.var);
+        let catch_stmts = emit_stmts(&catch.body)?;
+
+        let cond = if catch
+            .exception_types
+            .iter()
+            .any(|t| matches!(t.as_str(), "Throwable" | "Exception"))
+        {
+            // Catch-all
+            quote! { true }
+        } else {
+            let checks: Vec<TokenStream> = catch
+                .exception_types
+                .iter()
+                .map(|t| quote! { __ex.is_instance_of(#t) })
+                .collect();
+            quote! { #(#checks)||* }
+        };
+
+        chain = quote! {
+            if #cond {
+                let #var = __ex.clone();
+                { #(#catch_stmts)* }
+                None
+            } else {
+                #chain
+            }
+        };
+    }
+
+    Ok(chain)
 }
 
 // ─── expressions ─────────────────────────────────────────────────────────────

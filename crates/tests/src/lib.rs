@@ -314,4 +314,43 @@ mod tests {
     fn test_generic_class() {
         check("GenericClass.java", "42\nhello");
     }
+
+    #[test]
+    fn test_exception_basic() {
+        check("ExceptionBasic.java", "caught: divide by zero\ndone");
+    }
+
+    #[test]
+    fn test_exception_finally() {
+        check("ExceptionFinally.java", "caught: oops\nfinally\nafter");
+    }
+
+    #[test]
+    fn test_exception_multi_catch() {
+        check(
+            "ExceptionMultiCatch.java",
+            "caught: bad arg\ncaught: bad state",
+        );
+    }
+
+    #[test]
+    fn test_exception_nested() {
+        check(
+            "ExceptionNested.java",
+            "inner finally\nouter catch: inner\ndone",
+        );
+    }
+
+    #[test]
+    fn test_try_with_resources() {
+        check(
+            "TryWithResources.java",
+            "open: file.txt\ndata from file.txt\nclose: file.txt\ndone",
+        );
+    }
+
+    #[test]
+    fn test_throws_decl() {
+        check("ThrowsDecl.java", "caught: negative\nok: 5");
+    }
 }
