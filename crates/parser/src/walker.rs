@@ -737,9 +737,20 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
             for child in node.named_children(&mut cur) {
                 match child.kind() {
                     "catch_clause" => {
-                        let catch_formal = child_by_field(child, "catch_formal_parameter");
+                        // In tree-sitter-java, catch_formal_parameter is a
+                        // named child of catch_clause but NOT a named field,
+                        // so child_by_field does not work here.
+                        let catch_formal = named_children(child)
+                            .into_iter()
+                            .find(|n| n.kind() == "catch_formal_parameter");
                         let (exception_types, var) = if let Some(cfp) = catch_formal {
+                            // "name" IS a named field on catch_formal_parameter.
                             let var = child_by_field(cfp, "name")
+                                .or_else(|| {
+                                    named_children(cfp)
+                                        .into_iter()
+                                        .find(|n| n.kind() == "identifier")
+                                })
                                 .map(|n| text(n, src).to_owned())
                                 .unwrap_or_default();
                             let types: Vec<String> = named_children(cfp)
@@ -773,7 +784,11 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                         });
                     }
                     "finally_clause" => {
-                        finally = child_by_field(child, "body")
+                        // In tree-sitter-java the block inside finally_clause
+                        // is NOT a named field, so search by kind.
+                        finally = named_children(child)
+                            .into_iter()
+                            .find(|n| n.kind() == "block")
                             .map(|n| lower_block(n, src))
                             .transpose()?;
                     }
@@ -786,6 +801,127 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                 catches,
                 finally,
             }])
+        }
+        // try (Resource r = new Resource()) { body } catch (...) { ... }
+        // Desugared: let r = new Resource(); try { body } finally { r.close(); }
+        "try_with_resources_statement" => {
+            let mut result_stmts = Vec::new();
+            let mut resource_names: Vec<String> = Vec::new();
+
+            // Parse resource_specification → individual resource declarations
+            if let Some(resources_node) = child_by_field(node, "resources") {
+                let mut res_cursor = resources_node.walk();
+                for res in resources_node.named_children(&mut res_cursor) {
+                    if res.kind() != "resource" {
+                        continue;
+                    }
+                    let ty = child_by_field(res, "type")
+                        .map(|n| lower_type(n, src))
+                        .unwrap_or(IrType::Unknown);
+                    let name = child_by_field(res, "name")
+                        .map(|n| text(n, src).to_owned())
+                        .unwrap_or_default();
+                    let init = child_by_field(res, "value")
+                        .map(|n| lower_expr(n, src))
+                        .transpose()?;
+                    if !name.is_empty() {
+                        resource_names.push(name.clone());
+                        result_stmts.push(IrStmt::LocalVar { name, ty, init });
+                    }
+                }
+            }
+
+            let body = child_by_field(node, "body")
+                .map(|n| lower_block(n, src))
+                .transpose()?
+                .unwrap_or_default();
+
+            let mut catches = Vec::new();
+            let mut user_finally: Vec<IrStmt> = Vec::new();
+            let mut cur = node.walk();
+            for child in node.named_children(&mut cur) {
+                match child.kind() {
+                    "catch_clause" => {
+                        let catch_formal = named_children(child)
+                            .into_iter()
+                            .find(|n| n.kind() == "catch_formal_parameter");
+                        let (exception_types, var) = if let Some(cfp) = catch_formal {
+                            let var = child_by_field(cfp, "name")
+                                .or_else(|| {
+                                    named_children(cfp)
+                                        .into_iter()
+                                        .find(|n| n.kind() == "identifier")
+                                })
+                                .map(|n| text(n, src).to_owned())
+                                .unwrap_or_default();
+                            let types: Vec<String> = named_children(cfp)
+                                .iter()
+                                .filter(|n| {
+                                    n.kind() == "type_identifier"
+                                        || n.kind() == "catch_type"
+                                })
+                                .flat_map(|n| {
+                                    if n.kind() == "catch_type" {
+                                        named_children(*n)
+                                            .iter()
+                                            .map(|t| text(*t, src).to_owned())
+                                            .collect::<Vec<_>>()
+                                    } else {
+                                        vec![text(*n, src).to_owned()]
+                                    }
+                                })
+                                .collect();
+                            (types, var)
+                        } else {
+                            (vec![], String::new())
+                        };
+                        let catch_body = child_by_field(child, "body")
+                            .map(|n| lower_block(n, src))
+                            .transpose()?
+                            .unwrap_or_default();
+                        catches.push(CatchClause {
+                            exception_types,
+                            var,
+                            body: catch_body,
+                        });
+                    }
+                    "finally_clause" => {
+                        user_finally = named_children(child)
+                            .into_iter()
+                            .find(|n| n.kind() == "block")
+                            .map(|n| lower_block(n, src))
+                            .transpose()?
+                            .unwrap_or_default();
+                    }
+                    _ => {}
+                }
+            }
+
+            // Build close() calls in LIFO order, then append user finally stmts
+            let mut close_stmts: Vec<IrStmt> = resource_names
+                .iter()
+                .rev()
+                .map(|name| {
+                    IrStmt::Expr(IrExpr::MethodCall {
+                        receiver: Some(Box::new(IrExpr::Var {
+                            name: name.clone(),
+                            ty: IrType::Unknown,
+                        })),
+                        method_name: "close".to_owned(),
+                        args: vec![],
+                        ty: IrType::Void,
+                    })
+                })
+                .collect();
+            close_stmts.extend(user_finally);
+            let finally = if close_stmts.is_empty() {
+                None
+            } else {
+                Some(close_stmts)
+            };
+
+            result_stmts.push(IrStmt::TryCatch { body, catches, finally });
+            Ok(result_stmts)
         }
         "block" => {
             let inner = lower_block(node, src)?;
