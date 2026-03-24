@@ -353,4 +353,31 @@ mod tests {
     fn test_throws_decl() {
         check("ThrowsDecl.java", "caught: negative\nok: 5");
     }
+
+    // ── Stage 5: Concurrency ──────────────────────────────────────────────
+
+    #[test]
+    fn test_atomic_counter() {
+        check("AtomicCounter.java", "7\n7\n8\ntrue\n10");
+    }
+
+    #[test]
+    fn test_count_down_latch() {
+        check("CountDownLatchTest.java", "3\n1\nlatch done");
+    }
+
+    #[test]
+    fn test_semaphore() {
+        check("SemaphoreTest.java", "3\n1\n2\n0\n2");
+    }
+
+    #[test]
+    fn test_synchronized_counter() {
+        check("SynchronizedCounter.java", "3");
+    }
+
+    #[test]
+    fn test_thread_join() {
+        check("ThreadJoin.java", "hello from t1\nhello from t2\nmain done");
+    }
 }

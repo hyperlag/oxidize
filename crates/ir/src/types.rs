@@ -42,6 +42,11 @@ pub enum IrType {
         args: Vec<IrType>,
     },
 
+    // ── Concurrency ────────────────────────────────────────────────────────
+    /// A `volatile` primitive field: `AtomicI32`, `AtomicI64`, or `AtomicBool`.
+    /// The inner type is the original Java primitive (`Int`, `Long`, or `Bool`).
+    Atomic(Box<IrType>),
+
     // ── Special ────────────────────────────────────────────────────────────
     /// Type has not yet been resolved (placeholder during parsing).
     Unknown,
@@ -101,6 +106,7 @@ impl std::fmt::Display for IrType {
             }
             IrType::Unknown => write!(f, "<unknown>"),
             IrType::Null => write!(f, "null"),
+            IrType::Atomic(inner) => write!(f, "atomic({inner})"),
         }
     }
 }

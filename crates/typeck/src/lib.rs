@@ -311,6 +311,13 @@ fn check_stmt(
             }
         }
         IrStmt::Break(_) | IrStmt::Continue(_) => {}
+        IrStmt::Synchronized { monitor, body } => {
+            *monitor = check_expr(monitor.clone(), cls, class_map, env)?;
+            let mut sync_env = env.clone();
+            for s in body.iter_mut() {
+                check_stmt(s, cls, class_map, &mut sync_env)?;
+            }
+        }
     }
     Ok(())
 }
@@ -684,6 +691,53 @@ fn resolve_method_return_type(
     // System.out.println / System.err.println → void
     if method_name == "println" || method_name == "print" || method_name == "printf" {
         return IrType::Void;
+    }
+
+    // java.util.concurrent / Thread method return types
+    if let Some(recv) = receiver {
+        if let IrType::Class(class_name) = recv.ty() {
+            match class_name.as_str() {
+                "AtomicInteger" => match method_name {
+                    "get" | "getAndIncrement" | "incrementAndGet" | "getAndDecrement"
+                    | "decrementAndGet" | "getAndAdd" | "addAndGet" | "intValue" => {
+                        return IrType::Int;
+                    }
+                    "set" => return IrType::Void,
+                    "compareAndSet" => return IrType::Bool,
+                    _ => {}
+                },
+                "AtomicLong" => match method_name {
+                    "get" | "getAndIncrement" | "incrementAndGet" | "getAndDecrement"
+                    | "decrementAndGet" | "getAndAdd" | "addAndGet" | "longValue" => {
+                        return IrType::Long;
+                    }
+                    "set" => return IrType::Void,
+                    "compareAndSet" => return IrType::Bool,
+                    _ => {}
+                },
+                "AtomicBoolean" => match method_name {
+                    "get" | "getAndSet" => return IrType::Bool,
+                    "set" => return IrType::Void,
+                    "compareAndSet" => return IrType::Bool,
+                    _ => {}
+                },
+                "CountDownLatch" => match method_name {
+                    "getCount" => return IrType::Long,
+                    "countDown" | "await" => return IrType::Void,
+                    _ => {}
+                },
+                "Semaphore" => match method_name {
+                    "availablePermits" => return IrType::Int,
+                    "acquire" | "release" => return IrType::Void,
+                    _ => {}
+                },
+                "Thread" | "JThread" => match method_name {
+                    "start" | "join" | "sleep" | "run" => return IrType::Void,
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
     }
     // String methods
     match method_name {

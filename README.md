@@ -138,10 +138,10 @@ cargo test
 
 The differential integration tests in `crates/tests` compile and run each translated Rust
 program, then assert that stdout matches the expected output. No JDK is required to run
-the tests. The suite currently contains **49 differential tests** covering Stages 1–4:
+the tests. The suite currently contains **54 differential tests** covering Stages 1-5:
 
 ```bash
-cargo test -p tests --test-threads=4
+cargo test -p tests --test-threads=1
 ```
 
 ## Project Status
@@ -155,7 +155,7 @@ The project follows a staged delivery plan:
 | 2 | Object-oriented core: classes, inheritance, interfaces, `instanceof` | Complete (43/43 differential tests pass) |
 | 3 | Generics and collections: `List`, `Map`, `Set`, generic classes | Complete (43/43 differential tests pass) |
 | 4 | Exception handling: `try`/`catch`/`finally`/`throw`, multi-catch, try-with-resources, `throws` | Complete (49/49 differential tests pass) |
-| 5 | Concurrency: `synchronized`, `Thread`, `java.util.concurrent` | Planned |
+| 5 | Concurrency: `synchronized`, `Thread`, `java.util.concurrent` | Complete (54/54 differential tests pass) |
 | 6 | Reflection and dynamic dispatch | Planned |
 | 7 | Standard library coverage | Planned |
 
@@ -211,6 +211,19 @@ The project follows a staged delivery plan:
 - Exception hierarchy: `ArithmeticException`, `RuntimeException`, `IllegalArgumentException`, `IllegalStateException`, `NullPointerException`, `IndexOutOfBoundsException`, and others all recognised
 - Unhandled exceptions (not matched by any catch) are rethrown via `resume_unwind`
 - `e.getMessage()` on a caught exception returns the message string
+
+### Stage 5: Supported Java features
+
+- `Thread` + `Runnable`: `new Thread(runnable)` → `JThread::new(move || { r.run(); })`, with `.start()` and `.join()`
+- `Thread.sleep(ms)` → `JThread::sleep(ms)`
+- `synchronized` methods → per-class `static OnceLock<(Mutex<()>, Condvar)>` monitor; body prefixed with lock acquisition
+- `synchronized(expr) { ... }` blocks → global process-wide monitor via `java_compat::__sync_block_monitor()`
+- `wait()` inside synchronized → `Condvar::wait` on the held guard (rebind pattern)
+- `notify()` / `notifyAll()` inside synchronized → `Condvar::notify_one` / `notify_all`
+- `volatile` primitive fields → `Arc<AtomicI32>` / `Arc<AtomicI64>` / `Arc<AtomicBool>`; reads emit `.load(SeqCst)`, writes emit `.store(SeqCst)`
+- `AtomicInteger` / `AtomicLong` / `AtomicBoolean` → `JAtomicInteger` / `JAtomicLong` / `JAtomicBoolean` with full method support: `get`, `set`, `incrementAndGet`, `getAndIncrement`, `decrementAndGet`, `addAndGet`, `getAndAdd`, `compareAndSet`
+- `CountDownLatch` → `JCountDownLatch` with `countDown()`, `await()`, `getCount()`
+- `Semaphore` → `JSemaphore` with `acquire()`, `release()`, `availablePermits()`
 
 ### Java to Rust type mapping
 
