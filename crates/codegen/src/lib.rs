@@ -821,9 +821,7 @@ fn emit_throw(e: &IrExpr) -> Result<TokenStream, CodegenError> {
 
 /// Build a nested if-else chain that matches a `JException` against catch
 /// clauses, returning `None` if handled or `Some(__panic_val)` to rethrow.
-fn emit_catch_chain(
-    catches: &[ir::stmt::CatchClause],
-) -> Result<TokenStream, CodegenError> {
+fn emit_catch_chain(catches: &[ir::stmt::CatchClause]) -> Result<TokenStream, CodegenError> {
     // Start with the "no match → rethrow" base case.
     let mut chain = quote! { Some(__panic_val) };
 

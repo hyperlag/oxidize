@@ -857,8 +857,7 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                             let types: Vec<String> = named_children(cfp)
                                 .iter()
                                 .filter(|n| {
-                                    n.kind() == "type_identifier"
-                                        || n.kind() == "catch_type"
+                                    n.kind() == "type_identifier" || n.kind() == "catch_type"
                                 })
                                 .flat_map(|n| {
                                     if n.kind() == "catch_type" {
@@ -920,7 +919,11 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                 Some(close_stmts)
             };
 
-            result_stmts.push(IrStmt::TryCatch { body, catches, finally });
+            result_stmts.push(IrStmt::TryCatch {
+                body,
+                catches,
+                finally,
+            });
             Ok(result_stmts)
         }
         "block" => {

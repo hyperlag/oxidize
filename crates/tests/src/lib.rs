@@ -327,12 +327,18 @@ mod tests {
 
     #[test]
     fn test_exception_multi_catch() {
-        check("ExceptionMultiCatch.java", "caught: bad arg\ncaught: bad state");
+        check(
+            "ExceptionMultiCatch.java",
+            "caught: bad arg\ncaught: bad state",
+        );
     }
 
     #[test]
     fn test_exception_nested() {
-        check("ExceptionNested.java", "inner finally\nouter catch: inner\ndone");
+        check(
+            "ExceptionNested.java",
+            "inner finally\nouter catch: inner\ndone",
+        );
     }
 
     #[test]

@@ -139,8 +139,9 @@ mod tests {
 
     #[test]
     fn from_panic_payload_string() {
-        let payload: Box<dyn std::any::Any + Send> =
-            Box::new(String::from("JException:IllegalArgumentException:bad input"));
+        let payload: Box<dyn std::any::Any + Send> = Box::new(String::from(
+            "JException:IllegalArgumentException:bad input",
+        ));
         let ex = JException::from_panic_payload(&payload).unwrap();
         assert_eq!(ex.class_name, "IllegalArgumentException");
         assert!(ex.is_instance_of("RuntimeException"));
