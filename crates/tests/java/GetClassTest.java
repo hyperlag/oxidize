@@ -1,0 +1,13 @@
+public class GetClassTest {
+    private int value;
+
+    public GetClassTest(int value) {
+        this.value = value;
+    }
+
+    public static void main(String[] args) {
+        GetClassTest obj = new GetClassTest(42);
+        System.out.println(obj.getClass().getSimpleName());
+        System.out.println(obj.getClass().getName());
+    }
+}

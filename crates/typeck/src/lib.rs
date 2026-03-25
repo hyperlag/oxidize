@@ -735,9 +735,18 @@ fn resolve_method_return_type(
                     "start" | "join" | "sleep" | "run" => return IrType::Void,
                     _ => {}
                 },
+                // JClass reflection methods
+                "JClass" => match method_name {
+                    "getName" | "getSimpleName" | "getCanonicalName" => return IrType::String,
+                    _ => {}
+                },
                 _ => {}
             }
         }
+    }
+    // getClass() on any object → JClass
+    if method_name == "getClass" {
+        return IrType::Class("JClass".to_owned());
     }
     // String methods
     match method_name {
@@ -755,6 +764,13 @@ fn resolve_method_return_type(
         _ => {}
     }
 
+    // Universal Object methods
+    match method_name {
+        "hashCode" => return IrType::Int,
+        "equals" => return IrType::Bool,
+        _ => {}
+    }
+
     // Collection methods (JList / JMap / JSet)
     match method_name {
         "size" => return IrType::Int,
@@ -768,7 +784,7 @@ fn resolve_method_return_type(
     // Exception methods (JException)
     match method_name {
         "getMessage" | "toString" => return IrType::String,
-        "getClass" | "getClassName" => return IrType::String,
+        "getClassName" => return IrType::String,
         _ => {}
     }
 
