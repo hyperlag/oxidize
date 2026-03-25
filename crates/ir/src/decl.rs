@@ -48,6 +48,7 @@ pub struct IrField {
     pub visibility: Visibility,
     pub is_static: bool,
     pub is_final: bool,
+    pub is_volatile: bool,
     pub init: Option<crate::IrExpr>,
 }
 
@@ -59,6 +60,7 @@ pub struct IrMethod {
     pub is_static: bool,
     pub is_abstract: bool,
     pub is_final: bool,
+    pub is_synchronized: bool,
     pub type_params: Vec<String>,
     pub params: Vec<IrParam>,
     pub return_ty: IrType,
@@ -124,6 +126,7 @@ mod tests {
                 return_ty: IrType::Void,
                 body: Some(vec![]),
                 throws: vec![],
+                is_synchronized: false,
             }],
             constructors: vec![],
         });

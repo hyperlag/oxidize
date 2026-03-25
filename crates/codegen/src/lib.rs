@@ -26,7 +26,11 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
     // Emit a use for the runtime crate
     items.push(quote! {
         #[allow(unused_imports)]
-        use java_compat::{JString, JArray, JObject, JNull, JList, JMap, JSet, JException};
+        use java_compat::{
+            JString, JArray, JObject, JNull, JList, JMap, JSet, JException,
+            JAtomicInteger, JAtomicLong, JAtomicBoolean,
+            JCountDownLatch, JSemaphore, JThread,
+        };
     });
 
     // Build maps so emit_class can find parent class info and interface methods.
@@ -254,6 +258,20 @@ fn emit_class(
     }
     method_tokens.extend(delegation_methods);
 
+    // If any method is `synchronized`, emit a static per-class monitor helper.
+    if cls.methods.iter().any(|m| m.is_synchronized) {
+        method_tokens.push(quote! {
+            fn __sync_monitor() -> &'static (::std::sync::Mutex<()>, ::std::sync::Condvar) {
+                static __M: ::std::sync::OnceLock<
+                    (::std::sync::Mutex<()>, ::std::sync::Condvar),
+                > = ::std::sync::OnceLock::new();
+                __M.get_or_init(|| {
+                    (::std::sync::Mutex::new(()), ::std::sync::Condvar::new())
+                })
+            }
+        });
+    }
+
     // `_instanceof` — enables the Java `instanceof` operator.
     // Checks own class name, each implemented interface name, then delegates
     // up the `_super` composition chain for inherited types.
@@ -452,6 +470,18 @@ fn field_default_val(ty: &IrType) -> TokenStream {
         IrType::Float | IrType::Double => quote! { 0.0 },
         IrType::Char => quote! { '\0' },
         IrType::String => quote! { JString::from("") },
+        IrType::Atomic(inner) => match inner.as_ref() {
+            IrType::Int => quote! {
+                ::std::sync::Arc::new(::std::sync::atomic::AtomicI32::new(0))
+            },
+            IrType::Long => quote! {
+                ::std::sync::Arc::new(::std::sync::atomic::AtomicI64::new(0))
+            },
+            IrType::Bool => quote! {
+                ::std::sync::Arc::new(::std::sync::atomic::AtomicBool::new(false))
+            },
+            _ => quote! { Default::default() },
+        },
         _ => quote! { Default::default() },
     }
 }
@@ -490,6 +520,17 @@ fn emit_method_with_pub(method: &IrMethod, pub_vis: bool) -> Result<TokenStream,
         None => return Ok(quote! {}), // abstract
     };
 
+    // Preamble for `synchronized` instance methods: acquire per-class monitor.
+    let sync_preamble = if method.is_synchronized && !method.is_static {
+        quote! {
+            let (__sync_lock, __sync_cond) = Self::__sync_monitor();
+            let mut __sync_guard = __sync_lock.lock().unwrap();
+            let _ = &__sync_guard;
+        }
+    } else {
+        quote! {}
+    };
+
     let ret_clause = if method.return_ty == IrType::Void {
         quote! {}
     } else {
@@ -499,12 +540,14 @@ fn emit_method_with_pub(method: &IrMethod, pub_vis: bool) -> Result<TokenStream,
     if pub_vis {
         Ok(quote! {
             pub fn #name(#self_param #(#params),*) #ret_clause {
+                #sync_preamble
                 #(#body)*
             }
         })
     } else {
         Ok(quote! {
             fn #name(#self_param #(#params),*) #ret_clause {
+                #sync_preamble
                 #(#body)*
             }
         })
@@ -782,6 +825,21 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
             let ts = emit_stmts(stmts)?;
             Ok(quote! { { #(#ts)* } })
         }
+        IrStmt::Synchronized { body, .. } => {
+            // Use the process-global monitor for synchronized blocks.
+            // The monitor expression is evaluated but not used for locking
+            // (single-class files do not need per-object granularity).
+            let body_ts = emit_stmts(body)?;
+            Ok(quote! {
+                {
+                    let (__sync_lock, __sync_cond) = java_compat::__sync_block_monitor();
+                    let mut __sync_guard = __sync_lock.lock().unwrap();
+                    let _ = &__sync_guard;
+                    { #(#body_ts)* }
+                    drop(__sync_guard);
+                }
+            })
+        }
     }
 }
 
@@ -924,6 +982,14 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     return Ok(quote! { std::io::#stream });
                 }
             }
+            // Volatile field read: emit .load(SeqCst) instead of plain field access.
+            if matches!(ty, IrType::Atomic(_)) {
+                let recv = emit_expr(receiver)?;
+                let field = ident(field_name);
+                return Ok(quote! {
+                    (#recv).#field.load(::std::sync::atomic::Ordering::SeqCst)
+                });
+            }
             let recv = emit_expr(receiver)?;
             // array.length — check receiver is an array type
             if field_name == "length" {
@@ -975,25 +1041,68 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                         }
                     }
                 }
+
+                // Thread.sleep(ms) — static call on the Thread class name.
+                if let IrExpr::Var { name, .. } = recv.as_ref() {
+                    if name == "Thread" && method_name == "sleep" {
+                        return Ok(quote! { JThread::sleep(#(#args_ts),*) });
+                    }
+                }
+
+                let recv_ts = emit_expr(recv)?;
+                // Rename `await` → `await_` to avoid collision with the Rust keyword.
+                let method = if method_name == "await" {
+                    ident("await_")
+                } else {
+                    ident(method_name)
+                };
+                return Ok(quote! { (#recv_ts).#method(#(#args_ts),*) });
+            }
+
+            // No receiver — unqualified call.
+            // wait() / notifyAll() / notify() are special inside synchronized methods.
+            match method_name.as_str() {
+                "wait" => {
+                    return Ok(quote! { __sync_guard = __sync_cond.wait(__sync_guard).unwrap() });
+                }
+                "notifyAll" => {
+                    return Ok(quote! { __sync_cond.notify_all() });
+                }
+                "notify" => {
+                    return Ok(quote! { __sync_cond.notify_one() });
+                }
+                _ => {}
             }
 
             let method = ident(method_name);
-            match receiver {
-                None => Ok(quote! { Self::#method(#(#args_ts),*) }),
-                Some(recv) => {
-                    let recv_ts = emit_expr(recv)?;
-                    Ok(quote! { (#recv_ts).#method(#(#args_ts),*) })
-                }
-            }
+            Ok(quote! { Self::#method(#(#args_ts),*) })
         }
 
         IrExpr::New { class, args, .. } => {
             let args_ts: Vec<TokenStream> = args.iter().map(emit_expr).collect::<Result<_, _>>()?;
-            // Map Java collection constructors to their JList/JMap/JSet equivalents.
+            // Map Java constructors to their runtime equivalents.
             match class.as_str() {
                 "ArrayList" | "LinkedList" | "ArrayDeque" => Ok(quote! { JList::new() }),
                 "HashMap" | "LinkedHashMap" | "TreeMap" | "Hashtable" => Ok(quote! { JMap::new() }),
                 "HashSet" | "LinkedHashSet" | "TreeSet" => Ok(quote! { JSet::new() }),
+                "AtomicInteger" => Ok(quote! { JAtomicInteger::new(#(#args_ts),*) }),
+                "AtomicLong" => Ok(quote! { JAtomicLong::new(#(#args_ts),*) }),
+                "AtomicBoolean" => Ok(quote! { JAtomicBoolean::new(#(#args_ts),*) }),
+                "CountDownLatch" => Ok(quote! { JCountDownLatch::new(#(#args_ts),*) }),
+                "Semaphore" => Ok(quote! { JSemaphore::new(#(#args_ts),*) }),
+                "Thread" => {
+                    // new Thread(runnable) → JThread wrapping a move-closure that calls run()
+                    if let Some(runnable_ts) = args_ts.first() {
+                        Ok(quote! {
+                            JThread::new({
+                                let mut __r = #runnable_ts;
+                                move || { (__r).run(); }
+                            })
+                        })
+                    } else {
+                        Ok(quote! { JThread::new(|| {}) })
+                    }
+                }
                 _ => {
                     let cls = ident(class);
                     Ok(quote! { #cls::new(#(#args_ts),*) })
@@ -1059,6 +1168,22 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 let idx = emit_expr(index)?;
                 let val = emit_expr(rhs)?;
                 return Ok(quote! { (#arr).set(#idx, #val) });
+            }
+            // Volatile field write: emit .store(val, SeqCst) instead of assignment.
+            if let IrExpr::FieldAccess {
+                receiver,
+                field_name,
+                ty,
+            } = lhs.as_ref()
+            {
+                if matches!(ty, IrType::Atomic(_)) {
+                    let recv = emit_expr(receiver)?;
+                    let field = ident(field_name);
+                    let val = emit_expr(rhs)?;
+                    return Ok(quote! {
+                        (#recv).#field.store(#val, ::std::sync::atomic::Ordering::SeqCst)
+                    });
+                }
             }
             let l = emit_place(lhs)?;
             let r = emit_expr(rhs)?;
@@ -1220,6 +1345,12 @@ fn emit_type(ty: &IrType) -> TokenStream {
                 "Byte" => quote! { i8 },
                 "Short" => quote! { i16 },
                 "String" | "CharSequence" => quote! { JString },
+                "AtomicInteger" => quote! { JAtomicInteger },
+                "AtomicLong" => quote! { JAtomicLong },
+                "AtomicBoolean" => quote! { JAtomicBoolean },
+                "CountDownLatch" => quote! { JCountDownLatch },
+                "Semaphore" => quote! { JSemaphore },
+                "Thread" => quote! { JThread },
                 _ => {
                     let id = ident(name);
                     quote! { #id }
@@ -1256,6 +1387,21 @@ fn emit_type(ty: &IrType) -> TokenStream {
             let a: Vec<TokenStream> = args.iter().map(emit_type).collect();
             quote! { #b<#(#a),*> }
         }
+        IrType::Atomic(inner) => match inner.as_ref() {
+            IrType::Int => {
+                quote! { ::std::sync::Arc<::std::sync::atomic::AtomicI32> }
+            }
+            IrType::Long => {
+                quote! { ::std::sync::Arc<::std::sync::atomic::AtomicI64> }
+            }
+            IrType::Bool => {
+                quote! { ::std::sync::Arc<::std::sync::atomic::AtomicBool> }
+            }
+            other => {
+                let t = emit_type(other);
+                quote! { ::std::sync::Arc<#t> }
+            }
+        },
         IrType::Unknown => quote! { _ },
     }
 }
@@ -1287,6 +1433,8 @@ fn ident(name: &str) -> Ident {
         "impl" => "impl_".to_owned(),
         "fn" => "fn_".to_owned(),
         "in" => "in_".to_owned(),
+        "await" => "await_".to_owned(),
+        "async" => "async_".to_owned(),
         other => other.to_owned(),
     };
     Ident::new(&sanitised, Span::call_site())

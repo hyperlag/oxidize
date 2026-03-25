@@ -66,6 +66,13 @@ pub enum IrStmt {
         finally: Option<Vec<IrStmt>>,
     },
 
+    // ── Concurrency ───────────────────────────────────────────────────────
+    /// `synchronized (monitor) { body }`
+    Synchronized {
+        monitor: IrExpr,
+        body: Vec<IrStmt>,
+    },
+
     // ── OOP ───────────────────────────────────────────────────────────────
     /// Super constructor invocation: `super(args)` — only valid as the first
     /// statement in a sub-class constructor body.

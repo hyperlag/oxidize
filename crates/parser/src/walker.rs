@@ -299,6 +299,7 @@ fn lower_field(node: Node<'_>, src: &[u8]) -> Result<Vec<IrField>, ParseError> {
         .to_owned();
     let is_static = mods_text.contains("static");
     let is_final = mods_text.contains("final");
+    let is_volatile = mods_text.contains("volatile");
 
     let ty = child_by_field(node, "type")
         .map(|n| lower_type(n, src))
@@ -315,12 +316,24 @@ fn lower_field(node: Node<'_>, src: &[u8]) -> Result<Vec<IrField>, ParseError> {
             let init = child_by_field(child, "value")
                 .map(|n| lower_expr(n, src))
                 .transpose()?;
+            // Volatile fields use atomic types so concurrent reads/writes are safe.
+            let field_ty = if is_volatile {
+                match &ty {
+                    IrType::Int => IrType::Atomic(Box::new(IrType::Int)),
+                    IrType::Long => IrType::Atomic(Box::new(IrType::Long)),
+                    IrType::Bool => IrType::Atomic(Box::new(IrType::Bool)),
+                    other => other.clone(),
+                }
+            } else {
+                ty.clone()
+            };
             fields.push(IrField {
                 name,
-                ty: ty.clone(),
+                ty: field_ty,
                 visibility: vis,
                 is_static,
                 is_final,
+                is_volatile,
                 init,
             });
         }
@@ -346,6 +359,7 @@ fn lower_method(node: Node<'_>, src: &[u8]) -> Result<IrMethod, ParseError> {
     let is_static = mods_text.contains("static");
     let is_abstract = mods_text.contains("abstract");
     let is_final = mods_text.contains("final");
+    let is_synchronized = mods_text.contains("synchronized");
 
     let return_ty = child_by_field(node, "type")
         .map(|n| lower_type(n, src))
@@ -390,6 +404,7 @@ fn lower_method(node: Node<'_>, src: &[u8]) -> Result<IrMethod, ParseError> {
         is_static,
         is_abstract,
         is_final,
+        is_synchronized,
         type_params,
         params,
         return_ty,
@@ -716,6 +731,36 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
         "continue_statement" => {
             let label = node.named_child(0).map(|n| text(n, src).to_owned());
             Ok(vec![IrStmt::Continue(label)])
+        }
+        "synchronized_statement" => {
+            // synchronized ( monitor_expr ) { body }
+            let monitor = child_by_field(node, "lock")
+                .or_else(|| {
+                    // tree-sitter-java uses a parenthesized_expression as the first named child
+                    named_children(node)
+                        .into_iter()
+                        .find(|n| n.kind() == "parenthesized_expression")
+                })
+                .and_then(|n| {
+                    // unwrap parentheses to get the inner expression
+                    if n.kind() == "parenthesized_expression" {
+                        n.named_child(0)
+                            .map(|inner| lower_expr(inner, src))
+                            .transpose()
+                            .ok()
+                            .flatten()
+                    } else {
+                        lower_expr(n, src).ok()
+                    }
+                })
+                .unwrap_or(IrExpr::LitNull);
+            let body = named_children(node)
+                .into_iter()
+                .find(|n| n.kind() == "block")
+                .map(|n| lower_block(n, src))
+                .transpose()?
+                .unwrap_or_default();
+            Ok(vec![IrStmt::Synchronized { monitor, body }])
         }
         "throw_statement" => {
             let expr = node
