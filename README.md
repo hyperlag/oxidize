@@ -138,7 +138,7 @@ cargo test
 
 The differential integration tests in `crates/tests` compile and run each translated Rust
 program, then assert that stdout matches the expected output. No JDK is required to run
-the tests. The suite currently contains **54 differential tests** covering Stages 1-5:
+the tests. The suite currently contains **59 differential tests** covering Stages 1-6:
 
 ```bash
 cargo test -p tests --test-threads=1
@@ -156,7 +156,7 @@ The project follows a staged delivery plan:
 | 3 | Generics and collections: `List`, `Map`, `Set`, generic classes | Complete (43/43 differential tests pass) |
 | 4 | Exception handling: `try`/`catch`/`finally`/`throw`, multi-catch, try-with-resources, `throws` | Complete (49/49 differential tests pass) |
 | 5 | Concurrency: `synchronized`, `Thread`, `java.util.concurrent` | Complete (54/54 differential tests pass) |
-| 6 | Reflection and dynamic dispatch | Planned |
+| 6 | Reflection and dynamic dispatch | Complete (59/59 differential tests pass) |
 | 7 | Standard library coverage | Planned |
 
 ### Stage 1: Supported Java features
@@ -211,6 +211,15 @@ The project follows a staged delivery plan:
 - Exception hierarchy: `ArithmeticException`, `RuntimeException`, `IllegalArgumentException`, `IllegalStateException`, `NullPointerException`, `IndexOutOfBoundsException`, and others all recognised
 - Unhandled exceptions (not matched by any catch) are rethrown via `resume_unwind`
 - `e.getMessage()` on a caught exception returns the message string
+
+### Stage 6: Supported Java features
+
+- `obj.getClass()` returns a `JClass` descriptor injected into every generated class
+- `JClass` supports `.getName()`, `.getSimpleName()`, `.getCanonicalName()` (all return the simple class name; no package prefix)
+- `toString()` overrides automatically generate `impl std::fmt::Display` for the class, enabling `println!("{}", obj)` and string concatenation with `+`
+- `equals(SameType)` type-checked with return type `bool`; `hashCode()` type-checked with return type `i32`
+- `@Override` and `@Deprecated` annotations parsed and silently tolerated on any method
+- Limitations: `Method.invoke`, `Field.get/set`, `Class.forName`, `getDeclaredMethods/Fields`, and `Proxy` are out of scope (runtime-only dynamic dispatch cannot be represented in a static Rust translation)
 
 ### Stage 5: Supported Java features
 

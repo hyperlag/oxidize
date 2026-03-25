@@ -380,4 +380,33 @@ mod tests {
     fn test_thread_join() {
         check("ThreadJoin.java", "hello from t1\nhello from t2\nmain done");
     }
+
+    // Stage 6 — Reflection & Dynamic Dispatch
+    #[test]
+    fn test_get_class() {
+        check("GetClassTest.java", "GetClassTest\nGetClassTest");
+    }
+
+    #[test]
+    fn test_tostring_override() {
+        check(
+            "ToStringOverride.java",
+            "Point(3, 4)\nThe point is: Point(3, 4)",
+        );
+    }
+
+    #[test]
+    fn test_equals_contract() {
+        check("EqualsContract.java", "true\nfalse");
+    }
+
+    #[test]
+    fn test_hashcode_consistency() {
+        check("HashCodeConsistency.java", "true\nfalse");
+    }
+
+    #[test]
+    fn test_annotation_basic() {
+        check("AnnotationBasic.java", "LOG: hello\nFormatter(LOG)");
+    }
 }

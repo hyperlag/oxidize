@@ -11,6 +11,7 @@ pub mod exception;
 pub mod list;
 pub mod map;
 pub mod object;
+pub mod reflect;
 pub mod set;
 pub mod string;
 pub mod thread;
@@ -22,6 +23,7 @@ pub use exception::JException;
 pub use list::JList;
 pub use map::JMap;
 pub use object::{JNull, JObject};
+pub use reflect::JClass;
 pub use set::JSet;
 pub use string::JString;
 pub use thread::JThread;
@@ -29,7 +31,7 @@ pub use thread::JThread;
 /// Convenience re-export of all runtime types.
 pub mod prelude {
     pub use super::{
-        JArray, JAtomicBoolean, JAtomicInteger, JAtomicLong, JCountDownLatch, JException, JList,
-        JMap, JNull, JObject, JSemaphore, JSet, JString, JThread,
+        JArray, JAtomicBoolean, JAtomicInteger, JAtomicLong, JClass, JCountDownLatch, JException,
+        JList, JMap, JNull, JObject, JSemaphore, JSet, JString, JThread,
     };
 }

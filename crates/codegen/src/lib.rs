@@ -29,7 +29,7 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
         use java_compat::{
             JString, JArray, JObject, JNull, JList, JMap, JSet, JException,
             JAtomicInteger, JAtomicLong, JAtomicBoolean,
-            JCountDownLatch, JSemaphore, JThread,
+            JCountDownLatch, JSemaphore, JThread, JClass,
         };
     });
 
@@ -272,6 +272,16 @@ fn emit_class(
         });
     }
 
+    // `getClass()` — returns a compile-time JClass descriptor for this type.
+    {
+        let class_name_str = &cls.name;
+        method_tokens.push(quote! {
+            pub fn getClass(&self) -> JClass {
+                JClass::new(#class_name_str)
+            }
+        });
+    }
+
     // `_instanceof` — enables the Java `instanceof` operator.
     // Checks own class name, each implemented interface name, then delegates
     // up the `_super` composition chain for inherited types.
@@ -348,10 +358,33 @@ fn emit_class(
         }
     }
 
+    // `impl Display` — auto-generated if the class defines a `toString()` method.
+    // This enables use of the class in string-concatenation expressions and
+    // `println!("{}", obj)` calls.
+    let display_impl = if cls
+        .methods
+        .iter()
+        .any(|m| m.name == "toString" && !m.is_static)
+    {
+        quote! {
+            impl #impl_generics ::std::fmt::Display for #name #struct_generics {
+                fn fmt(
+                    &self,
+                    f: &mut ::std::fmt::Formatter<'_>,
+                ) -> ::std::fmt::Result {
+                    write!(f, "{}", self.clone().toString())
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
         #struct_def
         #(#static_items)*
         #impl_block
+        #display_impl
         #(#trait_impls)*
     })
 }
