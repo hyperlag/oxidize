@@ -110,7 +110,8 @@ fn find_best_match(rust_norm: &str, java_sigs: &[String], hint_line: u32) -> u32
 
         // Prefer lines near the previous match to preserve monotonicity.
         let proximity_bonus = if hint_line > 0 {
-            let dist = (i as i64 - hint_line as i64).unsigned_abs() as usize;
+            let java_line = (i + 1) as i64;
+            let dist = (java_line - hint_line as i64).unsigned_abs() as usize;
             5usize.saturating_sub(dist)
         } else {
             0

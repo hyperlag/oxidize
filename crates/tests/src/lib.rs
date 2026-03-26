@@ -458,22 +458,38 @@ mod tests {
     }
 
     fn jtrans_bin() -> PathBuf {
-        workspace_dir().join("target").join("debug").join("jtrans")
+        let target_dir = if let Some(dir) = std::env::var_os("CARGO_TARGET_DIR") {
+            let path = PathBuf::from(dir);
+            if path.is_absolute() {
+                path
+            } else {
+                workspace_dir().join(path)
+            }
+        } else {
+            workspace_dir().join("target")
+        };
+
+        let bin_name = format!("jtrans{}", std::env::consts::EXE_SUFFIX);
+        target_dir.join("debug").join(bin_name)
     }
 
     fn ensure_jtrans_built() {
-        let ws = workspace_dir();
-        let build = Command::new("cargo")
-            .args(["build", "-p", "jtrans"])
-            .current_dir(&ws)
-            .env("RUSTFLAGS", "")
-            .output()
-            .expect("failed to build jtrans");
-        assert!(
-            build.status.success(),
-            "jtrans build failed: {}",
-            String::from_utf8_lossy(&build.stderr)
-        );
+        static ONCE: std::sync::Once = std::sync::Once::new();
+
+        ONCE.call_once(|| {
+            let ws = workspace_dir();
+            let build = Command::new("cargo")
+                .args(["build", "-p", "jtrans"])
+                .current_dir(&ws)
+                .env("RUSTFLAGS", "")
+                .output()
+                .expect("failed to build jtrans");
+            assert!(
+                build.status.success(),
+                "jtrans build failed: {}",
+                String::from_utf8_lossy(&build.stderr)
+            );
+        });
     }
 
     #[test]
