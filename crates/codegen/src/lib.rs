@@ -30,6 +30,8 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             JString, JArray, JObject, JNull, JList, JMap, JSet, JException,
             JAtomicInteger, JAtomicLong, JAtomicBoolean,
             JCountDownLatch, JSemaphore, JThread, JClass,
+            JOptional, JStringBuilder, JBigInteger, JPattern, JMatcher,
+            JLocalDate, JFile, JStream,
         };
     });
 
@@ -1080,14 +1082,154 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     if name == "Thread" && method_name == "sleep" {
                         return Ok(quote! { JThread::sleep(#(#args_ts),*) });
                     }
+                    // Math.x(...) — static Math methods → f64 method calls or std ops.
+                    if name == "Math" {
+                        let first_ty = args.first().map(|e| e.ty().clone());
+                        let is_double = matches!(first_ty.as_ref(), Some(IrType::Double) | Some(IrType::Float));
+                        let is_long = matches!(first_ty.as_ref(), Some(IrType::Long));
+                        return match method_name.as_str() {
+                            "abs" => {
+                                let a = &args_ts[0];
+                                if is_double {
+                                    Ok(quote! { (#a as f64).abs() })
+                                } else if is_long {
+                                    Ok(quote! { (#a as i64).abs() })
+                                } else {
+                                    Ok(quote! { (#a as i32).abs() })
+                                }
+                            }
+                            "max" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                if is_double {
+                                    Ok(quote! { { let __a = #a as f64; let __b = #b as f64; if __a > __b { __a } else { __b } } })
+                                } else {
+                                    Ok(quote! { { let __a = #a as i32; let __b = #b as i32; if __a > __b { __a } else { __b } } })
+                                }
+                            }
+                            "min" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                if is_double {
+                                    Ok(quote! { { let __a = #a as f64; let __b = #b as f64; if __a < __b { __a } else { __b } } })
+                                } else {
+                                    Ok(quote! { { let __a = #a as i32; let __b = #b as i32; if __a < __b { __a } else { __b } } })
+                                }
+                            }
+                            "pow" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { (#a as f64).powf(#b as f64) })
+                            }
+                            "sqrt" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).sqrt() }) }
+                            "floor" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).floor() }) }
+                            "ceil" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).ceil() }) }
+                            "round" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).round() as i64 }) }
+                            "log" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).ln() }) }
+                            "log10" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).log10() }) }
+                            "sin" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).sin() }) }
+                            "cos" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).cos() }) }
+                            "tan" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).tan() }) }
+                            "exp" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).exp() }) }
+                            "random" => Ok(quote! { 0.0_f64 }),
+                            "PI" => Ok(quote! { std::f64::consts::PI }),
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { (#(#args_ts),* as f64).#m() })
+                            }
+                        };
+                    }
+                    // Optional.of(...) / Optional.empty() / Optional.ofNullable(...)
+                    if name == "Optional" {
+                        return match method_name.as_str() {
+                            "of" => Ok(quote! { JOptional::of(#(#args_ts),*) }),
+                            "empty" => Ok(quote! { JOptional::empty() }),
+                            "ofNullable" => Ok(quote! { JOptional::of_nullable(#(#args_ts),*) }),
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JOptional::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // Pattern.compile(...) / Pattern.matches(...)
+                    if name == "Pattern" {
+                        return match method_name.as_str() {
+                            "compile" => Ok(quote! { JPattern::compile(#(#args_ts),*) }),
+                            "matches" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { JPattern::static_matches(#a, #b) })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JPattern::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // LocalDate.of(...) / LocalDate.now()
+                    if name == "LocalDate" {
+                        return match method_name.as_str() {
+                            "of" => Ok(quote! { JLocalDate::of(#(#args_ts),*) }),
+                            "now" => Ok(quote! { JLocalDate::now() }),
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JLocalDate::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // BigInteger.valueOf(long)
+                    if name == "BigInteger" {
+                        return match method_name.as_str() {
+                            "valueOf" => Ok(quote! { JBigInteger::from_long(#(#args_ts),*) }),
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JBigInteger::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // Integer.parseInt / Integer.valueOf
+                    if name == "Integer" {
+                        return match method_name.as_str() {
+                            "parseInt" | "valueOf" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a).as_str().parse::<i32>().unwrap() })
+                            }
+                            "toString" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JString::from(format!("{}", #a).as_str()) })
+                            }
+                            _ => Ok(quote! { 0i32 }),
+                        };
+                    }
+                    // String.valueOf
+                    if name == "String" {
+                        return match method_name.as_str() {
+                            "valueOf" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JString::from(format!("{}", #a).as_str()) })
+                            }
+                            _ => Ok(quote! { JString::from("") }),
+                        };
+                    }
+                }
+
+                // `.collect(Collectors.toList())` → `.collect_to_list()`
+                if method_name == "collect" {
+                    if let Some(arg) = args.first() {
+                        if is_collectors_to_list(arg) {
+                            let recv_ts = emit_expr(recv)?;
+                            return Ok(quote! { (#recv_ts).collect_to_list() });
+                        }
+                    }
                 }
 
                 let recv_ts = emit_expr(recv)?;
                 // Rename `await` → `await_` to avoid collision with the Rust keyword.
-                let method = if method_name == "await" {
-                    ident("await_")
-                } else {
-                    ident(method_name)
+                // Also rename `mod` → `mod_` (Rust keyword).
+                let method = match method_name.as_str() {
+                    "await" => ident("await_"),
+                    "mod" => ident("mod_"),
+                    _ => ident(method_name),
                 };
                 return Ok(quote! { (#recv_ts).#method(#(#args_ts),*) });
             }
@@ -1123,6 +1265,25 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 "AtomicBoolean" => Ok(quote! { JAtomicBoolean::new(#(#args_ts),*) }),
                 "CountDownLatch" => Ok(quote! { JCountDownLatch::new(#(#args_ts),*) }),
                 "Semaphore" => Ok(quote! { JSemaphore::new(#(#args_ts),*) }),
+                "StringBuilder" => {
+                    if args_ts.is_empty() {
+                        Ok(quote! { JStringBuilder::new() })
+                    } else {
+                        Ok(quote! { JStringBuilder::new_from_string(#(#args_ts),*) })
+                    }
+                }
+                "BigInteger" => {
+                    Ok(quote! { JBigInteger::from_string(#(#args_ts),*) })
+                }
+                "File" => {
+                    if args_ts.len() == 2 {
+                        let a = &args_ts[0];
+                        let b = &args_ts[1];
+                        Ok(quote! { JFile::new_child(#a, #b) })
+                    } else {
+                        Ok(quote! { JFile::new(#(#args_ts),*) })
+                    }
+                }
                 "Thread" => {
                     // new Thread(runnable) → JThread wrapping a move-closure that calls run()
                     if let Some(runnable_ts) = args_ts.first() {
@@ -1263,6 +1424,17 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             };
             Ok(quote! { #inner._instanceof(#type_name_str) })
         }
+
+        IrExpr::Lambda { params, body, .. } => {
+            let param_idents: Vec<Ident> = params.iter().map(|p| ident(p)).collect();
+            let body_ts = emit_expr(body)?;
+            if param_idents.len() == 1 {
+                let p = &param_idents[0];
+                Ok(quote! { |#p| { #body_ts } })
+            } else {
+                Ok(quote! { |#(#param_idents),*| { #body_ts } })
+            }
+        }
     }
 }
 
@@ -1384,6 +1556,14 @@ fn emit_type(ty: &IrType) -> TokenStream {
                 "CountDownLatch" => quote! { JCountDownLatch },
                 "Semaphore" => quote! { JSemaphore },
                 "Thread" => quote! { JThread },
+                "Optional" => quote! { JOptional },
+                "StringBuilder" => quote! { JStringBuilder },
+                "BigInteger" => quote! { JBigInteger },
+                "Pattern" => quote! { JPattern },
+                "Matcher" => quote! { JMatcher },
+                "LocalDate" => quote! { JLocalDate },
+                "File" => quote! { JFile },
+                "JStream" => quote! { JStream },
                 _ => {
                     let id = ident(name);
                     quote! { #id }
@@ -1411,6 +1591,14 @@ fn emit_type(ty: &IrType) -> TokenStream {
                     "Set" | "HashSet" | "LinkedHashSet" | "TreeSet" => {
                         let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
                         return quote! { JSet<#a> };
+                    }
+                    "Optional" => {
+                        let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
+                        return quote! { JOptional<#a> };
+                    }
+                    "Stream" => {
+                        let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
+                        return quote! { JStream<#a> };
                     }
                     _ => {}
                 }
@@ -1471,6 +1659,23 @@ fn ident(name: &str) -> Ident {
         other => other.to_owned(),
     };
     Ident::new(&sanitised, Span::call_site())
+}
+
+/// Check if an expression is `Collectors.toList()` (a MethodCall on `Collectors` with name `toList`).
+fn is_collectors_to_list(expr: &IrExpr) -> bool {
+    if let IrExpr::MethodCall {
+        receiver: Some(recv),
+        method_name,
+        ..
+    } = expr
+    {
+        if method_name == "toList" {
+            if let IrExpr::Var { name, .. } = recv.as_ref() {
+                return name == "Collectors";
+            }
+        }
+    }
+    false
 }
 
 fn as_const_literal(expr: &IrExpr) -> Option<TokenStream> {

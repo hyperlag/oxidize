@@ -96,6 +96,18 @@ impl<T: Clone + PartialEq> JList<T> {
     }
 }
 
+impl<T: Clone + Default + std::fmt::Debug + 'static> JList<T> {
+    /// Java `list.stream()` — returns a `JStream` over the list elements.
+    pub fn stream(&self) -> crate::stream::JStream<T> {
+        crate::stream::JStream::new(self.inner.clone())
+    }
+
+    /// Create a `JList` from an existing `Vec<T>`.
+    pub fn from_vec(v: Vec<T>) -> Self {
+        JList { inner: v }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

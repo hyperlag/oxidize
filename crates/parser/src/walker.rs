@@ -1338,6 +1338,64 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
             })
         }
 
+        // ── lambda expression ─────────────────────────────────────────────
+        "lambda_expression" => {
+            let params = if let Some(params_node) = child_by_field(node, "parameters") {
+                match params_node.kind() {
+                    "identifier" => vec![text(params_node, src).to_owned()],
+                    "inferred_parameters" => {
+                        let mut c = params_node.walk();
+                        params_node
+                            .named_children(&mut c)
+                            .filter(|n| n.kind() == "identifier")
+                            .map(|n| text(n, src).to_owned())
+                            .collect()
+                    }
+                    "formal_parameters" => {
+                        let mut c = params_node.walk();
+                        params_node
+                            .named_children(&mut c)
+                            .filter(|n| {
+                                n.kind() == "formal_parameter"
+                                    || n.kind() == "spread_parameter"
+                            })
+                            .filter_map(|p| child_by_field(p, "name"))
+                            .map(|n| text(n, src).to_owned())
+                            .collect()
+                    }
+                    _ => vec![],
+                }
+            } else {
+                vec![]
+            };
+
+            if let Some(body_node) = child_by_field(node, "body") {
+                let body_expr = if body_node.kind() == "block" {
+                    // Block lambda: try to extract single return expression
+                    let stmts = lower_block(body_node, src)?;
+                    stmts
+                        .into_iter()
+                        .find_map(|s| {
+                            if let IrStmt::Return(Some(e)) = s {
+                                Some(e)
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or(IrExpr::LitNull)
+                } else {
+                    lower_expr(body_node, src)?
+                };
+                Ok(IrExpr::Lambda {
+                    params,
+                    body: Box::new(body_expr),
+                    ty: IrType::Unknown,
+                })
+            } else {
+                Err(ParseError::Unsupported("lambda without body".into()))
+            }
+        }
+
         // ── fallback ──────────────────────────────────────────────────────
         other => Err(ParseError::Unsupported(format!(
             "unsupported expression kind: {other}"

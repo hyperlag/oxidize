@@ -409,4 +409,47 @@ mod tests {
     fn test_annotation_basic() {
         check("AnnotationBasic.java", "LOG: hello\nFormatter(LOG)");
     }
+
+    // ── Stage 7: Standard Library Coverage ────────────────────────────────
+
+    #[test]
+    fn test_math_methods() {
+        check("MathMethods.java", "5\n7\n3\n4\n1024\n12");
+    }
+
+    #[test]
+    fn test_string_builder() {
+        check(
+            "StringBuilderTest.java",
+            "Hello World\n11\ndlroW olleH\nHello, World",
+        );
+    }
+
+    #[test]
+    fn test_optional() {
+        check("OptionalTest.java", "true\nhello\nfalse\ndefault");
+    }
+
+    #[test]
+    fn test_regex() {
+        check("RegexTest.java", "true\n123\ntrue\nfalse");
+    }
+
+    #[test]
+    fn test_local_date() {
+        check(
+            "LocalDateTest.java",
+            "2024\n3\n15\n2024-04-04\n2024-05-15",
+        );
+    }
+
+    #[test]
+    fn test_big_integer() {
+        check("BigIntegerTest.java", "300\n20000\n50\n-1");
+    }
+
+    #[test]
+    fn test_stream() {
+        check("StreamTest.java", "4\n1\n3\n5\n8");
+    }
 }

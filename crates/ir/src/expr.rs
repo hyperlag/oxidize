@@ -76,6 +76,13 @@ pub enum IrExpr {
         ty: IrType,
     },
 
+    /// Lambda expression: `x -> body` or `(x, y) -> body`.
+    Lambda {
+        params: Vec<String>,
+        body: Box<IrExpr>,
+        ty: IrType,
+    },
+
     // ── Casts & tests ─────────────────────────────────────────────────────
     /// Explicit cast: `(TargetType) expr`.
     Cast {
@@ -134,7 +141,8 @@ impl IrExpr {
             | IrExpr::NewArray { ty, .. }
             | IrExpr::ArrayAccess { ty, .. }
             | IrExpr::Assign { ty, .. }
-            | IrExpr::CompoundAssign { ty, .. } => ty,
+            | IrExpr::CompoundAssign { ty, .. }
+            | IrExpr::Lambda { ty, .. } => ty,
             IrExpr::Cast { target, .. } => target,
             IrExpr::InstanceOf { .. } => &IrType::Bool,
         }

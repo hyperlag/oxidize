@@ -32,6 +32,9 @@ prettyplease = "0.2"
 tree-sitter = "0.22"
 tree-sitter-java = "0.21"
 
+# Regular expressions (for java.util.regex translation)
+regex = "1"
+
 # Error handling
 thiserror = "1"
 anyhow = "1"

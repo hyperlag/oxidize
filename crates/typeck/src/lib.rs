@@ -612,6 +612,20 @@ fn check_expr(
                 check_type,
             })
         }
+
+        IrExpr::Lambda { params, body, .. } => {
+            // Add each param as Unknown-typed into a child env
+            let mut lambda_env = env.clone();
+            for p in &params {
+                lambda_env.insert(p.clone(), IrType::Unknown);
+            }
+            let body = check_expr(*body, cls, class_map, &lambda_env)?;
+            Ok(IrExpr::Lambda {
+                params,
+                body: Box::new(body),
+                ty: IrType::Unknown,
+            })
+        }
     }
 }
 
@@ -693,6 +707,41 @@ fn resolve_method_return_type(
         return IrType::Void;
     }
 
+    // Math static methods
+    if let Some(recv) = receiver {
+        if let IrExpr::Var { name, .. } = recv {
+            if name == "Math" {
+                return match method_name {
+                    "abs" | "max" | "min" => IrType::Int,
+                    "pow" | "sqrt" | "floor" | "ceil" | "log" | "log10"
+                    | "sin" | "cos" | "tan" | "exp" | "hypot" | "atan2" => IrType::Double,
+                    "round" => IrType::Long,
+                    "random" => IrType::Double,
+                    _ => IrType::Double,
+                };
+            }
+            if name == "Optional" {
+                return match method_name {
+                    "of" | "ofNullable" | "empty" => IrType::Class("Optional".to_owned()),
+                    _ => IrType::Unknown,
+                };
+            }
+            if name == "Pattern" {
+                return match method_name {
+                    "compile" => IrType::Class("Pattern".to_owned()),
+                    "matches" => IrType::Bool,
+                    _ => IrType::Unknown,
+                };
+            }
+            if name == "LocalDate" {
+                return IrType::Class("LocalDate".to_owned());
+            }
+            if name == "BigInteger" {
+                return IrType::Class("BigInteger".to_owned());
+            }
+        }
+    }
+
     // java.util.concurrent / Thread method return types
     if let Some(recv) = receiver {
         if let IrType::Class(class_name) = recv.ty() {
@@ -738,6 +787,72 @@ fn resolve_method_return_type(
                 // JClass reflection methods
                 "JClass" => match method_name {
                     "getName" | "getSimpleName" | "getCanonicalName" => return IrType::String,
+                    _ => {}
+                },
+                // Optional methods
+                "Optional" | "JOptional" => match method_name {
+                    "isPresent" | "isEmpty" => return IrType::Bool,
+                    "get" | "orElse" => return IrType::Unknown,
+                    _ => {}
+                },
+                // Pattern/Matcher methods
+                "Pattern" | "JPattern" => match method_name {
+                    "matcher" => return IrType::Class("Matcher".to_owned()),
+                    "matches" => return IrType::Bool,
+                    _ => {}
+                },
+                "Matcher" | "JMatcher" => match method_name {
+                    "matches" | "find" | "lookingAt" => return IrType::Bool,
+                    "group" => return IrType::String,
+                    _ => {}
+                },
+                // LocalDate methods
+                "LocalDate" | "JLocalDate" => match method_name {
+                    "getYear" | "getMonthValue" | "getDayOfMonth" | "getDayOfYear"
+                    | "getDayOfWeek" => return IrType::Int,
+                    "plusDays" | "minusDays" | "plusMonths" | "minusMonths"
+                    | "withDayOfMonth" => return IrType::Class("LocalDate".to_owned()),
+                    "toString" | "format" => return IrType::String,
+                    _ => {}
+                },
+                // BigInteger methods
+                "BigInteger" | "JBigInteger" => match method_name {
+                    "add" | "subtract" | "multiply" | "divide" | "mod" | "pow"
+                    | "abs" | "negate" | "gcd" => return IrType::Class("BigInteger".to_owned()),
+                    "toString" => return IrType::String,
+                    "intValue" | "compareTo" => return IrType::Int,
+                    "longValue" => return IrType::Long,
+                    _ => {}
+                },
+                // StringBuilder methods
+                "StringBuilder" | "JStringBuilder" => match method_name {
+                    "toString" | "substring" => return IrType::String,
+                    "length" | "indexOf" | "lastIndexOf" => return IrType::Int,
+                    "charAt" => return IrType::Char,
+                    "append" | "insert" | "delete" | "deleteCharAt" | "reverse" => {
+                        return IrType::Class("StringBuilder".to_owned())
+                    }
+                    _ => {}
+                },
+                // Stream methods
+                "JStream" => match method_name {
+                    "count" => return IrType::Long,
+                    "filter" | "sorted" | "distinct" | "limit" | "skip" | "peek" => {
+                        return IrType::Class("JStream".to_owned())
+                    }
+                    "collect_to_list" | "toArray" => return IrType::Unknown,
+                    "findFirst" => return IrType::Unknown,
+                    _ => {}
+                },
+                // File methods
+                "File" | "JFile" => match method_name {
+                    "getName" | "getPath" | "getAbsolutePath" | "getParent" => {
+                        return IrType::String
+                    }
+                    "exists" | "isFile" | "isDirectory" | "delete" | "mkdir" | "mkdirs" => {
+                        return IrType::Bool
+                    }
+                    "length" => return IrType::Long,
                     _ => {}
                 },
                 _ => {}
