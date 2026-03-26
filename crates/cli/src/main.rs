@@ -113,7 +113,7 @@ fn main() -> anyhow::Result<()> {
         Some(Commands::Translate {
             input,
             output,
-            classpath: _classpath,
+            classpath,
             watch,
             dump_ir,
             print,
@@ -121,7 +121,19 @@ fn main() -> anyhow::Result<()> {
             source_map,
             cargo_toml,
         }) => {
-            let java_files = collect_java_files(&input)?;
+            for cp in &classpath {
+                info!("classpath entry: {cp:?}");
+            }
+
+            let mut java_files = collect_java_files(&input)?;
+
+            // Also collect .java sources from classpath directories.
+            let cp_files = collect_java_files(&classpath).unwrap_or_default();
+            if !cp_files.is_empty() {
+                info!("{} Java file(s) found on classpath", cp_files.len());
+                java_files.extend(cp_files);
+            }
+
             if java_files.is_empty() {
                 anyhow::bail!("No .java files found in the specified input paths");
             }
@@ -137,7 +149,15 @@ fn main() -> anyhow::Result<()> {
             )?;
 
             if watch {
-                run_watch_mode(&input, &output, dump_ir, print, source_map, cargo_toml)?;
+                run_watch_mode(
+                    &input,
+                    &classpath,
+                    &output,
+                    dump_ir,
+                    print,
+                    source_map,
+                    cargo_toml,
+                )?;
             }
         }
 
@@ -324,6 +344,7 @@ fn translate_files_legacy(
 
 fn run_watch_mode(
     input_paths: &[PathBuf],
+    classpath: &[PathBuf],
     output: &Path,
     dump_ir: bool,
     print: bool,
@@ -370,8 +391,9 @@ fn run_watch_mode(
                     java_events.len()
                 );
 
-                // Re-collect all java files and retranslate.
-                let java_files = collect_java_files(input_paths)?;
+                // Re-collect all java files (input + classpath) and retranslate.
+                let mut java_files = collect_java_files(input_paths)?;
+                java_files.extend(collect_java_files(classpath).unwrap_or_default());
                 if let Err(e) = translate_files(
                     &java_files,
                     output,
