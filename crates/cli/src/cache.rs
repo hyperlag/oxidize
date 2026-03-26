@@ -30,7 +30,7 @@ impl TranslationCache {
 
         let mut entries = HashMap::new();
         for line in content.lines() {
-            if let Some((hash, file_path)) = line.split_once(' ') {
+            if let Some((hash, file_path)) = line.split_once('\t') {
                 entries.insert(PathBuf::from(file_path), hash.to_owned());
             }
         }
@@ -44,7 +44,7 @@ impl TranslationCache {
         let mut content = String::new();
         for (file_path, hash) in &self.entries {
             content.push_str(hash);
-            content.push(' ');
+            content.push('\t');
             content.push_str(&file_path.to_string_lossy());
             content.push('\n');
         }

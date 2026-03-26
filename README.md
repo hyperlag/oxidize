@@ -81,9 +81,9 @@ Options:
 jtrans translate --input HelloWorld.java
 ```
 
-This writes a complete Cargo project to `rust-out/` containing:
+This writes a Cargo project skeleton to `rust-out/` containing:
 - `src/helloworld.rs` — the translated Rust source
-- `Cargo.toml` — a ready-to-build manifest with the `java-compat` dependency
+- `Cargo.toml` — a manifest that declares a local `java-compat` dependency (`java-compat = { path = "java-compat" }`). You must either place the `java-compat` crate at that path relative to the output directory or edit the dependency to point at your runtime crate before `cargo build` will succeed.
 - `src/helloworld.jtrans-map` — a source map (Rust line → Java line)
 
 #### Translate an entire directory

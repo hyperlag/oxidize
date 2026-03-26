@@ -10,6 +10,7 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
     use std::process::Command;
+    use std::sync::OnceLock;
     use tempfile::TempDir;
 
     fn manifest_dir() -> PathBuf {
@@ -458,22 +459,32 @@ mod tests {
     }
 
     fn jtrans_bin() -> PathBuf {
-        workspace_dir().join("target").join("debug").join("jtrans")
+        let mut base = workspace_dir().join("target");
+        if let Ok(dir) = std::env::var("CARGO_TARGET_DIR") {
+            base = PathBuf::from(dir);
+        }
+        let profile = std::env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
+        let name = if cfg!(windows) { "jtrans.exe" } else { "jtrans" };
+        base.join(profile).join(name)
     }
 
+    static JTRANS_BUILT: OnceLock<()> = OnceLock::new();
+
     fn ensure_jtrans_built() {
-        let ws = workspace_dir();
-        let build = Command::new("cargo")
-            .args(["build", "-p", "jtrans"])
-            .current_dir(&ws)
-            .env("RUSTFLAGS", "")
-            .output()
-            .expect("failed to build jtrans");
-        assert!(
-            build.status.success(),
-            "jtrans build failed: {}",
-            String::from_utf8_lossy(&build.stderr)
-        );
+        JTRANS_BUILT.get_or_init(|| {
+            let ws = workspace_dir();
+            let build = Command::new("cargo")
+                .args(["build", "-p", "jtrans"])
+                .current_dir(&ws)
+                .env("RUSTFLAGS", "")
+                .output()
+                .expect("failed to build jtrans");
+            assert!(
+                build.status.success(),
+                "jtrans build failed: {}",
+                String::from_utf8_lossy(&build.stderr)
+            );
+        });
     }
 
     #[test]
@@ -571,8 +582,9 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let output_dir = tmp.path().join("rust-out");
         let hello = java_dir().join("HelloWorld.java");
+        let rs_out = output_dir.join("src").join("helloworld.rs");
 
-        // First translation should translate the file.
+        // First translation should produce the output file and create a cache.
         let result1 = Command::new(jtrans_bin())
             .args([
                 "translate",
@@ -585,15 +597,25 @@ mod tests {
             ])
             .output()
             .expect("failed to run jtrans");
-        assert!(result1.status.success());
-
-        let stderr1 = String::from_utf8_lossy(&result1.stderr);
         assert!(
-            stderr1.contains("1 translated"),
-            "first run should translate"
+            result1.status.success(),
+            "first run failed: {}",
+            String::from_utf8_lossy(&result1.stderr)
         );
 
-        // Second translation should skip (unchanged).
+        // Output file and cache must exist after first run.
+        assert!(rs_out.exists(), "output file should exist after first run");
+        let cache_file = output_dir.join(".jtrans-cache");
+        assert!(cache_file.exists(), "cache file should exist after first run");
+
+        // Record the modification time of the output file after the first run.
+        let mtime_after_first = fs::metadata(&rs_out)
+            .expect("cannot stat output file")
+            .modified()
+            .expect("mtime not available on this platform");
+
+        // Second translation should skip the unchanged file: the output must
+        // not be rewritten (mtime should stay the same).
         let result2 = Command::new(jtrans_bin())
             .args([
                 "translate",
@@ -606,16 +628,21 @@ mod tests {
             ])
             .output()
             .expect("failed to run jtrans");
-        assert!(result2.status.success());
-
-        let stderr2 = String::from_utf8_lossy(&result2.stderr);
         assert!(
-            stderr2.contains("1 skipped"),
-            "second run should skip unchanged file"
+            result2.status.success(),
+            "second run failed: {}",
+            String::from_utf8_lossy(&result2.stderr)
         );
 
-        // Verify cache file exists.
-        assert!(output_dir.join(".jtrans-cache").exists());
+        let mtime_after_second = fs::metadata(&rs_out)
+            .expect("cannot stat output file")
+            .modified()
+            .expect("mtime not available on this platform");
+
+        assert_eq!(
+            mtime_after_first, mtime_after_second,
+            "output file should not be rewritten when source is unchanged"
+        );
     }
 
     #[test]
