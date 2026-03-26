@@ -36,11 +36,11 @@ fn days_in_month(year: i32, month: i32) -> i32 {
 impl JLocalDate {
     /// Java `LocalDate.of(year, month, dayOfMonth)`.
     pub fn of(year: i32, month: i32, day: i32) -> Self {
-        if month < 1 || month > 12 {
+        if !(1..=12).contains(&month) {
             panic!("Invalid month value {}: valid range is 1..=12", month);
         }
         let max_day = days_in_month(year, month);
-        if day < 1 || day > max_day {
+        if !(1..=max_day).contains(&day) {
             panic!(
                 "Invalid day value {} for year {} and month {}: valid range is 1..={}",
                 day, year, month, max_day
