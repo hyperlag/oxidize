@@ -83,9 +83,7 @@ impl JBigInteger {
 
     /// Java `a.negate()`.
     pub fn negate(&self) -> JBigInteger {
-        JBigInteger {
-            inner: -self.inner,
-        }
+        JBigInteger { inner: -self.inner }
     }
 
     /// Java `a.gcd(b)`.

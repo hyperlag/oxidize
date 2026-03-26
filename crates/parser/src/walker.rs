@@ -1356,8 +1356,7 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                         params_node
                             .named_children(&mut c)
                             .filter(|n| {
-                                n.kind() == "formal_parameter"
-                                    || n.kind() == "spread_parameter"
+                                n.kind() == "formal_parameter" || n.kind() == "spread_parameter"
                             })
                             .filter_map(|p| child_by_field(p, "name"))
                             .map(|n| text(n, src).to_owned())

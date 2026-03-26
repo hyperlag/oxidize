@@ -42,7 +42,11 @@ impl JLocalDate {
     pub fn now() -> Self {
         // Returns 1970-01-01 as a deterministic stub.
         // For real usage in generated code, the Java test should capture the date before translating.
-        Self { year: 1970, month: 1, day: 1 }
+        Self {
+            year: 1970,
+            month: 1,
+            day: 1,
+        }
     }
 
     /// Java `date.getYear()`.
@@ -131,9 +135,7 @@ impl JLocalDate {
 
     /// Java `date.toString()` — returns "YYYY-MM-DD".
     pub fn toString(&self) -> JString {
-        JString::from(
-            format!("{:04}-{:02}-{:02}", self.year, self.month, self.day).as_str(),
-        )
+        JString::from(format!("{:04}-{:02}-{:02}", self.year, self.month, self.day).as_str())
     }
 }
 

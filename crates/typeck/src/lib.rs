@@ -713,8 +713,8 @@ fn resolve_method_return_type(
             if name == "Math" {
                 return match method_name {
                     "abs" | "max" | "min" => IrType::Int,
-                    "pow" | "sqrt" | "floor" | "ceil" | "log" | "log10"
-                    | "sin" | "cos" | "tan" | "exp" | "hypot" | "atan2" => IrType::Double,
+                    "pow" | "sqrt" | "floor" | "ceil" | "log" | "log10" | "sin" | "cos" | "tan"
+                    | "exp" | "hypot" | "atan2" => IrType::Double,
                     "round" => IrType::Long,
                     "random" => IrType::Double,
                     _ => IrType::Double,
@@ -810,15 +810,16 @@ fn resolve_method_return_type(
                 "LocalDate" | "JLocalDate" => match method_name {
                     "getYear" | "getMonthValue" | "getDayOfMonth" | "getDayOfYear"
                     | "getDayOfWeek" => return IrType::Int,
-                    "plusDays" | "minusDays" | "plusMonths" | "minusMonths"
-                    | "withDayOfMonth" => return IrType::Class("LocalDate".to_owned()),
+                    "plusDays" | "minusDays" | "plusMonths" | "minusMonths" | "withDayOfMonth" => {
+                        return IrType::Class("LocalDate".to_owned())
+                    }
                     "toString" | "format" => return IrType::String,
                     _ => {}
                 },
                 // BigInteger methods
                 "BigInteger" | "JBigInteger" => match method_name {
-                    "add" | "subtract" | "multiply" | "divide" | "mod" | "pow"
-                    | "abs" | "negate" | "gcd" => return IrType::Class("BigInteger".to_owned()),
+                    "add" | "subtract" | "multiply" | "divide" | "mod" | "pow" | "abs"
+                    | "negate" | "gcd" => return IrType::Class("BigInteger".to_owned()),
                     "toString" => return IrType::String,
                     "intValue" | "compareTo" => return IrType::Int,
                     "longValue" => return IrType::Long,

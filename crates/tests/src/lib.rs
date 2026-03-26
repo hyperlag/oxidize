@@ -437,10 +437,7 @@ mod tests {
 
     #[test]
     fn test_local_date() {
-        check(
-            "LocalDateTest.java",
-            "2024\n3\n15\n2024-04-04\n2024-05-15",
-        );
+        check("LocalDateTest.java", "2024\n3\n15\n2024-04-04\n2024-05-15");
     }
 
     #[test]

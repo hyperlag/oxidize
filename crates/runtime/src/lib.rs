@@ -45,9 +45,8 @@ pub use time::JLocalDate;
 /// Convenience re-export of all runtime types.
 pub mod prelude {
     pub use super::{
-        JArray, JAtomicBoolean, JAtomicInteger, JAtomicLong, JBigInteger, JClass,
-        JCountDownLatch, JException, JFile, JList, JLocalDate, JMap, JMatcher, JNull, JObject,
-        JOptional, JPattern, JSemaphore, JSet, JStream, JString, JStringBuilder, JThread,
+        JArray, JAtomicBoolean, JAtomicInteger, JAtomicLong, JBigInteger, JClass, JCountDownLatch,
+        JException, JFile, JList, JLocalDate, JMap, JMatcher, JNull, JObject, JOptional, JPattern,
+        JSemaphore, JSet, JStream, JString, JStringBuilder, JThread,
     };
 }
-

@@ -1085,7 +1085,10 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     // Math.x(...) — static Math methods → f64 method calls or std ops.
                     if name == "Math" {
                         let first_ty = args.first().map(|e| e.ty().clone());
-                        let is_double = matches!(first_ty.as_ref(), Some(IrType::Double) | Some(IrType::Float));
+                        let is_double = matches!(
+                            first_ty.as_ref(),
+                            Some(IrType::Double) | Some(IrType::Float)
+                        );
                         let is_long = matches!(first_ty.as_ref(), Some(IrType::Long));
                         return match method_name.as_str() {
                             "abs" => {
@@ -1102,18 +1105,26 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                 let a = &args_ts[0];
                                 let b = &args_ts[1];
                                 if is_double {
-                                    Ok(quote! { { let __a = #a as f64; let __b = #b as f64; if __a > __b { __a } else { __b } } })
+                                    Ok(
+                                        quote! { { let __a = #a as f64; let __b = #b as f64; if __a > __b { __a } else { __b } } },
+                                    )
                                 } else {
-                                    Ok(quote! { { let __a = #a as i32; let __b = #b as i32; if __a > __b { __a } else { __b } } })
+                                    Ok(
+                                        quote! { { let __a = #a as i32; let __b = #b as i32; if __a > __b { __a } else { __b } } },
+                                    )
                                 }
                             }
                             "min" => {
                                 let a = &args_ts[0];
                                 let b = &args_ts[1];
                                 if is_double {
-                                    Ok(quote! { { let __a = #a as f64; let __b = #b as f64; if __a < __b { __a } else { __b } } })
+                                    Ok(
+                                        quote! { { let __a = #a as f64; let __b = #b as f64; if __a < __b { __a } else { __b } } },
+                                    )
                                 } else {
-                                    Ok(quote! { { let __a = #a as i32; let __b = #b as i32; if __a < __b { __a } else { __b } } })
+                                    Ok(
+                                        quote! { { let __a = #a as i32; let __b = #b as i32; if __a < __b { __a } else { __b } } },
+                                    )
                                 }
                             }
                             "pow" => {
@@ -1121,16 +1132,46 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                 let b = &args_ts[1];
                                 Ok(quote! { (#a as f64).powf(#b as f64) })
                             }
-                            "sqrt" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).sqrt() }) }
-                            "floor" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).floor() }) }
-                            "ceil" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).ceil() }) }
-                            "round" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).round() as i64 }) }
-                            "log" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).ln() }) }
-                            "log10" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).log10() }) }
-                            "sin" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).sin() }) }
-                            "cos" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).cos() }) }
-                            "tan" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).tan() }) }
-                            "exp" => { let a = &args_ts[0]; Ok(quote! { (#a as f64).exp() }) }
+                            "sqrt" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).sqrt() })
+                            }
+                            "floor" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).floor() })
+                            }
+                            "ceil" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).ceil() })
+                            }
+                            "round" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).round() as i64 })
+                            }
+                            "log" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).ln() })
+                            }
+                            "log10" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).log10() })
+                            }
+                            "sin" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).sin() })
+                            }
+                            "cos" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).cos() })
+                            }
+                            "tan" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).tan() })
+                            }
+                            "exp" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).exp() })
+                            }
                             "random" => Ok(quote! { 0.0_f64 }),
                             "PI" => Ok(quote! { std::f64::consts::PI }),
                             _ => {
@@ -1272,9 +1313,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                         Ok(quote! { JStringBuilder::new_from_string(#(#args_ts),*) })
                     }
                 }
-                "BigInteger" => {
-                    Ok(quote! { JBigInteger::from_string(#(#args_ts),*) })
-                }
+                "BigInteger" => Ok(quote! { JBigInteger::from_string(#(#args_ts),*) }),
                 "File" => {
                     if args_ts.len() == 2 {
                         let a = &args_ts[0];

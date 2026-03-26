@@ -88,9 +88,10 @@ impl JStringBuilder {
     /// Java `sb.indexOf(s)`.
     pub fn indexOf(&self, s: JString) -> i32 {
         // Character-index version (Java indexOf returns char offset)
-        self.buf.find(s.as_str()).map(|b| {
-            self.buf[..b].chars().count() as i32
-        }).unwrap_or(-1)
+        self.buf
+            .find(s.as_str())
+            .map(|b| self.buf[..b].chars().count() as i32)
+            .unwrap_or(-1)
     }
 
     /// Java `sb.setCharAt(i, c)`.

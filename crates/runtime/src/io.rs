@@ -28,12 +28,7 @@ impl JFile {
 
     /// Java `file.getName()`.
     pub fn getName(&self) -> JString {
-        JString::from(
-            self.path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or(""),
-        )
+        JString::from(self.path.file_name().and_then(|n| n.to_str()).unwrap_or(""))
     }
 
     /// Java `file.getPath()`.
@@ -53,12 +48,7 @@ impl JFile {
 
     /// Java `file.getParent()`.
     pub fn getParent(&self) -> JString {
-        JString::from(
-            self.path
-                .parent()
-                .and_then(|p| p.to_str())
-                .unwrap_or(""),
-        )
+        JString::from(self.path.parent().and_then(|p| p.to_str()).unwrap_or(""))
     }
 
     /// Java `file.exists()`.
