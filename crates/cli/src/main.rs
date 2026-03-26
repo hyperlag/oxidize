@@ -150,13 +150,7 @@ fn main() -> anyhow::Result<()> {
 
             if watch {
                 run_watch_mode(
-                    &input,
-                    &classpath,
-                    &output,
-                    dump_ir,
-                    print,
-                    source_map,
-                    cargo_toml,
+                    &input, &classpath, &output, dump_ir, print, source_map, cargo_toml,
                 )?;
             }
         }
