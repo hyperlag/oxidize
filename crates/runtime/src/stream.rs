@@ -28,15 +28,23 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
 
     /// Java `stream.limit(n)`.
     pub fn limit(self, n: i64) -> Self {
+        if n < 0 {
+            panic!("java.lang.IllegalArgumentException: negative limit");
+        }
+        let n = n as usize;
         Self {
-            data: self.data.into_iter().take(n as usize).collect(),
+            data: self.data.into_iter().take(n).collect(),
         }
     }
 
     /// Java `stream.skip(n)`.
     pub fn skip(self, n: i64) -> Self {
+        if n < 0 {
+            panic!("java.lang.IllegalArgumentException: negative skip");
+        }
+        let n = n as usize;
         Self {
-            data: self.data.into_iter().skip(n as usize).collect(),
+            data: self.data.into_iter().skip(n).collect(),
         }
     }
 

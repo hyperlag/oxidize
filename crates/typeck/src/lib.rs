@@ -711,7 +711,7 @@ fn resolve_method_return_type(
     if let Some(IrExpr::Var { name, .. }) = receiver {
         if name == "Math" {
             return match method_name {
-                "abs" | "max" | "min" => IrType::Int,
+                "abs" | "max" | "min" => IrType::Unknown,
                 "pow" | "sqrt" | "floor" | "ceil" | "log" | "log10" | "sin" | "cos" | "tan"
                 | "exp" | "hypot" | "atan2" => IrType::Double,
                 "round" => IrType::Long,
@@ -806,12 +806,13 @@ fn resolve_method_return_type(
                 },
                 // LocalDate methods
                 "LocalDate" | "JLocalDate" => match method_name {
-                    "getYear" | "getMonthValue" | "getDayOfMonth" | "getDayOfYear"
-                    | "getDayOfWeek" => return IrType::Int,
+                    "getYear" | "getMonthValue" | "getDayOfMonth" | "getDayOfYear" => {
+                        return IrType::Int
+                    }
                     "plusDays" | "minusDays" | "plusMonths" | "minusMonths" | "withDayOfMonth" => {
                         return IrType::Class("LocalDate".to_owned())
                     }
-                    "toString" | "format" => return IrType::String,
+                    "toString" => return IrType::String,
                     _ => {}
                 },
                 // BigInteger methods
@@ -826,7 +827,7 @@ fn resolve_method_return_type(
                 // StringBuilder methods
                 "StringBuilder" | "JStringBuilder" => match method_name {
                     "toString" | "substring" => return IrType::String,
-                    "length" | "indexOf" | "lastIndexOf" => return IrType::Int,
+                    "length" | "indexOf" => return IrType::Int,
                     "charAt" => return IrType::Char,
                     "append" | "insert" | "delete" | "deleteCharAt" | "reverse" => {
                         return IrType::Class("StringBuilder".to_owned())
@@ -836,7 +837,7 @@ fn resolve_method_return_type(
                 // Stream methods
                 "JStream" => match method_name {
                     "count" => return IrType::Long,
-                    "filter" | "sorted" | "distinct" | "limit" | "skip" | "peek" => {
+                    "filter" | "sorted" | "distinct" | "limit" | "skip" => {
                         return IrType::Class("JStream".to_owned())
                     }
                     "collect_to_list" | "toArray" => return IrType::Unknown,

@@ -39,12 +39,14 @@ impl JFile {
 
     /// Java `file.getAbsolutePath()`.
     pub fn getAbsolutePath(&self) -> JString {
-        JString::from(
-            std::fs::canonicalize(&self.path)
+        let abs_path = if self.path.is_absolute() {
+            self.path.clone()
+        } else {
+            std::env::current_dir()
+                .map(|cwd| cwd.join(&self.path))
                 .unwrap_or_else(|_| self.path.clone())
-                .to_str()
-                .unwrap_or(""),
-        )
+        };
+        JString::from(abs_path.to_str().unwrap_or(""))
     }
 
     /// Java `file.getParent()`.

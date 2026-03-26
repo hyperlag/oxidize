@@ -43,7 +43,16 @@ impl JStringBuilder {
 
     /// Java `sb.charAt(i)`.
     pub fn charAt(&self, i: i32) -> char {
-        self.buf.chars().nth(i as usize).unwrap_or('\0')
+        if i < 0 {
+            panic!("JStringBuilder::charAt index out of bounds: {}", i);
+        }
+        let target = i as usize;
+        for (idx, ch) in self.buf.chars().enumerate() {
+            if idx == target {
+                return ch;
+            }
+        }
+        panic!("JStringBuilder::charAt index out of bounds: {}", i);
     }
 
     /// Java `sb.reverse()`.
@@ -55,12 +64,19 @@ impl JStringBuilder {
 
     /// Java `sb.insert(offset, s)`.
     pub fn insert(&mut self, offset: i32, s: JString) -> &mut Self {
-        let byte_idx = self
-            .buf
-            .char_indices()
-            .nth(offset as usize)
-            .map(|(i, _)| i)
-            .unwrap_or(self.buf.len());
+        let len_chars = self.buf.chars().count() as i32;
+        if offset < 0 || offset > len_chars {
+            panic!("StringIndexOutOfBoundsException: offset {}", offset);
+        }
+        let byte_idx = if offset == len_chars {
+            self.buf.len()
+        } else {
+            self.buf
+                .char_indices()
+                .nth(offset as usize)
+                .map(|(i, _)| i)
+                .expect("valid character index after bounds check")
+        };
         self.buf.insert_str(byte_idx, s.as_str());
         self
     }

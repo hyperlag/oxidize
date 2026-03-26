@@ -1370,18 +1370,23 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
 
             if let Some(body_node) = child_by_field(node, "body") {
                 let body_expr = if body_node.kind() == "block" {
-                    // Block lambda: try to extract single return expression
+                    // Block lambda: only support a single `return <expr>;` statement
                     let stmts = lower_block(body_node, src)?;
-                    stmts
-                        .into_iter()
-                        .find_map(|s| {
-                            if let IrStmt::Return(Some(e)) = s {
-                                Some(e)
-                            } else {
-                                None
+                    if stmts.len() == 1 {
+                        match stmts.into_iter().next().unwrap() {
+                            IrStmt::Return(Some(e)) => e,
+                            _ => {
+                                return Err(ParseError::Unsupported(
+                                    "block lambdas must be a single `return <expr>;` statement"
+                                        .into(),
+                                ));
                             }
-                        })
-                        .unwrap_or(IrExpr::LitNull)
+                        }
+                    } else {
+                        return Err(ParseError::Unsupported(
+                            "block lambdas must be a single `return <expr>;` statement".into(),
+                        ));
+                    }
                 } else {
                     lower_expr(body_node, src)?
                 };

@@ -28,7 +28,9 @@ impl JPattern {
     pub fn compile(pattern: JString) -> Self {
         let src = pattern.as_str().to_owned();
         // Java uses the same regex syntax as the `regex` crate for common patterns.
-        let inner = Regex::new(&src).unwrap_or_else(|_| Regex::new("").unwrap());
+        let inner = Regex::new(&src).unwrap_or_else(|err| {
+            panic!("Invalid regex pattern {:?}: {}", src, err);
+        });
         Self { inner, source: src }
     }
 
@@ -57,6 +59,7 @@ pub struct JMatcher {
     pattern: Regex,
     input: String,
     captures: Option<Vec<Option<String>>>,
+    search_start: usize,
 }
 
 impl Default for JMatcher {
@@ -65,6 +68,7 @@ impl Default for JMatcher {
             pattern: Regex::new("").unwrap(),
             input: String::new(),
             captures: None,
+            search_start: 0,
         }
     }
 }
@@ -75,6 +79,7 @@ impl JMatcher {
             pattern,
             input: input.as_str().to_owned(),
             captures: None,
+            search_start: 0,
         }
     }
 
@@ -106,12 +111,15 @@ impl JMatcher {
 
     /// Java `matcher.find()` — finds the next match.
     pub fn find(&mut self) -> bool {
-        if let Some(caps) = self.pattern.captures(&self.input) {
-            self.captures = Some(
-                caps.iter()
-                    .map(|m| m.map(|m| m.as_str().to_owned()))
-                    .collect(),
-            );
+        if let Some(m) = self.pattern.find_at(&self.input, self.search_start) {
+            self.search_start = if m.end() > m.start() { m.end() } else { m.end() + 1 };
+            if let Some(caps) = self.pattern.captures_at(&self.input, m.start()) {
+                self.captures = Some(
+                    caps.iter()
+                        .map(|m| m.map(|m| m.as_str().to_owned()))
+                        .collect(),
+                );
+            }
             true
         } else {
             self.captures = None;

@@ -1108,6 +1108,10 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                     Ok(
                                         quote! { { let __a = #a as f64; let __b = #b as f64; if __a > __b { __a } else { __b } } },
                                     )
+                                } else if is_long {
+                                    Ok(
+                                        quote! { { let __a = #a as i64; let __b = #b as i64; if __a > __b { __a } else { __b } } },
+                                    )
                                 } else {
                                     Ok(
                                         quote! { { let __a = #a as i32; let __b = #b as i32; if __a > __b { __a } else { __b } } },
@@ -1120,6 +1124,10 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                 if is_double {
                                     Ok(
                                         quote! { { let __a = #a as f64; let __b = #b as f64; if __a < __b { __a } else { __b } } },
+                                    )
+                                } else if is_long {
+                                    Ok(
+                                        quote! { { let __a = #a as i64; let __b = #b as i64; if __a < __b { __a } else { __b } } },
                                     )
                                 } else {
                                     Ok(
@@ -1174,10 +1182,10 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             }
                             "random" => Ok(quote! { 0.0_f64 }),
                             "PI" => Ok(quote! { std::f64::consts::PI }),
-                            _ => {
-                                let m = ident(method_name);
-                                Ok(quote! { (#(#args_ts),* as f64).#m() })
-                            }
+                            _ => Err(CodegenError::Unsupported(format!(
+                                "unsupported Math method: {}",
+                                method_name
+                            ))),
                         };
                     }
                     // Optional.of(...) / Optional.empty() / Optional.ofNullable(...)
