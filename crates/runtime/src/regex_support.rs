@@ -112,7 +112,8 @@ impl JMatcher {
     /// Java `matcher.find()` — finds the next match.
     pub fn find(&mut self) -> bool {
         if let Some(m) = self.pattern.find_at(&self.input, self.search_start) {
-            self.search_start = if m.end() > m.start() { m.end() } else { m.end() + 1 };
+            let next = if m.end() > m.start() { m.end() } else { (m.end() + 1).min(self.input.len()) };
+            self.search_start = next;
             if let Some(caps) = self.pattern.captures_at(&self.input, m.start()) {
                 self.captures = Some(
                     caps.iter()

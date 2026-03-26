@@ -47,12 +47,11 @@ impl JStringBuilder {
             panic!("JStringBuilder::charAt index out of bounds: {}", i);
         }
         let target = i as usize;
-        for (idx, ch) in self.buf.chars().enumerate() {
-            if idx == target {
-                return ch;
-            }
+        let len = self.buf.chars().count();
+        if target >= len {
+            panic!("JStringBuilder::charAt index out of bounds: {}", i);
         }
-        panic!("JStringBuilder::charAt index out of bounds: {}", i);
+        self.buf.chars().nth(target).unwrap()
     }
 
     /// Java `sb.reverse()`.
