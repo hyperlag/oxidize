@@ -449,4 +449,256 @@ mod tests {
     fn test_stream() {
         check("StreamTest.java", "4\n1\n3\n5\n8");
     }
+
+    // ── Stage 8: Build Integration & Tooling Tests ────────────────────────
+
+    fn workspace_dir() -> PathBuf {
+        let md = manifest_dir();
+        md.parent().unwrap().parent().unwrap().to_path_buf()
+    }
+
+    fn jtrans_bin() -> PathBuf {
+        workspace_dir().join("target").join("debug").join("jtrans")
+    }
+
+    fn ensure_jtrans_built() {
+        let ws = workspace_dir();
+        let build = Command::new("cargo")
+            .args(["build", "-p", "jtrans"])
+            .current_dir(&ws)
+            .env("RUSTFLAGS", "")
+            .output()
+            .expect("failed to build jtrans");
+        assert!(
+            build.status.success(),
+            "jtrans build failed: {}",
+            String::from_utf8_lossy(&build.stderr)
+        );
+    }
+
+    #[test]
+    fn test_cli_translate_subcommand() {
+        ensure_jtrans_built();
+
+        let tmp = TempDir::new().unwrap();
+        let output_dir = tmp.path().join("rust-out");
+        let hello = java_dir().join("HelloWorld.java");
+
+        let result = Command::new(jtrans_bin())
+            .args([
+                "translate",
+                "--input",
+                hello.to_str().unwrap(),
+                "--output",
+                output_dir.to_str().unwrap(),
+                "--no-incremental",
+                "--no-source-map",
+                "--no-cargo-toml",
+            ])
+            .output()
+            .expect("failed to run jtrans");
+
+        assert!(
+            result.status.success(),
+            "jtrans translate failed: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert!(output_dir.join("src").join("helloworld.rs").exists());
+    }
+
+    #[test]
+    fn test_cli_cargo_toml_generation() {
+        ensure_jtrans_built();
+
+        let tmp = TempDir::new().unwrap();
+        let output_dir = tmp.path().join("rust-out");
+        let hello = java_dir().join("HelloWorld.java");
+
+        let result = Command::new(jtrans_bin())
+            .args([
+                "translate",
+                "--input",
+                hello.to_str().unwrap(),
+                "--output",
+                output_dir.to_str().unwrap(),
+                "--no-incremental",
+                "--no-source-map",
+            ])
+            .output()
+            .expect("failed to run jtrans");
+
+        assert!(result.status.success());
+        let cargo_toml = output_dir.join("Cargo.toml");
+        assert!(cargo_toml.exists(), "Cargo.toml should be generated");
+        let content = fs::read_to_string(&cargo_toml).unwrap();
+        assert!(content.contains("[package]"));
+        assert!(content.contains("java-compat"));
+    }
+
+    #[test]
+    fn test_cli_source_map_generation() {
+        ensure_jtrans_built();
+
+        let tmp = TempDir::new().unwrap();
+        let output_dir = tmp.path().join("rust-out");
+        let hello = java_dir().join("HelloWorld.java");
+
+        let result = Command::new(jtrans_bin())
+            .args([
+                "translate",
+                "--input",
+                hello.to_str().unwrap(),
+                "--output",
+                output_dir.to_str().unwrap(),
+                "--no-incremental",
+                "--no-cargo-toml",
+            ])
+            .output()
+            .expect("failed to run jtrans");
+
+        assert!(result.status.success());
+        let map_file = output_dir.join("src").join("helloworld.jtrans-map");
+        assert!(map_file.exists(), "source map should be generated");
+        let content = fs::read_to_string(&map_file).unwrap();
+        assert!(content.contains("# jtrans source map v1"));
+        assert!(content.contains(" -> "));
+    }
+
+    #[test]
+    fn test_cli_incremental_cache() {
+        ensure_jtrans_built();
+
+        let tmp = TempDir::new().unwrap();
+        let output_dir = tmp.path().join("rust-out");
+        let hello = java_dir().join("HelloWorld.java");
+
+        // First translation should translate the file.
+        let result1 = Command::new(jtrans_bin())
+            .args([
+                "translate",
+                "--input",
+                hello.to_str().unwrap(),
+                "--output",
+                output_dir.to_str().unwrap(),
+                "--no-source-map",
+                "--no-cargo-toml",
+            ])
+            .output()
+            .expect("failed to run jtrans");
+        assert!(result1.status.success());
+
+        let stderr1 = String::from_utf8_lossy(&result1.stderr);
+        assert!(
+            stderr1.contains("1 translated"),
+            "first run should translate"
+        );
+
+        // Second translation should skip (unchanged).
+        let result2 = Command::new(jtrans_bin())
+            .args([
+                "translate",
+                "--input",
+                hello.to_str().unwrap(),
+                "--output",
+                output_dir.to_str().unwrap(),
+                "--no-source-map",
+                "--no-cargo-toml",
+            ])
+            .output()
+            .expect("failed to run jtrans");
+        assert!(result2.status.success());
+
+        let stderr2 = String::from_utf8_lossy(&result2.stderr);
+        assert!(
+            stderr2.contains("1 skipped"),
+            "second run should skip unchanged file"
+        );
+
+        // Verify cache file exists.
+        assert!(output_dir.join(".jtrans-cache").exists());
+    }
+
+    #[test]
+    fn test_cli_init_maven() {
+        ensure_jtrans_built();
+
+        let tmp = TempDir::new().unwrap();
+
+        let result = Command::new(jtrans_bin())
+            .args(["init-maven", "--output", tmp.path().to_str().unwrap()])
+            .output()
+            .expect("failed to run jtrans");
+
+        assert!(result.status.success());
+        let pom = tmp.path().join("jtrans-maven-plugin.xml");
+        assert!(pom.exists(), "Maven plugin fragment should be generated");
+        let content = fs::read_to_string(&pom).unwrap();
+        assert!(content.contains("exec-maven-plugin"));
+        assert!(content.contains("jtrans"));
+    }
+
+    #[test]
+    fn test_cli_init_gradle() {
+        ensure_jtrans_built();
+
+        let tmp = TempDir::new().unwrap();
+
+        let result = Command::new(jtrans_bin())
+            .args(["init-gradle", "--output", tmp.path().to_str().unwrap()])
+            .output()
+            .expect("failed to run jtrans");
+
+        assert!(result.status.success());
+        let gradle = tmp.path().join("jtrans.gradle.kts");
+        assert!(
+            gradle.exists(),
+            "Gradle plugin fragment should be generated"
+        );
+        let content = fs::read_to_string(&gradle).unwrap();
+        assert!(content.contains("translateToRust"));
+        assert!(content.contains("jtrans"));
+    }
+
+    #[test]
+    fn test_cli_directory_input() {
+        ensure_jtrans_built();
+
+        // Create a temp dir with two Java files.
+        let tmp = TempDir::new().unwrap();
+        let input_dir = tmp.path().join("java-src");
+        fs::create_dir_all(&input_dir).unwrap();
+        fs::copy(
+            java_dir().join("HelloWorld.java"),
+            input_dir.join("HelloWorld.java"),
+        )
+        .unwrap();
+        fs::copy(
+            java_dir().join("Arithmetic.java"),
+            input_dir.join("Arithmetic.java"),
+        )
+        .unwrap();
+
+        let output_dir = tmp.path().join("rust-out");
+        let result = Command::new(jtrans_bin())
+            .args([
+                "translate",
+                "--input",
+                input_dir.to_str().unwrap(),
+                "--output",
+                output_dir.to_str().unwrap(),
+                "--no-incremental",
+                "--no-source-map",
+                "--no-cargo-toml",
+            ])
+            .output()
+            .expect("failed to run jtrans");
+
+        assert!(
+            result.status.success(),
+            "jtrans should translate a directory: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert!(output_dir.join("src").join("helloworld.rs").exists());
+        assert!(output_dir.join("src").join("arithmetic.rs").exists());
+    }
 }
