@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 //! [`JBigInteger`] — Rust representation of `java.math.BigInteger`.
 //!
 //! Mapping: `java.math.BigInteger` → `JBigInteger` (backed by `i128`).

@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 //! [`JStringBuilder`] — Rust representation of `java.lang.StringBuilder`.
 //!
 //! Mapping: `java.lang.StringBuilder` → `JStringBuilder` (wraps `String`).

@@ -708,37 +708,35 @@ fn resolve_method_return_type(
     }
 
     // Math static methods
-    if let Some(recv) = receiver {
-        if let IrExpr::Var { name, .. } = recv {
-            if name == "Math" {
-                return match method_name {
-                    "abs" | "max" | "min" => IrType::Int,
-                    "pow" | "sqrt" | "floor" | "ceil" | "log" | "log10" | "sin" | "cos" | "tan"
-                    | "exp" | "hypot" | "atan2" => IrType::Double,
-                    "round" => IrType::Long,
-                    "random" => IrType::Double,
-                    _ => IrType::Double,
-                };
-            }
-            if name == "Optional" {
-                return match method_name {
-                    "of" | "ofNullable" | "empty" => IrType::Class("Optional".to_owned()),
-                    _ => IrType::Unknown,
-                };
-            }
-            if name == "Pattern" {
-                return match method_name {
-                    "compile" => IrType::Class("Pattern".to_owned()),
-                    "matches" => IrType::Bool,
-                    _ => IrType::Unknown,
-                };
-            }
-            if name == "LocalDate" {
-                return IrType::Class("LocalDate".to_owned());
-            }
-            if name == "BigInteger" {
-                return IrType::Class("BigInteger".to_owned());
-            }
+    if let Some(IrExpr::Var { name, .. }) = receiver {
+        if name == "Math" {
+            return match method_name {
+                "abs" | "max" | "min" => IrType::Int,
+                "pow" | "sqrt" | "floor" | "ceil" | "log" | "log10" | "sin" | "cos" | "tan"
+                | "exp" | "hypot" | "atan2" => IrType::Double,
+                "round" => IrType::Long,
+                "random" => IrType::Double,
+                _ => IrType::Double,
+            };
+        }
+        if name == "Optional" {
+            return match method_name {
+                "of" | "ofNullable" | "empty" => IrType::Class("Optional".to_owned()),
+                _ => IrType::Unknown,
+            };
+        }
+        if name == "Pattern" {
+            return match method_name {
+                "compile" => IrType::Class("Pattern".to_owned()),
+                "matches" => IrType::Bool,
+                _ => IrType::Unknown,
+            };
+        }
+        if name == "LocalDate" {
+            return IrType::Class("LocalDate".to_owned());
+        }
+        if name == "BigInteger" {
+            return IrType::Class("BigInteger".to_owned());
         }
     }
 

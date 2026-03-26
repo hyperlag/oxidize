@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 //! [`JStream<T>`] — Rust representation of `java.util.stream.Stream<T>`.
 //!
 //! Mapping: `Stream<T>` → `JStream<T>` (backed by `Vec<T>` for eager evaluation).

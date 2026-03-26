@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 //! [`JOptional<T>`] — Rust representation of `java.util.Optional<T>`.
 //!
 //! Mapping: `Optional<T>` → `JOptional<T>` (wraps `Option<T>`).

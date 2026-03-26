@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 //! [`JPattern`] and [`JMatcher`] — Rust representations of `java.util.regex`.
 //!
 //! Mapping: `Pattern` → `JPattern`, `Matcher` → `JMatcher`.

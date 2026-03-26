@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 //! [`JLocalDate`] — Rust representation of `java.time.LocalDate`.
 //!
 //! Mapping: `java.time.LocalDate` → `JLocalDate` (year/month/day triple).

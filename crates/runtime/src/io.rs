@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 //! [`JFile`] — Rust representation of `java.io.File`.
 //!
 //! Mapping: `java.io.File` → `JFile` (wraps `std::path::PathBuf`).
