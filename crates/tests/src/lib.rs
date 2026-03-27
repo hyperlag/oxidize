@@ -10,6 +10,7 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
     use std::process::Command;
+    use std::sync::OnceLock;
     use tempfile::TempDir;
 
     fn manifest_dir() -> PathBuf {
@@ -448,5 +449,290 @@ mod tests {
     #[test]
     fn test_stream() {
         check("StreamTest.java", "4\n1\n3\n5\n8");
+    }
+
+    // ── Stage 8: Build Integration & Tooling Tests ────────────────────────
+
+    fn workspace_dir() -> PathBuf {
+        let md = manifest_dir();
+        md.parent().unwrap().parent().unwrap().to_path_buf()
+    }
+
+    fn jtrans_bin() -> PathBuf {
+        let mut base = workspace_dir().join("target");
+        if let Ok(dir) = std::env::var("CARGO_TARGET_DIR") {
+            base = PathBuf::from(dir);
+        }
+        let profile = std::env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
+        let name = if cfg!(windows) {
+            "jtrans.exe"
+        } else {
+            "jtrans"
+        };
+        base.join(profile).join(name)
+    }
+
+    static JTRANS_BUILT: OnceLock<()> = OnceLock::new();
+
+    fn ensure_jtrans_built() {
+        JTRANS_BUILT.get_or_init(|| {
+            let ws = workspace_dir();
+            let build = Command::new("cargo")
+                .args(["build", "-p", "jtrans"])
+                .current_dir(&ws)
+                .env("RUSTFLAGS", "")
+                .output()
+                .expect("failed to build jtrans");
+            assert!(
+                build.status.success(),
+                "jtrans build failed: {}",
+                String::from_utf8_lossy(&build.stderr)
+            );
+        });
+    }
+
+    #[test]
+    fn test_cli_translate_subcommand() {
+        ensure_jtrans_built();
+
+        let tmp = TempDir::new().unwrap();
+        let output_dir = tmp.path().join("rust-out");
+        let hello = java_dir().join("HelloWorld.java");
+
+        let result = Command::new(jtrans_bin())
+            .args([
+                "translate",
+                "--input",
+                hello.to_str().unwrap(),
+                "--output",
+                output_dir.to_str().unwrap(),
+                "--no-incremental",
+                "--no-source-map",
+                "--no-cargo-toml",
+            ])
+            .output()
+            .expect("failed to run jtrans");
+
+        assert!(
+            result.status.success(),
+            "jtrans translate failed: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert!(output_dir.join("src").join("helloworld.rs").exists());
+    }
+
+    #[test]
+    fn test_cli_cargo_toml_generation() {
+        ensure_jtrans_built();
+
+        let tmp = TempDir::new().unwrap();
+        let output_dir = tmp.path().join("rust-out");
+        let hello = java_dir().join("HelloWorld.java");
+
+        let result = Command::new(jtrans_bin())
+            .args([
+                "translate",
+                "--input",
+                hello.to_str().unwrap(),
+                "--output",
+                output_dir.to_str().unwrap(),
+                "--no-incremental",
+                "--no-source-map",
+            ])
+            .output()
+            .expect("failed to run jtrans");
+
+        assert!(result.status.success());
+        let cargo_toml = output_dir.join("Cargo.toml");
+        assert!(cargo_toml.exists(), "Cargo.toml should be generated");
+        let content = fs::read_to_string(&cargo_toml).unwrap();
+        assert!(content.contains("[package]"));
+        assert!(content.contains("java-compat"));
+    }
+
+    #[test]
+    fn test_cli_source_map_generation() {
+        ensure_jtrans_built();
+
+        let tmp = TempDir::new().unwrap();
+        let output_dir = tmp.path().join("rust-out");
+        let hello = java_dir().join("HelloWorld.java");
+
+        let result = Command::new(jtrans_bin())
+            .args([
+                "translate",
+                "--input",
+                hello.to_str().unwrap(),
+                "--output",
+                output_dir.to_str().unwrap(),
+                "--no-incremental",
+                "--no-cargo-toml",
+            ])
+            .output()
+            .expect("failed to run jtrans");
+
+        assert!(result.status.success());
+        let map_file = output_dir.join("src").join("helloworld.jtrans-map");
+        assert!(map_file.exists(), "source map should be generated");
+        let content = fs::read_to_string(&map_file).unwrap();
+        assert!(content.contains("# jtrans source map v1"));
+        assert!(content.contains(" -> "));
+    }
+
+    #[test]
+    fn test_cli_incremental_cache() {
+        ensure_jtrans_built();
+
+        let tmp = TempDir::new().unwrap();
+        let output_dir = tmp.path().join("rust-out");
+        let hello = java_dir().join("HelloWorld.java");
+        let rs_out = output_dir.join("src").join("helloworld.rs");
+
+        // First translation should produce the output file and create a cache.
+        let result1 = Command::new(jtrans_bin())
+            .args([
+                "translate",
+                "--input",
+                hello.to_str().unwrap(),
+                "--output",
+                output_dir.to_str().unwrap(),
+                "--no-source-map",
+                "--no-cargo-toml",
+            ])
+            .output()
+            .expect("failed to run jtrans");
+        assert!(
+            result1.status.success(),
+            "first run failed: {}",
+            String::from_utf8_lossy(&result1.stderr)
+        );
+
+        // Output file and cache must exist after first run.
+        assert!(rs_out.exists(), "output file should exist after first run");
+        let cache_file = output_dir.join(".jtrans-cache");
+        assert!(
+            cache_file.exists(),
+            "cache file should exist after first run"
+        );
+
+        // Record the modification time of the output file after the first run.
+        let mtime_after_first = fs::metadata(&rs_out)
+            .expect("cannot stat output file")
+            .modified()
+            .expect("mtime not available on this platform");
+
+        // Second translation should skip the unchanged file: the output must
+        // not be rewritten (mtime should stay the same).
+        let result2 = Command::new(jtrans_bin())
+            .args([
+                "translate",
+                "--input",
+                hello.to_str().unwrap(),
+                "--output",
+                output_dir.to_str().unwrap(),
+                "--no-source-map",
+                "--no-cargo-toml",
+            ])
+            .output()
+            .expect("failed to run jtrans");
+        assert!(
+            result2.status.success(),
+            "second run failed: {}",
+            String::from_utf8_lossy(&result2.stderr)
+        );
+
+        let mtime_after_second = fs::metadata(&rs_out)
+            .expect("cannot stat output file")
+            .modified()
+            .expect("mtime not available on this platform");
+
+        assert_eq!(
+            mtime_after_first, mtime_after_second,
+            "output file should not be rewritten when source is unchanged"
+        );
+    }
+
+    #[test]
+    fn test_cli_init_maven() {
+        ensure_jtrans_built();
+
+        let tmp = TempDir::new().unwrap();
+
+        let result = Command::new(jtrans_bin())
+            .args(["init-maven", "--output", tmp.path().to_str().unwrap()])
+            .output()
+            .expect("failed to run jtrans");
+
+        assert!(result.status.success());
+        let pom = tmp.path().join("jtrans-maven-plugin.xml");
+        assert!(pom.exists(), "Maven plugin fragment should be generated");
+        let content = fs::read_to_string(&pom).unwrap();
+        assert!(content.contains("exec-maven-plugin"));
+        assert!(content.contains("jtrans"));
+    }
+
+    #[test]
+    fn test_cli_init_gradle() {
+        ensure_jtrans_built();
+
+        let tmp = TempDir::new().unwrap();
+
+        let result = Command::new(jtrans_bin())
+            .args(["init-gradle", "--output", tmp.path().to_str().unwrap()])
+            .output()
+            .expect("failed to run jtrans");
+
+        assert!(result.status.success());
+        let gradle = tmp.path().join("jtrans.gradle.kts");
+        assert!(
+            gradle.exists(),
+            "Gradle plugin fragment should be generated"
+        );
+        let content = fs::read_to_string(&gradle).unwrap();
+        assert!(content.contains("translateToRust"));
+        assert!(content.contains("jtrans"));
+    }
+
+    #[test]
+    fn test_cli_directory_input() {
+        ensure_jtrans_built();
+
+        // Create a temp dir with two Java files.
+        let tmp = TempDir::new().unwrap();
+        let input_dir = tmp.path().join("java-src");
+        fs::create_dir_all(&input_dir).unwrap();
+        fs::copy(
+            java_dir().join("HelloWorld.java"),
+            input_dir.join("HelloWorld.java"),
+        )
+        .unwrap();
+        fs::copy(
+            java_dir().join("Arithmetic.java"),
+            input_dir.join("Arithmetic.java"),
+        )
+        .unwrap();
+
+        let output_dir = tmp.path().join("rust-out");
+        let result = Command::new(jtrans_bin())
+            .args([
+                "translate",
+                "--input",
+                input_dir.to_str().unwrap(),
+                "--output",
+                output_dir.to_str().unwrap(),
+                "--no-incremental",
+                "--no-source-map",
+                "--no-cargo-toml",
+            ])
+            .output()
+            .expect("failed to run jtrans");
+
+        assert!(
+            result.status.success(),
+            "jtrans should translate a directory: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert!(output_dir.join("src").join("helloworld.rs").exists());
+        assert!(output_dir.join("src").join("arithmetic.rs").exists());
     }
 }

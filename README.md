@@ -34,9 +34,9 @@ Rust source (.rs)
 | `ir` | Core intermediate representation: `IrType`, `IrExpr`, `IrStmt`, `IrDecl` |
 | `typeck` | Type-checking and symbol-resolution pass over the IR |
 | `codegen` | Lowers annotated IR to Rust token streams via `proc-macro2` / `quote` |
-| `runtime` | `java-compat` crate: `JObject`, `JString`, `JArray<T>`, `JList<T>`, `JMap<K,V>`, `JSet<T>`, `JException` |
-| `cli` | `jtrans` binary: command-line entry point |
-| `tests` | Differential test suite (translated Rust output vs. expected output) |
+| `runtime` | `java-compat` crate: runtime types (`JString`, `JArray`, `JList`, `JMap`, `JOptional`, `JStream`, `JThread`, etc.) |
+| `cli` | `jtrans` binary: CLI driver with `translate`, `init-maven`, `init-gradle` subcommands, watch mode, incremental cache, and source map generation |
+| `tests` | Differential test suite (73 tests: translated Rust output vs. expected output) |
 
 ## Requirements
 
@@ -56,76 +56,148 @@ cargo run --bin jtrans -- [OPTIONS] <file.java>
 
 ## Usage
 
-```
-jtrans [OPTIONS] <INPUTS>...
+### `jtrans translate` — translate Java to Rust
 
-Arguments:
-  <INPUTS>...  Java source file(s) to translate
+The primary command for translating Java source files or directories:
+
+```
+jtrans translate [OPTIONS] --input <INPUT>
 
 Options:
-  -o, --output <OUTPUT>  Output directory for generated Rust source [default: out]
-      --print            Print generated Rust to stdout instead of writing to disk
-      --dump-ir          Print the IR as JSON after parsing (debugging aid)
-  -h, --help             Print help
-  -V, --version          Print version
+  -i, --input <INPUT>          Input directory or file(s) containing Java source code
+  -o, --output <OUTPUT>        Output directory for the generated Rust project [default: rust-out]
+  -c, --classpath <CLASSPATH>  Classpath entries for type resolution
+      --watch                  Watch input files and re-translate on changes
+      --dump-ir                Print the IR as JSON after parsing
+      --print                  Print generated Rust to stdout instead of writing to disk
+      --no-incremental         Disable incremental caching (translate all files every run)
+      --no-source-map          Disable .jtrans-map source map generation
+      --no-cargo-toml          Disable Cargo.toml generation in the output directory
 ```
 
-### Translate a single file
+#### Translate a single file
 
 ```bash
-jtrans HelloWorld.java
+jtrans translate --input HelloWorld.java
 ```
 
-This writes `out/helloworld.rs`: a self-contained Rust source file that depends only on the
-`java-compat` runtime crate (part of this repository).
+This writes a Cargo project skeleton to `rust-out/` containing:
+- `src/helloworld.rs` — the translated Rust source
+- `Cargo.toml` — a manifest that declares a local `java-compat` dependency (`java-compat = { path = "java-compat" }`). You must either place the `java-compat` crate at that path relative to the output directory or edit the dependency to point at your runtime crate before `cargo build` will succeed.
+- `src/helloworld.jtrans-map` — a source map (Rust line → Java line)
 
-### Build and run the translated program
-
-The generated file is not a full Cargo project on its own. The easiest way to run it
-is to create a minimal wrapper:
+#### Translate an entire directory
 
 ```bash
-# 1. Translate
-jtrans HelloWorld.java --output out/
+jtrans translate --input src/main/java/ --output rust-out/
+```
 
-# 2. Create a Cargo project pointing at java-compat
-mkdir -p hello-rs/src
-cp out/helloworld.rs hello-rs/src/main.rs
-cat > hello-rs/Cargo.toml << 'EOF'
-[package]
-name = "hello-rs"
-version = "0.1.0"
-edition = "2021"
+All `.java` files are discovered recursively and translated.
 
-[dependencies]
-java-compat = { path = "/path/to/oxidize/crates/runtime" }
-EOF
+#### Build and run the translated program
 
-# 3. Run
+```bash
+# Translate
+jtrans translate --input HelloWorld.java --output hello-rs/
+
+# Point java-compat to the runtime crate (edit the Cargo.toml path if needed)
+# Then build and run
 cd hello-rs && cargo run
 ```
 
-### Preview without writing files
+#### Incremental mode (default)
 
-Use `--print` to inspect the generated Rust without touching disk:
+By default, `jtrans` maintains a `.jtrans-cache` file in the output directory containing
+SHA-256 hashes of each input file. On subsequent runs, unchanged files are skipped:
 
 ```bash
-jtrans --print HelloWorld.java
+# First run: translates everything
+jtrans translate --input src/ --output rust-out/
+
+# Second run: skips unchanged files
+jtrans translate --input src/ --output rust-out/
 ```
 
-### Translate multiple files at once
+Disable with `--no-incremental` to force a full retranslation every time.
+
+#### Watch mode
+
+Use `--watch` to continuously monitor input files and re-translate on changes:
 
 ```bash
-jtrans Foo.java Bar.java Baz.java --output out/
+jtrans translate --input src/ --output rust-out/ --watch
 ```
 
-### Debug the IR
+Press Ctrl+C to stop.
 
-Use `--dump-ir` to print the typed intermediate representation as JSON, useful when
-diagnosing translation problems:
+#### Source maps
+
+Each translated `.rs` file is accompanied by a `.jtrans-map` file that maps Rust line
+numbers back to the original Java line numbers, useful for debugging:
+
+```
+# jtrans source map v1
+# rust_line -> java_line
+1 -> 0
+5 -> 3
+6 -> 4
+```
+
+Disable with `--no-source-map`.
+
+#### Preview without writing files
 
 ```bash
-jtrans --dump-ir HelloWorld.java
+jtrans translate --input HelloWorld.java --print
+```
+
+#### Debug the IR
+
+```bash
+jtrans translate --input HelloWorld.java --dump-ir
+```
+
+### `jtrans init-maven` — Maven integration
+
+Generate a Maven plugin fragment using `exec-maven-plugin`:
+
+```bash
+jtrans init-maven --output .
+```
+
+This writes `jtrans-maven-plugin.xml`. Copy its contents into your `pom.xml`
+`<build><plugins>` section. Then run:
+
+```bash
+mvn compile exec:exec@jtrans
+```
+
+### `jtrans init-gradle` — Gradle integration
+
+Generate a Gradle build script fragment in Kotlin DSL:
+
+```bash
+jtrans init-gradle --output .
+```
+
+This writes `jtrans.gradle.kts`. Apply it in your `build.gradle.kts`:
+
+```kotlin
+apply(from = "jtrans.gradle.kts")
+```
+
+Then run:
+
+```bash
+./gradlew translateToRust
+```
+
+### Legacy mode
+
+For backwards compatibility, positional arguments are still supported:
+
+```bash
+jtrans HelloWorld.java --output out/ --print
 ```
 
 ## Running Tests
@@ -138,10 +210,10 @@ cargo test
 
 The differential integration tests in `crates/tests` compile and run each translated Rust
 program, then assert that stdout matches the expected output. No JDK is required to run
-the tests. The suite currently contains **59 differential tests** covering Stages 1-6:
+the tests. The suite currently contains **73 differential tests** covering Stages 1–8:
 
 ```bash
-cargo test -p tests --test-threads=1
+cargo test -p tests -- --test-threads=4
 ```
 
 ## Project Status
@@ -151,13 +223,16 @@ The project follows a staged delivery plan:
 | Stage | Description | Status |
 |---|---|---|
 | 0 | Foundation and tooling: workspace, CI, tree-sitter smoke test | Complete |
-| 1 | Core language: primitives, control flow, static methods, arrays | Complete (32/32 differential tests pass) |
-| 2 | Object-oriented core: classes, inheritance, interfaces, `instanceof` | Complete (43/43 differential tests pass) |
-| 3 | Generics and collections: `List`, `Map`, `Set`, generic classes | Complete (43/43 differential tests pass) |
-| 4 | Exception handling: `try`/`catch`/`finally`/`throw`, multi-catch, try-with-resources, `throws` | Complete (49/49 differential tests pass) |
-| 5 | Concurrency: `synchronized`, `Thread`, `java.util.concurrent` | Complete (54/54 differential tests pass) |
-| 6 | Reflection and dynamic dispatch | Complete (59/59 differential tests pass) |
-| 7 | Standard library coverage | Planned |
+| 1 | Core language: primitives, control flow, static methods, arrays | Complete (32/32 tests) |
+| 2 | Object-oriented core: classes, inheritance, interfaces, `instanceof` | Complete (43/43 tests) |
+| 3 | Generics and collections: `List`, `Map`, `Set`, generic classes | Complete (43/43 tests) |
+| 4 | Exception handling: `try`/`catch`/`finally`/`throw`, multi-catch, try-with-resources, `throws` | Complete (49/49 tests) |
+| 5 | Concurrency: `synchronized`, `Thread`, `java.util.concurrent` | Complete (54/54 tests) |
+| 6 | Reflection and dynamic dispatch | Complete (59/59 tests) |
+| 7 | Standard library coverage: `Math`, `Optional`, `Stream`, `regex`, `BigInteger`, `LocalDate`, `StringBuilder`, `File` | Complete (66/66 tests) |
+| 8 | Build integration and tooling: `translate` subcommand, `--watch`, incremental cache, source maps, Cargo.toml generation, Maven/Gradle plugins | Complete (73/73 tests) |
+| 9 | Validation, fuzzing, and hardening | Planned |
+| 10 | Documentation and release | Planned |
 
 ### Stage 1: Supported Java features
 
@@ -257,7 +332,42 @@ The project follows a staged delivery plan:
 | `List<T>` / `ArrayList<T>` | `java_compat::JList<T>` |
 | `Map<K,V>` / `HashMap<K,V>` | `java_compat::JMap<K,V>` |
 | `Set<T>` / `HashSet<T>` | `java_compat::JSet<T>` |
+| `Optional<T>` | `java_compat::JOptional<T>` |
+| `Stream<T>` | `java_compat::JStream<T>` |
+| `StringBuilder` | `java_compat::JStringBuilder` |
+| `BigInteger` | `java_compat::JBigInteger` |
+| `Pattern` / `Matcher` | `java_compat::JPattern` / `JMatcher` |
+| `LocalDate` | `java_compat::JLocalDate` |
+| `File` | `java_compat::JFile` |
+| `AtomicInteger` | `java_compat::JAtomicInteger` |
+| `CountDownLatch` | `java_compat::JCountDownLatch` |
+| `Semaphore` | `java_compat::JSemaphore` |
+| `Thread` | `java_compat::JThread` |
 | `ClassName` | `ClassName` (generated struct) |
+
+### Stage 7: Standard library coverage
+
+- `Math` static methods: `abs`, `max`, `min`, `pow`, `sqrt`, `floor`, `ceil`, `round`, `log`, `sin`, `cos`, `tan`, `exp`, `random`
+- `StringBuilder`: `append`, `toString`, `length`, `charAt`, `reverse`, `insert`, `delete`
+- `Optional<T>`: `of`, `empty`, `ofNullable`, `isPresent`, `get`, `orElse`, `ifPresent`, `filter`, `map`
+- `Stream<T>` API: `filter`, `map`, `sorted`, `distinct`, `collect(Collectors.toList())`, lambda expression support
+- `Pattern` / `Matcher`: `compile`, `matcher`, `find`, `group`, `matches`, `lookingAt`
+- `LocalDate`: `of`, `now`, `getYear`, `getMonthValue`, `getDayOfMonth`, `plusDays`, `plusMonths`, `plusYears`
+- `BigInteger`: `valueOf`, construction from string, `add`, `subtract`, `multiply`, `divide`, `mod`, `pow`, `abs`, `gcd`, `compareTo`
+- `File`: `exists`, `isFile`, `isDirectory`, `length`, `delete`, `mkdir`, `mkdirs`
+- Lambda expressions: `(params) -> { body }` → `|params| { body }` closures
+
+### Stage 8: Build integration and tooling
+
+- `jtrans translate` subcommand with `--input`, `--output`, `--classpath`, `--watch`, `--print`, `--dump-ir`
+- Incremental translation cache: SHA-256 hashing with `.jtrans-cache` file, skip unchanged files
+- `--watch` mode: filesystem monitoring via `notify` crate, auto re-translate on `.java` file changes
+- Source map generation: `.jtrans-map` files mapping Rust output lines back to Java source lines
+- Cargo.toml auto-generation in the output directory with `java-compat` dependency
+- Maven integration: `jtrans init-maven` generates an `exec-maven-plugin` fragment
+- Gradle integration: `jtrans init-gradle` generates a Kotlin DSL build script with `translateToRust` task
+- Recursive directory input: `--input src/` discovers all `.java` files
+- Legacy positional CLI mode preserved for backwards compatibility
 
 ## Contributing
 
