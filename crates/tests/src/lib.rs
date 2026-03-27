@@ -464,7 +464,11 @@ mod tests {
             base = PathBuf::from(dir);
         }
         let profile = std::env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
-        let name = if cfg!(windows) { "jtrans.exe" } else { "jtrans" };
+        let name = if cfg!(windows) {
+            "jtrans.exe"
+        } else {
+            "jtrans"
+        };
         base.join(profile).join(name)
     }
 
@@ -606,7 +610,10 @@ mod tests {
         // Output file and cache must exist after first run.
         assert!(rs_out.exists(), "output file should exist after first run");
         let cache_file = output_dir.join(".jtrans-cache");
-        assert!(cache_file.exists(), "cache file should exist after first run");
+        assert!(
+            cache_file.exists(),
+            "cache file should exist after first run"
+        );
 
         // Record the modification time of the output file after the first run.
         let mtime_after_first = fs::metadata(&rs_out)
