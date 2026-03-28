@@ -79,6 +79,45 @@ impl<T: Clone> JList<T> {
     }
 }
 
+impl<T: Clone + Ord> JList<T> {
+    /// Java `Collections.sort(list)` -- sorts by natural ordering.
+    pub fn sort(&mut self) {
+        self.inner.sort();
+    }
+}
+
+impl<T: Clone> JList<T> {
+    /// Java `Collections.sort(list, comparator)` -- sorts with a custom comparator.
+    /// The comparator follows Java convention: returns negative, zero, or positive i32.
+    pub fn sort_with(&mut self, cmp: impl Fn(&T, &T) -> i32) {
+        self.inner.sort_by(|a, b| {
+            let r = cmp(a, b);
+            if r < 0 {
+                std::cmp::Ordering::Less
+            } else if r > 0 {
+                std::cmp::Ordering::Greater
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        });
+    }
+
+    /// Java `Collections.reverse(list)`.
+    pub fn reverse(&mut self) {
+        self.inner.reverse();
+    }
+
+    /// Java `Collections.singletonList(item)`.
+    pub fn singleton(item: T) -> Self {
+        JList { inner: vec![item] }
+    }
+
+    /// Java `list.retainAll` / `Iterator.remove()` pattern support.
+    pub fn retain(&mut self, f: impl Fn(&T) -> bool) {
+        self.inner.retain(|item| f(item));
+    }
+}
+
 impl<T: Clone + PartialEq> JList<T> {
     /// Java `list.contains(item)`.
     pub fn contains(&self, item: T) -> bool {

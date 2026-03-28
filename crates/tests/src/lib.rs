@@ -808,4 +808,41 @@ Primes up to 30: 2 3 5 7 11 13 17 19 23 29
 Expression calculator tests complete",
         );
     }
+
+    // ── Advanced Collections ──────────────────────────────────────────────
+
+    #[test]
+    fn test_linked_list_basic() {
+        check("LinkedListBasic.java", "5\n5\n35\n5\n35\n3\n10\n20\n30");
+    }
+
+    #[test]
+    fn test_priority_queue_basic() {
+        check("PriorityQueueBasic.java", "4\n5\n5\n10\n20\n30\ntrue");
+    }
+
+    #[test]
+    fn test_tree_map_basic() {
+        check("TreeMapBasic.java", "3\nten\ntrue\n10\n30\n2\nfalse");
+    }
+
+    #[test]
+    fn test_tree_set_basic() {
+        check("TreeSetBasic.java", "3\ntrue\n10\n30\n10\n20\n30");
+    }
+
+    #[test]
+    fn test_linked_hash_map_basic() {
+        check("LinkedHashMapBasic.java", "3\n1\ntrue\n2\nfalse");
+    }
+
+    #[test]
+    fn test_linked_hash_set_basic() {
+        check("LinkedHashSetBasic.java", "3\ntrue\n30\n10\n20");
+    }
+
+    #[test]
+    fn test_collections_sort() {
+        check("CollectionsSort.java", "5\n10\n20\n30\n30\n20\n10\n5");
+    }
 }

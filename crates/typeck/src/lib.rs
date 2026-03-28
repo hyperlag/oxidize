@@ -886,13 +886,18 @@ fn resolve_method_return_type(
         _ => {}
     }
 
-    // Collection methods (JList / JMap / JSet)
+    // Collection methods (JList / JMap / JSet / JLinkedList / JTreeMap / JTreeSet / JPriorityQueue)
     match method_name {
         "size" => return IrType::Int,
-        "isEmpty" | "containsKey" | "containsValue" | "contains" | "add" | "remove" => {
+        "isEmpty" | "containsKey" | "containsValue" | "contains" | "add" | "remove" | "offer" => {
             return IrType::Bool
         }
-        "clear" | "put" => return IrType::Void,
+        "clear" | "put" | "sort" | "reverse" | "addFirst" | "addLast" | "push" => {
+            return IrType::Void
+        }
+        "get" | "getFirst" | "getLast" | "peek" | "poll" | "pop" | "removeFirst" | "removeLast"
+        | "first" | "last" | "firstKey" | "lastKey" => return IrType::Unknown,
+        "iterator" => return IrType::Class("JIterator".to_owned()),
         _ => {}
     }
 

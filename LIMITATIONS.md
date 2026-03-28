@@ -79,16 +79,18 @@ Basic threading (`Thread`, `synchronized`, `volatile`, `AtomicInteger`,
 
 ## Collections (Advanced)
 
-The core collections (`ArrayList`, `HashMap`, `HashSet`) are supported. The
-following are not:
+The core collections (`ArrayList`, `HashMap`, `HashSet`) are supported, along
+with `LinkedList`, `ArrayDeque`, `PriorityQueue`, `TreeMap`, `TreeSet`,
+`LinkedHashMap`, `LinkedHashSet`, `Collections.sort()`, `Collections.reverse()`,
+`Collections.unmodifiableList/Map/Set()`, `Collections.emptyList/Map/Set()`,
+`Collections.singletonList()`, `Arrays.asList()`, and `Iterator` with
+`hasNext()`/`next()`/`remove()`.
 
-- `LinkedList`, `ArrayDeque`, `PriorityQueue`
-- `TreeMap`, `TreeSet`, `LinkedHashMap`, `LinkedHashSet`
-- `EnumMap`, `EnumSet`
-- `Collections.unmodifiableList()` and other wrapper methods
-- `Collections.sort()` with custom `Comparator` (use Stream API instead)
-- `Iterator.remove()`
+The following are **not** supported:
+
+- `EnumMap`, `EnumSet` (blocked on enum support)
 - `Spliterator`
+- Map `keySet()`/`values()`/`entrySet()` iteration
 
 ## Standard Library Gaps
 

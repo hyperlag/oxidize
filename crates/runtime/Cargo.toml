@@ -10,3 +10,4 @@ license.workspace = true
 thiserror = { workspace = true }
 serde = { workspace = true }
 regex = { workspace = true }
+indexmap = "2"

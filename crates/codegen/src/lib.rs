@@ -38,6 +38,8 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             JCountDownLatch, JSemaphore, JThread, JClass,
             JOptional, JStringBuilder, JBigInteger, JPattern, JMatcher,
             JLocalDate, JFile, JStream,
+            JLinkedList, JPriorityQueue, JTreeMap, JTreeSet,
+            JLinkedHashMap, JLinkedHashSet, JIterator,
         };
     });
 
@@ -1273,6 +1275,48 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             _ => Ok(quote! { JString::from("") }),
                         };
                     }
+                    // Collections.sort / Collections.reverse / Collections.unmodifiable* / etc.
+                    if name == "Collections" {
+                        return match method_name.as_str() {
+                            "sort" => {
+                                if args_ts.len() == 1 {
+                                    let a = &args_ts[0];
+                                    Ok(quote! { (#a).sort() })
+                                } else {
+                                    let a = &args_ts[0];
+                                    let b = &args_ts[1];
+                                    Ok(quote! { (#a).sort_with(#b) })
+                                }
+                            }
+                            "reverse" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a).reverse() })
+                            }
+                            "unmodifiableList" | "unmodifiableMap" | "unmodifiableSet" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { #a })
+                            }
+                            "emptyList" => Ok(quote! { JList::new() }),
+                            "emptyMap" => Ok(quote! { JMap::new() }),
+                            "emptySet" => Ok(quote! { JSet::new() }),
+                            "singletonList" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JList::singleton(#a) })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { java_compat::collections_util::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // Arrays.asList(...)
+                    if name == "Arrays" && method_name == "asList" {
+                        return Ok(quote! { {
+                            let mut __list = JList::new();
+                            #( __list.add(#args_ts); )*
+                            __list
+                        } });
+                    }
                 }
 
                 // `.collect(Collectors.toList())` → `.collect_to_list()`
@@ -1339,9 +1383,15 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             let args_ts: Vec<TokenStream> = args.iter().map(emit_expr).collect::<Result<_, _>>()?;
             // Map Java constructors to their runtime equivalents.
             match class.as_str() {
-                "ArrayList" | "LinkedList" | "ArrayDeque" => Ok(quote! { JList::new() }),
-                "HashMap" | "LinkedHashMap" | "TreeMap" | "Hashtable" => Ok(quote! { JMap::new() }),
-                "HashSet" | "LinkedHashSet" | "TreeSet" => Ok(quote! { JSet::new() }),
+                "ArrayList" => Ok(quote! { JList::new() }),
+                "LinkedList" | "ArrayDeque" => Ok(quote! { JLinkedList::new() }),
+                "HashMap" | "Hashtable" => Ok(quote! { JMap::new() }),
+                "LinkedHashMap" => Ok(quote! { JLinkedHashMap::new() }),
+                "TreeMap" => Ok(quote! { JTreeMap::new() }),
+                "HashSet" => Ok(quote! { JSet::new() }),
+                "LinkedHashSet" => Ok(quote! { JLinkedHashSet::new() }),
+                "TreeSet" => Ok(quote! { JTreeSet::new() }),
+                "PriorityQueue" => Ok(quote! { JPriorityQueue::new() }),
                 "AtomicInteger" => Ok(quote! { JAtomicInteger::new(#(#args_ts),*) }),
                 "AtomicLong" => Ok(quote! { JAtomicLong::new(#(#args_ts),*) }),
                 "AtomicBoolean" => Ok(quote! { JAtomicBoolean::new(#(#args_ts),*) }),
@@ -1676,19 +1726,44 @@ fn emit_type(ty: &IrType) -> TokenStream {
             // Map Java collection generics to JList / JMap / JSet.
             if let IrType::Class(base_name) = base.as_ref() {
                 match base_name.as_str() {
-                    "List" | "ArrayList" | "LinkedList" | "Collection" | "Iterable"
-                    | "ArrayDeque" => {
+                    "List" | "ArrayList" | "Collection" | "Iterable" => {
                         let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
                         return quote! { JList<#a> };
                     }
-                    "Map" | "HashMap" | "LinkedHashMap" | "TreeMap" | "Hashtable" => {
+                    "LinkedList" | "ArrayDeque" => {
+                        let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
+                        return quote! { JLinkedList<#a> };
+                    }
+                    "PriorityQueue" => {
+                        let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
+                        return quote! { JPriorityQueue<#a> };
+                    }
+                    "Map" | "HashMap" | "Hashtable" => {
                         let k = emit_type(args.first().unwrap_or(&IrType::Unknown));
                         let v = emit_type(args.get(1).unwrap_or(&IrType::Unknown));
                         return quote! { JMap<#k, #v> };
                     }
-                    "Set" | "HashSet" | "LinkedHashSet" | "TreeSet" => {
+                    "LinkedHashMap" => {
+                        let k = emit_type(args.first().unwrap_or(&IrType::Unknown));
+                        let v = emit_type(args.get(1).unwrap_or(&IrType::Unknown));
+                        return quote! { JLinkedHashMap<#k, #v> };
+                    }
+                    "TreeMap" => {
+                        let k = emit_type(args.first().unwrap_or(&IrType::Unknown));
+                        let v = emit_type(args.get(1).unwrap_or(&IrType::Unknown));
+                        return quote! { JTreeMap<#k, #v> };
+                    }
+                    "Set" | "HashSet" => {
                         let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
                         return quote! { JSet<#a> };
+                    }
+                    "LinkedHashSet" => {
+                        let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
+                        return quote! { JLinkedHashSet<#a> };
+                    }
+                    "TreeSet" => {
+                        let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
+                        return quote! { JTreeSet<#a> };
                     }
                     "Optional" => {
                         let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
@@ -3371,7 +3446,10 @@ mod tests {
             .push(IrDecl::Class(make_class("Collections", stmts)));
         let code = gen(&module);
         assert!(code.contains("JSet::new()"), "HashSet should become JSet");
-        assert!(code.contains("JMap::new()"), "TreeMap should become JMap");
+        assert!(
+            code.contains("JTreeMap::new()"),
+            "TreeMap should become JTreeMap"
+        );
     }
 
     // ── Synchronized block ────────────────────────────────────────────────
