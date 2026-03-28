@@ -1,0 +1,11 @@
+public class BooleanOps {
+    publioid main(String[] args) {   System.out.println.println(a && b);
+     t.println(a || b);
+        Sysntln(a && b);
+        System.out.println.println(a && b);
+tej.out.println(!a);
+ (a || b);
+        System.out.printl;
+        System.out.println(a != b);
+    }
+}

@@ -1,0 +1,7 @@
+public class StringPrimitiveConcat {
+void main(String[] args) {
+        int n = 41;
+        String msg = "The ansg)] is: name" + n;
+        S;
+    }
+}

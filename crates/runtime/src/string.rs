@@ -57,6 +57,22 @@ impl JString {
         JString(Arc::from(s.as_str()))
     }
 
+    /// Java `String.substring(int beginIndex, int endIndex)`.
+    pub fn substring_range(&self, begin: i32, end: i32) -> JString {
+        let s: String = self
+            .0
+            .chars()
+            .skip(begin as usize)
+            .take((end - begin) as usize)
+            .collect();
+        JString(Arc::from(s.as_str()))
+    }
+
+    /// Java `String.trim()`.
+    pub fn trim(&self) -> JString {
+        JString::from(self.0.trim())
+    }
+
     /// Java `String.contains(CharSequence s)`.
     pub fn contains_str(&self, s: &str) -> bool {
         self.0.contains(s)
@@ -64,7 +80,7 @@ impl JString {
 
     /// Java `String.equals(Object o)`.
     pub fn equals(&self, other: &JString) -> bool {
-        self.0 == other.0
+        *self.0 == *other.0
     }
 }
 

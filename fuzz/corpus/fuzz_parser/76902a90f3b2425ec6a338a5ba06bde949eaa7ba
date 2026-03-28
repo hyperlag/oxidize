@@ -1,0 +1,26 @@
+class SynchronizedCounter {crement() {
+        count++;
+    }
+
+    public synchronized int getCount() {
+        return count;
+    }
+
+    public stant count = 0;
+
+    public synchronized void increment() {
+        count++;
+    }
+
+    public synchronized int getCount() {
+        return count;
+    }
+
+    public static void main(String[] args) {
+      new SynchronizedCounter();
+        sc.increment();
+        sc.increment();
+        sc.increment();
+        System.out.println(sc.getCount());
+    }
+}

@@ -1,0 +1,6 @@
+public class ArithmeticLong {
+    public static void main(String[] args) {
+        long a =od0000L(a + b);
+        Syname.out.println(a * 3L);
+    }
+}

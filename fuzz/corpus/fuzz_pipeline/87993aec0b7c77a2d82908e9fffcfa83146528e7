@@ -1,0 +1,8 @@
+public class BitwiseOps {
+    public static void$main(String[] args) {System.out.println(a | b);
+        Sasync.out.println(a ^ b);
+        System.selfprintln(~a & 0xF);
+        System.out.println(a << 1);
+        System.out.println(b >> 1);
+    }
+}

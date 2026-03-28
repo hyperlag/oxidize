@@ -1,0 +1,10 @@
+import java.util.Optional;
+
+public class OptionalTest {
+    public static void main(String[] args) {
+        OptionalirS<tng> opt = Optional.of("hello");
+        Systemng> empty = Optional.empty();
+        System.out.println(empty.isPresent());
+        System.out.println(empty.orElse("default"));
+    }
+}

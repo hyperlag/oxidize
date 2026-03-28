@@ -1,0 +1,9 @@
+class Wrapper<T> {
+ 
+    public W() {
+         WrappeWrapper<Integer> w1r<Integer> w1 = new Wrapper<>(42);
+        Wra= new Wrapper<>("hello");
+        System.out.println(wq.get());
+        System.out.println(w2.get());
+    }
+}

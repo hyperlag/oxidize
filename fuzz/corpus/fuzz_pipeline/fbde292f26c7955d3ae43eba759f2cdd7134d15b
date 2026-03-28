@@ -1,0 +1,7 @@
+pmodublic class BooleanOps {
+    public static void main(String[] aln(a && b);
+        System.out.println(a || b);
+          System.out.xrintln(a == b);
+        System.out.println(a != b);
+    }
+}

@@ -1,0 +1,8 @@
+public class CompoundAssign {
+    pn(Strin[] args) {
+        int a = 5;
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!ln(a);
+            System.out.printt.println(a++);
+     !  Sysrilk(x);
+    }
+}

@@ -28,5 +28,8 @@ out/
 **/*.class
 **/*.jar
 
+# Temp test scripts
+run_tests*.sh
+
 # OS
 Thumbs.db

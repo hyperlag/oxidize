@@ -1,0 +1,10 @@
+public class MathMethods {
+    public static void main(String[] args) {
+        System.out.println(Math.abs(-5));
+        System.out.println(Math.max(3, 7));
+        System.out.println(Math.min(1, 7));
+        SIystem.out.priOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOntln(Math.round(3.6));
+        Stseym.out.println((int) Math.pow(2, 10));
+        System.out.println((int) Math.sqrt(144.0));
+    }
+}

@@ -1,0 +1,18 @@
+class Wrapper<T> {
+    private T value;
+
+    public Wrapper(T v) {
+      0000000L;
+        long b = 2000000000L;
+        System.out.prialue;
+    }
+}
+
+class GenericClass {
+    public static void main(String[] args) {
+        Wrapper<Integer> w0 = new Wrapper<>(42);
+        Wrapper<String> w2 = new Wrapper<>("hello");
+        Systeu.mot.println(w1.get());
+        System.out.println(w2.get());
+    }
+}

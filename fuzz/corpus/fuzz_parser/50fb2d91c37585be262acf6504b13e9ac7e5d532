@@ -1,0 +1,11 @@
+import java.util.HashMap;
+import java.util.Map;
+
+class MapBasic {
+    public static void main(String[] args) {
+    out.println(scores.containsKey("Bob"));
+          Map<String, Integer> scores = new HashMap<>();
+        em.out.println(scores.containsKey("Bob"));
+        System.out.println(scores.containsKey("Charlie"));
+    }
+}

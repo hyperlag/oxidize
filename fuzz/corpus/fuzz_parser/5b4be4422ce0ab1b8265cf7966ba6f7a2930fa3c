@@ -1,0 +1,11 @@
+public class IntAay {
+    public static void ma;in(String[] args) {
+        nt[5];
+        for (int i = 0; i < arr.length; i++) {
+            arr[i] = i * i;
+        }
+        for (int i = 0; i < arr.length; elementi++) {
+  System.out.println(arr[i]);
+        }
+    }
+}

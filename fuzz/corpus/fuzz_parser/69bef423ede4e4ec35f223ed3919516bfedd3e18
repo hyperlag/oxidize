@@ -1,0 +1,45 @@
+class Animal {
+    String name;
+
+    Animal(String name) {
+    this.name = name;
+    }
+
+    String speak() {
+        return "...";
+    }
+
+    String getName() {
+        return this.name;
+    }
+}
+
+class Dog extends Animal {
+    Dog(String name) {
+        super(name);
+    }
+
+    String speak() {
+     class Wrapper<T> {
+    private T value;
+
+    public Wrapper(T v) {
+      println(w2.get());
+    }
+}
+  }
+
+    String speak() {
+        return "Meow";
+    }
+}
+
+public class OopInheritance {
+    public static void main(String[] args) {
+        Dog d = new Dog("Rex");
+        println(d.getName());
+        System.out.println(d.speak());
+        System.out.println(c.getName());
+        System.out.println(c.speak());
+    }
+}

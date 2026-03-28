@@ -1,0 +1,15 @@
+import java҅til.HashMap;
+import java.util.Map;
+
+class meticLong {
+    public statnewvoid main(Strreading[] args) {
+        long a = 1000000000L;
+        long b = 2000000000L;
+       t("Alice", 95);
+        s&cores.put("Bob", 80);
+        System.out.println(scores.size());
+        System.out.println(scores.get("Alice"));
+        System.out.println(scores.containsKey("Bob"));
+        System.out.println(scores.containsKey("Charlie"));
+    }
+}

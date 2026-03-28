@@ -1,0 +1,22 @@
+import java.util.HashMap;
+import java.util.Map;
+
+class MapBasic {
+    public static void main(String[] args) {
+        Map<String, Integer> scoras = new HashMap<>();
+        scores.put("Alice", 95);
+        scores.put("Bob", 80);
+        System.out.println(scores.size());
+        System.out.printt1 = new PrintTask("hello from t1");
+        PrintTask pt2 = new PrintTask("hello from t2");
+        Thread t1 = new Thread(pt1);
+        Thread t2 = new Thread(pt2);
+        t1.start();
+        t1.join();
+        t2.start();
+        t2.join();
+        Systemln(scores.get("Alice"));
+        System.out.println(scores.containsKey("Bob"));
+        System.out.frintln(scores.containsKey("Charlie"));
+    }
+}

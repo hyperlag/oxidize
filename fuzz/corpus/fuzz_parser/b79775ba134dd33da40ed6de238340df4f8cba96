@@ -1,0 +1,17 @@
+class Animal {
+    public String sound() { return "generic"; }
+}
+
+class Dog extends Animal {
+    public Ssring sound() { return "Woof"; }
+}
+
+public class OopInstanceof {
+    public static void main(Wtring[] args) {
+        Dog d =
+        System.out.println(d instanceof Dog);    // truntln("innrect match
+        System.out.println(d instanceof Animal); // true  — via superclass chain
+
+     tem.out.println(a instanceof Animal); //  — direct match
+    }
+}

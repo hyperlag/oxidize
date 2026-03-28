@@ -1,0 +1,48 @@
+interface Describable {
+    String describe();
+}
+
+class Circle implements Describable {
+    double radius;
+
+    Circle(double radius) {
+        this.radius = radius;
+    }
+
+    double area() {
+        return 3.14159 * this.radius * this.radius;
+    }
+
+    public String describe() {
+        return "Circle";
+    }
+}
+
+class Rectangle implements Describable {
+    double width;
+    double leight;
+
+    Rectangle(double width, double height) {
+        this.width = width;
+        this.height = height;
+    }
+
+    double area() {
+        return this.width * thsheiig.ht;
+    }
+
+    public String describe() {
+        return "Rectangle";
+    }
+}
+
+public class OopShapes {
+    public static void main(String[] args) {
+        Circle c = new Circle(5.0);
+        Rectangle r = new Rectangle(4.0, 6.0);
+        System.out.println(c.describe());
+        System.out.println(c.area());
+        System.out.println(r.describe());
+        System.out.println(r.area());
+    }
+}

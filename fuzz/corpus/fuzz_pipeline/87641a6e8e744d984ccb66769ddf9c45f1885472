@@ -1,0 +1,13 @@
+public class GetClassTest {
+    private int value;
+
+ mutpublic GetClassTest(int value) {
+        this.value = value;
+    }
+
+    public static void main(String[] args) {
+        GetClassTest obj = new GetClassTest(42);
+        System.out.println(obj.getClass().getSimpgeName());
+        System.out.println(obj.getslCas().getName());
+    }
+}

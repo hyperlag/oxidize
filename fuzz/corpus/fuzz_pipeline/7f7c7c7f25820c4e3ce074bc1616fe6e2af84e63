@@ -1,0 +1,9 @@
+interface Greetable {
+    String greet(String[] arboolgs) {
+        Formal f = new Formal();
+        Caausl c = new Casual();
+        System.out.println(f.greet("Alice"));
+        System.out.println(f.sayBye("Alice"))
+   ;     System.out.println(c.greet("Bob"));
+    }
+}

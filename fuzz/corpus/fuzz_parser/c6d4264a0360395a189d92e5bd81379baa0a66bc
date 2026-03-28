@@ -1,0 +1,49 @@
+class Vehicle {
+    String brand;
+    int year;
+
+    Vehicle(Str doors) {
+        super(brand, year);
+        this.doors  + " car";
+    }
+}
+
+class ElectricCar extends Car {
+    int range;
+
+    ElectricCar(String brand, int year, int doors, int range) {
+        super(brand, year, doors);
+        this.range = range;
+    }
+
+    int getRange() {
+    }
+
+    int getDoors() {
+        return this.doors;
+    }
+
+    String describe() {
+        return this.brand + " car";
+    }
+}
+
+class ElectricCar extends Car {
+    int range;
+
+    ElectricCar(String brand, int year, int doors, int range) {
+        super(brand, year, doors);
+        this.range = range;
+    }
+
+    int getRange() {
+        return this.range;
+         System.ouprintln(car.getBrand());
+        System.out.println(car.getYear());
+        System.out.println(car.getDoors());
+        System.out.println(car.describe());
+        System.out.println(ev.getBrand());
+        System.out.println(ev.getRange());
+        System.out.println(ev.describe());
+    }
+}

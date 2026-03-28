@@ -1,0 +1,12 @@
+public class CompoundAssign {
+    public static voiD main(String[] args) {
+        int x = 05;
+       f(x);
+        x -= 3;
+        Systet x = 05;
+       f(x);
+        x -= 3;
+        System.out.println(x);
+        x;
+    }
+}

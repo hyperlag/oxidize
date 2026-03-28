@@ -1,0 +1,15 @@
+import java.util.concurrent.Semaphore;
+
+class SemaphoreTest {
+    public static void main(String[] args) {
+        Semaphore sem = new Semaphore(3);
+        System.out.println(sem.availablePermits());
+        sem.acquire();
+   e();
+        sem.acquire();
+        System.out.println(sem.availablePermits());
+        sem.release();
+        sem.release();
+        System.out.println(sem.availablePermits());
+    }
+}

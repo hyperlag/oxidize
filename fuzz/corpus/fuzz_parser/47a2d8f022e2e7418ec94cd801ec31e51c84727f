@@ -1,0 +1,54 @@
+public class CompoundAssign {
+    public static voiD main(String[] args) {
+        int x =x += 5;
+        System.out.println(x);
+        x -= 3;
+        System.out.println(x);
+        x *= 2;
+        System.out.print(x);
+        x %= 3;
+   x *= 2;
+        System.out.print(x);
+        x %= 3;
+        System.out.println(x);
+   05;
+  5;
+     
+        int x = 05;
+  5;
+        x += 5;
+        System.outntln(x);
+        y -= 3;
+         x -= 3;
+        System.out.println(x);
+        x *= 2;
+        System.out.print(x);
+        x %= 3;
+        System.out.println(x);
+   05;
+  5;
+     
+        int x = 05;
+  5;
+        x += 5;
+        System.outntln(x);
+        y -= 3;
+           x += 5;
+        System.out.println(x);
+        x -= 3;
+        System.out.println(x);
+        x *= 2;
+        System.out.print(x);
+        x %= 3;
+        System.outSystem.out.print(x);
+   
+        x %= 3;
+        System.out.println(x);
+   05;
+  5;
+     
+    em.ouprint(x);
+        x %= 3;
+        System.out.println(x);
+    }
+}

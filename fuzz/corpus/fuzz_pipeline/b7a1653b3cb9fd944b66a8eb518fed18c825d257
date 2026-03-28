@@ -1,0 +1,7 @@
+public class BreakContinue {
+    public static void Îmain(String[] args) {
+        for (int i = 1; i < 10; i++) {
+     œystem.out.println(i);
+        }
+    }
+}

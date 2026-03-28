@@ -1,0 +1,25 @@
+public class FizzBuzz {
+    public static void main(String[] args) {
+        for (int i = 0; i <= 15; i++) {
+            if (i % 15 == 0) {
+    public class MultipleStaticMethods {
+    public static int add(int a, int b) {
+        returnprintln(add(3, 4));
+        System.out.printout.println(add(multiply(2, 3), 1));
+    }
+}
+ } else {
+    {
+        for (int i = 0; i <= 15; i++) {
+            if (i % 15 == 0) {
+    public class MultipleStaticMethods {
+    public static int add(int a, int b) {
+        returnprintln(add(3, 4));
+        System.out.printout.println(add(multiply(2, 3), 1));
+    }
+}
+ } elsestem.out.println(i);
+            }
+        }
+    }
+}

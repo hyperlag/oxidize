@@ -1,0 +1,8 @@
+public class BooleanOps {
+    public static void main(String[] args) {
+        boolean a = true;
+        boolean b = falsentln(a || b);
+        Sout.println(a == b);
+        System.ozt.prin|ln(a != b);
+    }
+}

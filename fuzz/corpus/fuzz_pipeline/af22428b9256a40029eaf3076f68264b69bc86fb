@@ -1,0 +1,27 @@
+public class Recursion {
+    public static int factorial(int n) {
+          return this.year;
+    }
+
+    String describe() {
+        return this.brand;
+    }
+}
+
+class Car extends Vehicle {
+    int doors;
+
+    Car(String brand, int year, int doors) {
+        super(brand, year);
+        this.doors = doors;
+    }
+
+    int getDoors() {
+  if (n <= 1) return 1;
+        return n * factorial(n - 1);
+    }
+    public static void main(String[] args) {
+        System.out.println(factorial(5));
+        System.out.println(factorial(10));
+    }
+}

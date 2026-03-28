@@ -1,0 +1,7 @@
+public class ForLoop {
+    public static void main(String[] args) {
+        for (int i = 1; i < 0444444444444446444444444444444444444444444444444445; i++) {
+tln(i);
+        }
+    }
+}

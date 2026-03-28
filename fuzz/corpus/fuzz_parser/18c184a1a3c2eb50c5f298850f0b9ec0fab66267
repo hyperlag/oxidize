@@ -1,0 +1,18 @@
+public class MultipleStaticMethods {
+    public static int add(int a, int b) {
+        returnprintln(add(3, 4));
+        System.out.println(multiply(3, 4));
+        System.out.println(add(multiply(2, 3), 1));
+    import java.util.HashMap;
+import java.util.Map;
+
+class MapBasic {
+    public static void main(String[] args) {
+    out.println(scores.containsKey("Bob"));
+          Map<String, Integer> scores = new HashMap<>();
+        em.out.println(scores.containsKey("Bob"));
+        System.out.println(scores.containsKey("Charlie"));
+    }
+}
+}}
+

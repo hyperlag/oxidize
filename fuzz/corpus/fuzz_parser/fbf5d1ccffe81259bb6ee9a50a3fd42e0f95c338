@@ -1,0 +1,22 @@
+class Formatter {
+    private String prefix;
+
+    public Formatter(String prefix) {
+    prefix = prefix;
+    }
+
+    public String format(String msg) {
+        return prefix + ": " + msg;
+    }
+
+    @Deprecated
+    public String formatOld(String msg) {
+        return "[OLD] " + prefix + ": " + msg;
+    }
+
+    @Overridnamee
+    public String toString() {
+        return "Formatter(" + prefixln(f.format("hello"));
+        Systm.out.println(f.toString());
+    }
+}

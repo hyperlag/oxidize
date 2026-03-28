@@ -929,12 +929,2178 @@ fn resolve_method_return_type(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ir::IrModule;
+    use ir::decl::*;
+    use ir::expr::BinOp as IrBinOp;
+    use ir::expr::UnOp as IrUnOp;
+    use ir::stmt::{CatchClause, SwitchCase};
+    use ir::{IrExpr, IrModule, IrStmt, IrType};
+
+    /// Helper: build a minimal class with a single static main method.
+    fn make_class(name: &str, body: Vec<IrStmt>) -> IrClass {
+        IrClass {
+            name: name.into(),
+            visibility: Visibility::Public,
+            is_abstract: false,
+            is_final: false,
+            type_params: vec![],
+            superclass: None,
+            interfaces: vec![],
+            fields: vec![],
+            methods: vec![IrMethod {
+                name: "main".into(),
+                visibility: Visibility::Public,
+                is_static: true,
+                is_abstract: false,
+                is_final: false,
+                is_synchronized: false,
+                type_params: vec![],
+                params: vec![IrParam {
+                    name: "args".into(),
+                    ty: IrType::Array(Box::new(IrType::String)),
+                    is_varargs: false,
+                }],
+                return_ty: IrType::Void,
+                body: Some(body),
+                throws: vec![],
+            }],
+            constructors: vec![],
+        }
+    }
+
+    fn tc(module: IrModule) -> IrModule {
+        type_check(module).expect("type_check should succeed")
+    }
 
     #[test]
     fn check_simple_module() {
         let module = IrModule::new("test");
         let result = type_check(module);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn check_empty_class() {
+        let mut module = IrModule::new("");
+        module.decls.push(IrDecl::Class(make_class("Empty", vec![])));
+        tc(module);
+    }
+
+    #[test]
+    fn check_local_var_with_literal() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::LocalVar {
+            name: "x".into(),
+            ty: IrType::Int,
+            init: Some(IrExpr::LitInt(42)),
+        }];
+        module.decls.push(IrDecl::Class(make_class("LocalTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_arithmetic_typing() {
+        let mut module = IrModule::new("");
+        let init = IrStmt::LocalVar {
+            name: "x".into(),
+            ty: IrType::Int,
+            init: Some(IrExpr::BinOp {
+                op: IrBinOp::Add,
+                lhs: Box::new(IrExpr::LitInt(1)),
+                rhs: Box::new(IrExpr::LitInt(2)),
+                ty: IrType::Unknown,
+            }),
+        };
+        module.decls.push(IrDecl::Class(make_class("ArithTyping", vec![init])));
+        let result = tc(module);
+        // After type checking, the BinOp should be typed as Int
+        if let IrDecl::Class(cls) = &result.decls[0] {
+            if let Some(body) = &cls.methods[0].body {
+                if let IrStmt::LocalVar { init: Some(expr), .. } = &body[0] {
+                    assert_eq!(*expr.ty(), IrType::Int, "Add of ints should be Int");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn check_string_concat_typing() {
+        let mut module = IrModule::new("");
+        let init = IrStmt::LocalVar {
+            name: "s".into(),
+            ty: IrType::String,
+            init: Some(IrExpr::BinOp {
+                op: IrBinOp::Concat,
+                lhs: Box::new(IrExpr::LitString("a".into())),
+                rhs: Box::new(IrExpr::LitString("b".into())),
+                ty: IrType::Unknown,
+            }),
+        };
+        module.decls.push(IrDecl::Class(make_class("ConcatTyping", vec![init])));
+        let result = tc(module);
+        if let IrDecl::Class(cls) = &result.decls[0] {
+            if let Some(body) = &cls.methods[0].body {
+                if let IrStmt::LocalVar { init: Some(expr), .. } = &body[0] {
+                    assert_eq!(*expr.ty(), IrType::String, "Concat should be String");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn check_comparison_typing() {
+        let mut module = IrModule::new("");
+        let init = IrStmt::LocalVar {
+            name: "b".into(),
+            ty: IrType::Bool,
+            init: Some(IrExpr::BinOp {
+                op: IrBinOp::Lt,
+                lhs: Box::new(IrExpr::LitInt(1)),
+                rhs: Box::new(IrExpr::LitInt(2)),
+                ty: IrType::Unknown,
+            }),
+        };
+        module.decls.push(IrDecl::Class(make_class("CompTyping", vec![init])));
+        let result = tc(module);
+        if let IrDecl::Class(cls) = &result.decls[0] {
+            if let Some(body) = &cls.methods[0].body {
+                if let IrStmt::LocalVar { init: Some(expr), .. } = &body[0] {
+                    assert_eq!(*expr.ty(), IrType::Bool, "Comparison should be Bool");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn check_if_statement() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::If {
+            cond: IrExpr::LitBool(true),
+            then_: vec![IrStmt::Return(None)],
+            else_: Some(vec![IrStmt::Return(None)]),
+        }];
+        module.decls.push(IrDecl::Class(make_class("IfTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_while_loop() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::While {
+            cond: IrExpr::LitBool(false),
+            body: vec![IrStmt::Break(None)],
+        }];
+        module.decls.push(IrDecl::Class(make_class("WhileTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_for_loop() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::For {
+            init: Some(Box::new(IrStmt::LocalVar {
+                name: "i".into(),
+                ty: IrType::Int,
+                init: Some(IrExpr::LitInt(0)),
+            })),
+            cond: Some(IrExpr::BinOp {
+                op: IrBinOp::Lt,
+                lhs: Box::new(IrExpr::Var { name: "i".into(), ty: IrType::Int }),
+                rhs: Box::new(IrExpr::LitInt(10)),
+                ty: IrType::Unknown,
+            }),
+            update: vec![IrExpr::UnOp {
+                op: IrUnOp::PostInc,
+                operand: Box::new(IrExpr::Var { name: "i".into(), ty: IrType::Int }),
+                ty: IrType::Unknown,
+            }],
+            body: vec![],
+        }];
+        module.decls.push(IrDecl::Class(make_class("ForTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_do_while() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::DoWhile {
+            body: vec![IrStmt::Continue(None)],
+            cond: IrExpr::LitBool(false),
+        }];
+        module.decls.push(IrDecl::Class(make_class("DoWhileTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_switch() {
+        let mut module = IrModule::new("");
+        let init = IrStmt::LocalVar {
+            name: "x".into(),
+            ty: IrType::Int,
+            init: Some(IrExpr::LitInt(1)),
+        };
+        let switch = IrStmt::Switch {
+            expr: IrExpr::Var { name: "x".into(), ty: IrType::Int },
+            cases: vec![SwitchCase {
+                value: IrExpr::LitInt(1),
+                body: vec![IrStmt::Break(None)],
+            }],
+            default: Some(vec![IrStmt::Break(None)]),
+        };
+        module.decls.push(IrDecl::Class(make_class("SwitchTest", vec![init, switch])));
+        tc(module);
+    }
+
+    #[test]
+    fn check_try_catch() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::TryCatch {
+            body: vec![],
+            catches: vec![CatchClause {
+                exception_types: vec!["Exception".into()],
+                var: "e".into(),
+                body: vec![],
+            }],
+            finally: Some(vec![]),
+        }];
+        module.decls.push(IrDecl::Class(make_class("TryTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_constructor() {
+        let mut module = IrModule::new("");
+        let mut cls = make_class("WithCtor", vec![]);
+        cls.fields.push(IrField {
+            name: "val".into(),
+            ty: IrType::Int,
+            visibility: Visibility::Public,
+            is_static: false,
+            is_final: false,
+            is_volatile: false,
+            init: None,
+        });
+        cls.constructors.push(IrConstructor {
+            visibility: Visibility::Public,
+            params: vec![IrParam {
+                name: "val".into(),
+                ty: IrType::Int,
+                is_varargs: false,
+            }],
+            body: vec![],
+            throws: vec![],
+        });
+        module.decls.push(IrDecl::Class(cls));
+        tc(module);
+    }
+
+    #[test]
+    fn check_class_with_instance_method() {
+        let mut module = IrModule::new("");
+        let mut cls = make_class("Inst", vec![]);
+        cls.fields.push(IrField {
+            name: "count".into(),
+            ty: IrType::Int,
+            visibility: Visibility::Public,
+            is_static: false,
+            is_final: false,
+            is_volatile: false,
+            init: None,
+        });
+        cls.methods.push(IrMethod {
+            name: "getCount".into(),
+            visibility: Visibility::Public,
+            is_static: false,
+            is_abstract: false,
+            is_final: false,
+            is_synchronized: false,
+            type_params: vec![],
+            params: vec![],
+            return_ty: IrType::Int,
+            body: Some(vec![IrStmt::Return(Some(IrExpr::FieldAccess {
+                receiver: Box::new(IrExpr::Var {
+                    name: "this".into(),
+                    ty: IrType::Class("Inst".into()),
+                }),
+                field_name: "count".into(),
+                ty: IrType::Unknown,
+            }))]),
+            throws: vec![],
+        });
+        module.decls.push(IrDecl::Class(cls));
+        tc(module);
+    }
+
+    #[test]
+    fn check_method_call_typing() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::Expr(IrExpr::MethodCall {
+            receiver: None,
+            method_name: "System.out.println".into(),
+            args: vec![IrExpr::LitString("hello".into())],
+            ty: IrType::Unknown,
+        })];
+        module.decls.push(IrDecl::Class(make_class("CallTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_ternary() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::LocalVar {
+            name: "x".into(),
+            ty: IrType::Int,
+            init: Some(IrExpr::Ternary {
+                cond: Box::new(IrExpr::LitBool(true)),
+                then_: Box::new(IrExpr::LitInt(1)),
+                else_: Box::new(IrExpr::LitInt(2)),
+                ty: IrType::Unknown,
+            }),
+        }];
+        module.decls.push(IrDecl::Class(make_class("TernaryTest", stmts)));
+        let result = tc(module);
+        if let IrDecl::Class(cls) = &result.decls[0] {
+            if let Some(body) = &cls.methods[0].body {
+                if let IrStmt::LocalVar { init: Some(expr), .. } = &body[0] {
+                    assert_eq!(*expr.ty(), IrType::Int, "Ternary should infer Int");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn check_field_initialiser() {
+        let mut module = IrModule::new("");
+        let mut cls = make_class("FieldInit", vec![]);
+        cls.fields.push(IrField {
+            name: "value".into(),
+            ty: IrType::Int,
+            visibility: Visibility::Public,
+            is_static: true,
+            is_final: true,
+            is_volatile: false,
+            init: Some(IrExpr::BinOp {
+                op: IrBinOp::Add,
+                lhs: Box::new(IrExpr::LitInt(1)),
+                rhs: Box::new(IrExpr::LitInt(2)),
+                ty: IrType::Unknown,
+            }),
+        });
+        module.decls.push(IrDecl::Class(cls));
+        let result = tc(module);
+        if let IrDecl::Class(cls) = &result.decls[0] {
+            if let Some(init) = &cls.fields[0].init {
+                assert_eq!(*init.ty(), IrType::Int, "Field init should be typed");
+            }
+        }
+    }
+
+    #[test]
+    fn check_cast_expression() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::LocalVar {
+            name: "d".into(),
+            ty: IrType::Double,
+            init: Some(IrExpr::Cast {
+                target: IrType::Double,
+                expr: Box::new(IrExpr::LitInt(42)),
+            }),
+        }];
+        module.decls.push(IrDecl::Class(make_class("CastTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_unary_ops() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "x".into(),
+                ty: IrType::Int,
+                init: Some(IrExpr::UnOp {
+                    op: IrUnOp::Neg,
+                    operand: Box::new(IrExpr::LitInt(5)),
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "b".into(),
+                ty: IrType::Bool,
+                init: Some(IrExpr::UnOp {
+                    op: IrUnOp::Not,
+                    operand: Box::new(IrExpr::LitBool(true)),
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("UnaryTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_new_expression() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::LocalVar {
+            name: "list".into(),
+            ty: IrType::Class("ArrayList".into()),
+            init: Some(IrExpr::New {
+                class: "ArrayList".into(),
+                args: vec![],
+                ty: IrType::Unknown,
+            }),
+        }];
+        module.decls.push(IrDecl::Class(make_class("NewTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_array_access() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "arr".into(),
+                ty: IrType::Array(Box::new(IrType::Int)),
+                init: Some(IrExpr::NewArray {
+                    elem_ty: IrType::Int,
+                    len: Box::new(IrExpr::LitInt(5)),
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "val".into(),
+                ty: IrType::Int,
+                init: Some(IrExpr::ArrayAccess {
+                    array: Box::new(IrExpr::Var {
+                        name: "arr".into(),
+                        ty: IrType::Array(Box::new(IrType::Int)),
+                    }),
+                    index: Box::new(IrExpr::LitInt(0)),
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("ArrayTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_block_scoping() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::Block(vec![
+            IrStmt::LocalVar {
+                name: "inner".into(),
+                ty: IrType::Int,
+                init: Some(IrExpr::LitInt(1)),
+            },
+        ])];
+        module.decls.push(IrDecl::Class(make_class("BlockTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_throw() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::Throw(IrExpr::New {
+            class: "RuntimeException".into(),
+            args: vec![IrExpr::LitString("err".into())],
+            ty: IrType::Class("RuntimeException".into()),
+        })];
+        module.decls.push(IrDecl::Class(make_class("ThrowTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_for_each() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "list".into(),
+                ty: IrType::Class("ArrayList".into()),
+                init: Some(IrExpr::New {
+                    class: "ArrayList".into(),
+                    args: vec![],
+                    ty: IrType::Class("ArrayList".into()),
+                }),
+            },
+            IrStmt::ForEach {
+                var: "x".into(),
+                var_ty: IrType::Int,
+                iterable: IrExpr::Var {
+                    name: "list".into(),
+                    ty: IrType::Class("ArrayList".into()),
+                },
+                body: vec![],
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("ForEachTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_assign() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "x".into(),
+                ty: IrType::Int,
+                init: Some(IrExpr::LitInt(0)),
+            },
+            IrStmt::Expr(IrExpr::Assign {
+                lhs: Box::new(IrExpr::Var { name: "x".into(), ty: IrType::Int }),
+                rhs: Box::new(IrExpr::LitInt(42)),
+                ty: IrType::Unknown,
+            }),
+        ];
+        module.decls.push(IrDecl::Class(make_class("AssignTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_compound_assign() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "x".into(),
+                ty: IrType::Int,
+                init: Some(IrExpr::LitInt(10)),
+            },
+            IrStmt::Expr(IrExpr::CompoundAssign {
+                op: IrBinOp::Add,
+                lhs: Box::new(IrExpr::Var { name: "x".into(), ty: IrType::Int }),
+                rhs: Box::new(IrExpr::LitInt(5)),
+                ty: IrType::Unknown,
+            }),
+        ];
+        module.decls.push(IrDecl::Class(make_class("CompoundTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_instanceof() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "obj".into(),
+                ty: IrType::Class("Object".into()),
+                init: None,
+            },
+            IrStmt::If {
+                cond: IrExpr::InstanceOf {
+                    expr: Box::new(IrExpr::Var {
+                        name: "obj".into(),
+                        ty: IrType::Class("Object".into()),
+                    }),
+                    check_type: IrType::Class("String".into()),
+                },
+                then_: vec![],
+                else_: None,
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("InstanceOfTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_lambda() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::LocalVar {
+            name: "f".into(),
+            ty: IrType::Class("Function".into()),
+            init: Some(IrExpr::Lambda {
+                params: vec!["x".into()],
+                body: Box::new(IrExpr::LitInt(1)),
+                ty: IrType::Class("Function".into()),
+            }),
+        }];
+        module.decls.push(IrDecl::Class(make_class("LambdaTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_return_with_value() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::Return(Some(IrExpr::LitInt(42)))];
+        module.decls.push(IrDecl::Class(make_class("ReturnTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_interface_skipped() {
+        let mut module = IrModule::new("");
+        module.decls.push(IrDecl::Interface(IrInterface {
+            name: "Runnable".into(),
+            visibility: Visibility::Public,
+            type_params: vec![],
+            extends: vec![],
+            methods: vec![IrMethod {
+                name: "run".into(),
+                visibility: Visibility::Public,
+                is_static: false,
+                is_abstract: true,
+                is_final: false,
+                is_synchronized: false,
+                type_params: vec![],
+                params: vec![],
+                return_ty: IrType::Void,
+                body: None,
+                throws: vec![],
+            }],
+        }));
+        tc(module);
+    }
+
+    // ── resolve_method_return_type branches ───────────────────────────────
+
+    #[test]
+    fn check_math_static_methods() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "a".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "Math".into(),
+                        ty: IrType::Class("Math".into()),
+                    })),
+                    method_name: "abs".into(),
+                    args: vec![IrExpr::LitInt(-5)],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "b".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "Math".into(),
+                        ty: IrType::Class("Math".into()),
+                    })),
+                    method_name: "sqrt".into(),
+                    args: vec![IrExpr::LitDouble(4.0)],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "c".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "Math".into(),
+                        ty: IrType::Class("Math".into()),
+                    })),
+                    method_name: "random".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "d".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "Math".into(),
+                        ty: IrType::Class("Math".into()),
+                    })),
+                    method_name: "round".into(),
+                    args: vec![IrExpr::LitDouble(1.5)],
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("MathTest", stmts)));
+        let checked = tc(module);
+        // sqrt should type to Double
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[1] {
+                assert_eq!(*e.ty(), IrType::Double, "Math.sqrt should return Double");
+            }
+            // round should return Long
+            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[3] {
+                assert_eq!(*e.ty(), IrType::Long, "Math.round should return Long");
+            }
+        }
+    }
+
+    #[test]
+    fn check_optional_static() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::LocalVar {
+            name: "opt".into(),
+            ty: IrType::Unknown,
+            init: Some(IrExpr::MethodCall {
+                receiver: Some(Box::new(IrExpr::Var {
+                    name: "Optional".into(),
+                    ty: IrType::Class("Optional".into()),
+                })),
+                method_name: "of".into(),
+                args: vec![IrExpr::LitInt(1)],
+                ty: IrType::Unknown,
+            }),
+        }];
+        module.decls.push(IrDecl::Class(make_class("OptTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+                assert_eq!(*e.ty(), IrType::Class("Optional".into()));
+            }
+        }
+    }
+
+    #[test]
+    fn check_pattern_compile() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::LocalVar {
+            name: "p".into(),
+            ty: IrType::Unknown,
+            init: Some(IrExpr::MethodCall {
+                receiver: Some(Box::new(IrExpr::Var {
+                    name: "Pattern".into(),
+                    ty: IrType::Class("Pattern".into()),
+                })),
+                method_name: "compile".into(),
+                args: vec![IrExpr::LitString("\\d+".into())],
+                ty: IrType::Unknown,
+            }),
+        }];
+        module.decls.push(IrDecl::Class(make_class("PatternTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+                assert_eq!(*e.ty(), IrType::Class("Pattern".into()));
+            }
+        }
+    }
+
+    #[test]
+    fn check_atomic_integer_methods() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "ai".into(),
+                ty: IrType::Class("AtomicInteger".into()),
+                init: Some(IrExpr::New {
+                    class: "AtomicInteger".into(),
+                    args: vec![IrExpr::LitInt(0)],
+                    ty: IrType::Class("AtomicInteger".into()),
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "v".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "ai".into(),
+                        ty: IrType::Class("AtomicInteger".into()),
+                    })),
+                    method_name: "get".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "b".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "ai".into(),
+                        ty: IrType::Class("AtomicInteger".into()),
+                    })),
+                    method_name: "compareAndSet".into(),
+                    args: vec![IrExpr::LitInt(0), IrExpr::LitInt(1)],
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("AtomicTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            let body = cls.methods[0].body.as_ref().unwrap();
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
+                assert_eq!(*e.ty(), IrType::Int, "AtomicInteger.get should return Int");
+            }
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
+                assert_eq!(*e.ty(), IrType::Bool, "compareAndSet should return Bool");
+            }
+        }
+    }
+
+    #[test]
+    fn check_string_methods_return_types() {
+        let mut module = IrModule::new("");
+        let str_var = Box::new(IrExpr::Var {
+            name: "s".into(),
+            ty: IrType::String,
+        });
+        let stmts = vec![
+            IrStmt::LocalVar { name: "s".into(), ty: IrType::String, init: Some(IrExpr::LitString("hello".into())) },
+            IrStmt::LocalVar {
+                name: "len".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(str_var.clone()),
+                    method_name: "length".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "sub".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(str_var.clone()),
+                    method_name: "substring".into(),
+                    args: vec![IrExpr::LitInt(0), IrExpr::LitInt(3)],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "eq".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(str_var.clone()),
+                    method_name: "equals".into(),
+                    args: vec![IrExpr::LitString("hello".into())],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "idx".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(str_var.clone()),
+                    method_name: "indexOf".into(),
+                    args: vec![IrExpr::LitString("l".into())],
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("StrMethodTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            let body = cls.methods[0].body.as_ref().unwrap();
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
+                assert_eq!(*e.ty(), IrType::Int, "String.length should return Int");
+            }
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
+                assert_eq!(*e.ty(), IrType::String, "substring should return String");
+            }
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[3] {
+                assert_eq!(*e.ty(), IrType::Bool, "equals should return Bool");
+            }
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[4] {
+                assert_eq!(*e.ty(), IrType::Int, "indexOf should return Int");
+            }
+        }
+    }
+
+    #[test]
+    fn check_collection_method_types() {
+        let mut module = IrModule::new("");
+        let list_var = Box::new(IrExpr::Var {
+            name: "list".into(),
+            ty: IrType::Class("ArrayList".into()),
+        });
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "list".into(),
+                ty: IrType::Class("ArrayList".into()),
+                init: Some(IrExpr::New {
+                    class: "ArrayList".into(),
+                    args: vec![],
+                    ty: IrType::Class("ArrayList".into()),
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "sz".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(list_var.clone()),
+                    method_name: "size".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "empty".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(list_var.clone()),
+                    method_name: "isEmpty".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("CollTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            let body = cls.methods[0].body.as_ref().unwrap();
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
+                assert_eq!(*e.ty(), IrType::Int, "size should return Int");
+            }
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
+                assert_eq!(*e.ty(), IrType::Bool, "isEmpty should return Bool");
+            }
+        }
+    }
+
+    #[test]
+    fn check_getclass_returns_jclass() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::LocalVar {
+            name: "cls".into(),
+            ty: IrType::Unknown,
+            init: Some(IrExpr::MethodCall {
+                receiver: Some(Box::new(IrExpr::Var {
+                    name: "obj".into(),
+                    ty: IrType::Class("Object".into()),
+                })),
+                method_name: "getClass".into(),
+                args: vec![],
+                ty: IrType::Unknown,
+            }),
+        }];
+        module.decls.push(IrDecl::Class(make_class("GetClassTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+                assert_eq!(*e.ty(), IrType::Class("JClass".into()));
+            }
+        }
+    }
+
+    #[test]
+    fn check_hashcode_returns_int() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::LocalVar {
+            name: "h".into(),
+            ty: IrType::Unknown,
+            init: Some(IrExpr::MethodCall {
+                receiver: Some(Box::new(IrExpr::Var {
+                    name: "obj".into(),
+                    ty: IrType::Class("Object".into()),
+                })),
+                method_name: "hashCode".into(),
+                args: vec![],
+                ty: IrType::Unknown,
+            }),
+        }];
+        module.decls.push(IrDecl::Class(make_class("HashTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+                assert_eq!(*e.ty(), IrType::Int, "hashCode should return Int");
+            }
+        }
+    }
+
+    #[test]
+    fn check_resolve_field_array_length() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "arr".into(),
+                ty: IrType::Array(Box::new(IrType::Int)),
+                init: Some(IrExpr::NewArray {
+                    elem_ty: IrType::Int,
+                    len: Box::new(IrExpr::LitInt(5)),
+                    ty: IrType::Array(Box::new(IrType::Int)),
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "len".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::FieldAccess {
+                    receiver: Box::new(IrExpr::Var {
+                        name: "arr".into(),
+                        ty: IrType::Array(Box::new(IrType::Int)),
+                    }),
+                    field_name: "length".into(),
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("ArrLenTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[1] {
+                assert_eq!(*e.ty(), IrType::Int, "array.length should be Int");
+            }
+        }
+    }
+
+    #[test]
+    fn check_system_out_field() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::LocalVar {
+            name: "out".into(),
+            ty: IrType::Unknown,
+            init: Some(IrExpr::FieldAccess {
+                receiver: Box::new(IrExpr::Var {
+                    name: "System".into(),
+                    ty: IrType::Class("System".into()),
+                }),
+                field_name: "out".into(),
+                ty: IrType::Unknown,
+            }),
+        }];
+        module.decls.push(IrDecl::Class(make_class("SysOutTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+                assert_eq!(*e.ty(), IrType::Class("PrintStream".into()));
+            }
+        }
+    }
+
+    #[test]
+    fn check_widen_numeric_double() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::LocalVar {
+            name: "x".into(),
+            ty: IrType::Unknown,
+            init: Some(IrExpr::BinOp {
+                op: ir::expr::BinOp::Add,
+                lhs: Box::new(IrExpr::LitInt(1)),
+                rhs: Box::new(IrExpr::LitDouble(2.0)),
+                ty: IrType::Unknown,
+            }),
+        }];
+        module.decls.push(IrDecl::Class(make_class("WidenTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+                assert_eq!(*e.ty(), IrType::Double, "int + double should widen to Double");
+            }
+        }
+    }
+
+    #[test]
+    fn check_widen_numeric_long() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::LocalVar {
+            name: "x".into(),
+            ty: IrType::Unknown,
+            init: Some(IrExpr::BinOp {
+                op: ir::expr::BinOp::Mul,
+                lhs: Box::new(IrExpr::LitInt(1)),
+                rhs: Box::new(IrExpr::LitLong(2)),
+                ty: IrType::Unknown,
+            }),
+        }];
+        module.decls.push(IrDecl::Class(make_class("LongWidenTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+                assert_eq!(*e.ty(), IrType::Long, "int * long should widen to Long");
+            }
+        }
+    }
+
+    #[test]
+    fn check_concat_typing() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::LocalVar {
+            name: "x".into(),
+            ty: IrType::Unknown,
+            init: Some(IrExpr::BinOp {
+                op: ir::expr::BinOp::Concat,
+                lhs: Box::new(IrExpr::LitString("a".into())),
+                rhs: Box::new(IrExpr::LitString("b".into())),
+                ty: IrType::Unknown,
+            }),
+        }];
+        module.decls.push(IrDecl::Class(make_class("ConcatType", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+                assert_eq!(*e.ty(), IrType::String, "concat should be String");
+            }
+        }
+    }
+
+    #[test]
+    fn check_thread_method_types() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "t".into(),
+                ty: IrType::Class("Thread".into()),
+                init: Some(IrExpr::New {
+                    class: "Thread".into(),
+                    args: vec![],
+                    ty: IrType::Class("Thread".into()),
+                }),
+            },
+            IrStmt::Expr(IrExpr::MethodCall {
+                receiver: Some(Box::new(IrExpr::Var {
+                    name: "t".into(),
+                    ty: IrType::Class("Thread".into()),
+                })),
+                method_name: "start".into(),
+                args: vec![],
+                ty: IrType::Unknown,
+            }),
+        ];
+        module.decls.push(IrDecl::Class(make_class("ThreadTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_countdown_latch_types() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "latch".into(),
+                ty: IrType::Class("CountDownLatch".into()),
+                init: Some(IrExpr::New {
+                    class: "CountDownLatch".into(),
+                    args: vec![IrExpr::LitInt(1)],
+                    ty: IrType::Class("CountDownLatch".into()),
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "cnt".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "latch".into(),
+                        ty: IrType::Class("CountDownLatch".into()),
+                    })),
+                    method_name: "getCount".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("LatchTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[1] {
+                assert_eq!(*e.ty(), IrType::Long, "getCount should return Long");
+            }
+        }
+    }
+
+    #[test]
+    fn check_stringbuilder_methods() {
+        let mut module = IrModule::new("");
+        let sb_var = Box::new(IrExpr::Var {
+            name: "sb".into(),
+            ty: IrType::Class("StringBuilder".into()),
+        });
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "sb".into(),
+                ty: IrType::Class("StringBuilder".into()),
+                init: Some(IrExpr::New {
+                    class: "StringBuilder".into(),
+                    args: vec![],
+                    ty: IrType::Class("StringBuilder".into()),
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "s".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(sb_var.clone()),
+                    method_name: "toString".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "n".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(sb_var.clone()),
+                    method_name: "length".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("SBTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            let body = cls.methods[0].body.as_ref().unwrap();
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
+                assert_eq!(*e.ty(), IrType::String, "SB.toString should be String");
+            }
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
+                assert_eq!(*e.ty(), IrType::Int, "SB.length should be Int");
+            }
+        }
+    }
+
+    #[test]
+    fn check_biginteger_methods() {
+        let mut module = IrModule::new("");
+        let big_var = Box::new(IrExpr::Var {
+            name: "bi".into(),
+            ty: IrType::Class("BigInteger".into()),
+        });
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "bi".into(),
+                ty: IrType::Class("BigInteger".into()),
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "BigInteger".into(),
+                        ty: IrType::Class("BigInteger".into()),
+                    })),
+                    method_name: "valueOf".into(),
+                    args: vec![IrExpr::LitLong(42)],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "sum".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(big_var.clone()),
+                    method_name: "add".into(),
+                    args: vec![IrExpr::Var {
+                        name: "bi".into(),
+                        ty: IrType::Class("BigInteger".into()),
+                    }],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "s".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(big_var.clone()),
+                    method_name: "toString".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("BigIntTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            let body = cls.methods[0].body.as_ref().unwrap();
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
+                assert_eq!(*e.ty(), IrType::Class("BigInteger".into()), "add should return BigInteger");
+            }
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
+                assert_eq!(*e.ty(), IrType::String, "toString should return String");
+            }
+        }
+    }
+
+    #[test]
+    fn check_exception_methods() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::TryCatch {
+                body: vec![IrStmt::Throw(IrExpr::New {
+                    class: "Exception".into(),
+                    args: vec![IrExpr::LitString("err".into())],
+                    ty: IrType::Class("Exception".into()),
+                })],
+                catches: vec![ir::stmt::CatchClause {
+                    exception_types: vec!["Exception".into()],
+                    var: "e".into(),
+                    body: vec![IrStmt::LocalVar {
+                        name: "msg".into(),
+                        ty: IrType::Unknown,
+                        init: Some(IrExpr::MethodCall {
+                            receiver: Some(Box::new(IrExpr::Var {
+                                name: "e".into(),
+                                ty: IrType::Class("Exception".into()),
+                            })),
+                            method_name: "getMessage".into(),
+                            args: vec![],
+                            ty: IrType::Unknown,
+                        }),
+                    }],
+                }],
+                finally: None,
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("ExcTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_super_constructor_call() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::SuperConstructorCall {
+            args: vec![IrExpr::LitInt(1)],
+        }];
+        module.decls.push(IrDecl::Class(make_class("SuperCallTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_synchronized_stmt() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::Synchronized {
+            monitor: IrExpr::Var {
+                name: "lock".into(),
+                ty: IrType::Class("Object".into()),
+            },
+            body: vec![IrStmt::Expr(IrExpr::LitInt(1))],
+        }];
+        module.decls.push(IrDecl::Class(make_class("SyncTest", stmts)));
+        tc(module);
+    }
+
+    #[test]
+    fn check_class_field_resolve() {
+        let mut module = IrModule::new("");
+        let mut cls = make_class("Pt", vec![]);
+        cls.fields.push(IrField {
+            name: "x".into(),
+            ty: IrType::Int,
+            visibility: Visibility::Public,
+            is_static: false,
+            is_final: false,
+            is_volatile: false,
+            init: None,
+        });
+        cls.methods[0].body = Some(vec![IrStmt::LocalVar {
+            name: "v".into(),
+            ty: IrType::Unknown,
+            init: Some(IrExpr::FieldAccess {
+                receiver: Box::new(IrExpr::Var {
+                    name: "Pt".into(),
+                    ty: IrType::Class("Pt".into()),
+                }),
+                field_name: "x".into(),
+                ty: IrType::Unknown,
+            }),
+        }]);
+        module.decls.push(IrDecl::Class(cls));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+                assert_eq!(*e.ty(), IrType::Int, "field x should resolve to Int");
+            }
+        }
+    }
+
+    #[test]
+    fn check_local_date_methods() {
+        let mut module = IrModule::new("");
+        let stmts = vec![IrStmt::LocalVar {
+            name: "d".into(),
+            ty: IrType::Unknown,
+            init: Some(IrExpr::MethodCall {
+                receiver: Some(Box::new(IrExpr::Var {
+                    name: "LocalDate".into(),
+                    ty: IrType::Class("LocalDate".into()),
+                })),
+                method_name: "now".into(),
+                args: vec![],
+                ty: IrType::Unknown,
+            }),
+        }];
+        module.decls.push(IrDecl::Class(make_class("DateTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+                assert_eq!(*e.ty(), IrType::Class("LocalDate".into()));
+            }
+        }
+    }
+
+    #[test]
+    fn check_parse_methods() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "i".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: None,
+                    method_name: "parseInt".into(),
+                    args: vec![IrExpr::LitString("1".into())],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "d".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: None,
+                    method_name: "parseDouble".into(),
+                    args: vec![IrExpr::LitString("1.0".into())],
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("ParseTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            let body = cls.methods[0].body.as_ref().unwrap();
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[0] {
+                assert_eq!(*e.ty(), IrType::Int, "parseInt should return Int");
+            }
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
+                assert_eq!(*e.ty(), IrType::Double, "parseDouble should return Double");
+            }
+        }
+    }
+
+    // ── AtomicLong method types ───────────────────────────────────────────
+
+    #[test]
+    fn check_atomic_long_methods() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "al".into(),
+                ty: IrType::Class("AtomicLong".into()),
+                init: None,
+            },
+            IrStmt::LocalVar {
+                name: "v".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "al".into(),
+                        ty: IrType::Class("AtomicLong".into()),
+                    })),
+                    method_name: "get".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "v2".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "al".into(),
+                        ty: IrType::Class("AtomicLong".into()),
+                    })),
+                    method_name: "incrementAndGet".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("AtomLong", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            let body = cls.methods[0].body.as_ref().unwrap();
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
+                assert_eq!(*e.ty(), IrType::Long, "AtomicLong.get should return Long");
+            }
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
+                assert_eq!(*e.ty(), IrType::Long, "AtomicLong.incrementAndGet should return Long");
+            }
+        }
+    }
+
+    // ── AtomicBoolean method types ────────────────────────────────────────
+
+    #[test]
+    fn check_atomic_boolean_methods() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "ab".into(),
+                ty: IrType::Class("AtomicBoolean".into()),
+                init: None,
+            },
+            IrStmt::LocalVar {
+                name: "v".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "ab".into(),
+                        ty: IrType::Class("AtomicBoolean".into()),
+                    })),
+                    method_name: "get".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "v2".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "ab".into(),
+                        ty: IrType::Class("AtomicBoolean".into()),
+                    })),
+                    method_name: "compareAndSet".into(),
+                    args: vec![IrExpr::LitBool(true), IrExpr::LitBool(false)],
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("AtomBool", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            let body = cls.methods[0].body.as_ref().unwrap();
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
+                assert_eq!(*e.ty(), IrType::Bool, "AtomicBoolean.get should return Bool");
+            }
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
+                assert_eq!(*e.ty(), IrType::Bool, "AtomicBoolean.compareAndSet should return Bool");
+            }
+        }
+    }
+
+    // ── Semaphore method types ────────────────────────────────────────────
+
+    #[test]
+    fn check_semaphore_methods() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "sem".into(),
+                ty: IrType::Class("Semaphore".into()),
+                init: None,
+            },
+            IrStmt::LocalVar {
+                name: "p".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "sem".into(),
+                        ty: IrType::Class("Semaphore".into()),
+                    })),
+                    method_name: "availablePermits".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("SemTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            let body = cls.methods[0].body.as_ref().unwrap();
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
+                assert_eq!(*e.ty(), IrType::Int, "Semaphore.availablePermits should return Int");
+            }
+        }
+    }
+
+    // ── JClass method types ───────────────────────────────────────────────
+
+    #[test]
+    fn check_jclass_methods() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "cls".into(),
+                ty: IrType::Class("JClass".into()),
+                init: None,
+            },
+            IrStmt::LocalVar {
+                name: "n".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "cls".into(),
+                        ty: IrType::Class("JClass".into()),
+                    })),
+                    method_name: "getName".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "s".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "cls".into(),
+                        ty: IrType::Class("JClass".into()),
+                    })),
+                    method_name: "getSimpleName".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("JClassTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            let body = cls.methods[0].body.as_ref().unwrap();
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
+                assert_eq!(*e.ty(), IrType::String, "JClass.getName should return String");
+            }
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
+                assert_eq!(*e.ty(), IrType::String, "JClass.getSimpleName should return String");
+            }
+        }
+    }
+
+    // ── Optional instance method types ────────────────────────────────────
+
+    #[test]
+    fn check_optional_instance_methods() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "opt".into(),
+                ty: IrType::Class("Optional".into()),
+                init: None,
+            },
+            IrStmt::LocalVar {
+                name: "p".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "opt".into(),
+                        ty: IrType::Class("Optional".into()),
+                    })),
+                    method_name: "isPresent".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "e".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "opt".into(),
+                        ty: IrType::Class("Optional".into()),
+                    })),
+                    method_name: "isEmpty".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("OptInst", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            let body = cls.methods[0].body.as_ref().unwrap();
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
+                assert_eq!(*e.ty(), IrType::Bool, "Optional.isPresent should return Bool");
+            }
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
+                assert_eq!(*e.ty(), IrType::Bool, "JOptional.isEmpty should return Bool");
+            }
+        }
+    }
+
+    // ── Pattern/Matcher method types ──────────────────────────────────────
+
+    #[test]
+    fn check_matcher_methods() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "p".into(),
+                ty: IrType::Class("Pattern".into()),
+                init: None,
+            },
+            IrStmt::LocalVar {
+                name: "mat".into(),
+                ty: IrType::Class("Matcher".into()),
+                init: None,
+            },
+            IrStmt::LocalVar {
+                name: "m".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "p".into(),
+                        ty: IrType::Class("Pattern".into()),
+                    })),
+                    method_name: "matcher".into(),
+                    args: vec![IrExpr::LitString("test".into())],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "b".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "mat".into(),
+                        ty: IrType::Class("Matcher".into()),
+                    })),
+                    method_name: "find".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "g".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "mat".into(),
+                        ty: IrType::Class("Matcher".into()),
+                    })),
+                    method_name: "group".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("MatcherTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            let body = cls.methods[0].body.as_ref().unwrap();
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
+                assert_eq!(*e.ty(), IrType::Class("Matcher".into()), "Pattern.matcher should return Matcher");
+            }
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[3] {
+                assert_eq!(*e.ty(), IrType::Bool, "Matcher.find should return Bool");
+            }
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[4] {
+                assert_eq!(*e.ty(), IrType::String, "Matcher.group should return String");
+            }
+        }
+    }
+
+    // ── File method types ─────────────────────────────────────────────────
+
+    #[test]
+    fn check_file_methods() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "f".into(),
+                ty: IrType::Class("File".into()),
+                init: None,
+            },
+            IrStmt::LocalVar {
+                name: "n".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "f".into(),
+                        ty: IrType::Class("File".into()),
+                    })),
+                    method_name: "getName".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "e".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "f".into(),
+                        ty: IrType::Class("File".into()),
+                    })),
+                    method_name: "exists".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "l".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "f".into(),
+                        ty: IrType::Class("File".into()),
+                    })),
+                    method_name: "length".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("FileTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            let body = cls.methods[0].body.as_ref().unwrap();
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
+                assert_eq!(*e.ty(), IrType::String, "File.getName should return String");
+            }
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
+                assert_eq!(*e.ty(), IrType::Bool, "File.exists should return Bool");
+            }
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[3] {
+                assert_eq!(*e.ty(), IrType::Long, "File.length should return Long");
+            }
+        }
+    }
+
+    // ── JStream method types ──────────────────────────────────────────────
+
+    #[test]
+    fn check_jstream_methods() {
+        let mut module = IrModule::new("");
+        let stmts = vec![
+            IrStmt::LocalVar {
+                name: "s".into(),
+                ty: IrType::Class("JStream".into()),
+                init: None,
+            },
+            IrStmt::LocalVar {
+                name: "c".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "s".into(),
+                        ty: IrType::Class("JStream".into()),
+                    })),
+                    method_name: "count".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+            IrStmt::LocalVar {
+                name: "f".into(),
+                ty: IrType::Unknown,
+                init: Some(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "s".into(),
+                        ty: IrType::Class("JStream".into()),
+                    })),
+                    method_name: "filter".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }),
+            },
+        ];
+        module.decls.push(IrDecl::Class(make_class("StreamTest", stmts)));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            let body = cls.methods[0].body.as_ref().unwrap();
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
+                assert_eq!(*e.ty(), IrType::Long, "JStream.count should return Long");
+            }
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
+                assert_eq!(*e.ty(), IrType::Class("JStream".into()), "JStream.filter should return JStream");
+            }
+        }
+    }
+
+    // ── Inherited field resolution ────────────────────────────────────────
+
+    #[test]
+    fn check_inherited_field_super_path() {
+        let mut module = IrModule::new("");
+        let parent = IrClass {
+            name: "Base".into(),
+            visibility: Visibility::Public,
+            is_abstract: false,
+            is_final: false,
+            type_params: vec![],
+            superclass: None,
+            interfaces: vec![],
+            fields: vec![IrField {
+                name: "value".into(),
+                ty: IrType::Int,
+                visibility: Visibility::Public,
+                is_static: false,
+                is_final: false,
+                is_volatile: false,
+                init: None,
+            }],
+            methods: vec![],
+            constructors: vec![],
+        };
+        let child = IrClass {
+            name: "Child".into(),
+            visibility: Visibility::Public,
+            is_abstract: false,
+            is_final: false,
+            type_params: vec![],
+            superclass: Some("Base".into()),
+            interfaces: vec![],
+            fields: vec![],
+            methods: vec![IrMethod {
+                name: "getVal".into(),
+                visibility: Visibility::Public,
+                is_static: false,
+                is_abstract: false,
+                is_final: false,
+                is_synchronized: false,
+                type_params: vec![],
+                params: vec![],
+                return_ty: IrType::Int,
+                body: Some(vec![IrStmt::Return(Some(IrExpr::Var {
+                    name: "value".into(),
+                    ty: IrType::Unknown,
+                }))]),
+                throws: vec![],
+            }],
+            constructors: vec![],
+        };
+        module.decls.push(IrDecl::Class(parent));
+        module.decls.push(IrDecl::Class(child));
+        let checked = tc(module);
+        // The child's method should resolve `value` through _super
+        if let IrDecl::Class(cls) = &checked.decls[1] {
+            let body = cls.methods[0].body.as_ref().unwrap();
+            if let IrStmt::Return(Some(e)) = &body[0] {
+                assert_eq!(*e.ty(), IrType::Int, "inherited field should have type Int");
+            }
+        }
+    }
+
+    // ── Inherited method lookup ───────────────────────────────────────────
+
+    #[test]
+    fn check_inherited_method_lookup() {
+        let mut module = IrModule::new("");
+        let parent = IrClass {
+            name: "Animal".into(),
+            visibility: Visibility::Public,
+            is_abstract: false,
+            is_final: false,
+            type_params: vec![],
+            superclass: None,
+            interfaces: vec![],
+            fields: vec![],
+            methods: vec![IrMethod {
+                name: "speak".into(),
+                visibility: Visibility::Public,
+                is_static: false,
+                is_abstract: false,
+                is_final: false,
+                is_synchronized: false,
+                type_params: vec![],
+                params: vec![],
+                return_ty: IrType::String,
+                body: Some(vec![IrStmt::Return(Some(IrExpr::LitString("...".into())))]),
+                throws: vec![],
+            }],
+            constructors: vec![],
+        };
+        let child = IrClass {
+            name: "Dog".into(),
+            visibility: Visibility::Public,
+            is_abstract: false,
+            is_final: false,
+            type_params: vec![],
+            superclass: Some("Animal".into()),
+            interfaces: vec![],
+            fields: vec![],
+            methods: vec![IrMethod {
+                name: "bark".into(),
+                visibility: Visibility::Public,
+                is_static: false,
+                is_abstract: false,
+                is_final: false,
+                is_synchronized: false,
+                type_params: vec![],
+                params: vec![],
+                return_ty: IrType::String,
+                body: Some(vec![IrStmt::Return(Some(IrExpr::MethodCall {
+                    receiver: None,
+                    method_name: "speak".into(),
+                    args: vec![],
+                    ty: IrType::Unknown,
+                }))]),
+                throws: vec![],
+            }],
+            constructors: vec![],
+        };
+        module.decls.push(IrDecl::Class(parent));
+        module.decls.push(IrDecl::Class(child));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[1] {
+            let body = cls.methods[0].body.as_ref().unwrap();
+            if let IrStmt::Return(Some(e)) = &body[0] {
+                assert_eq!(*e.ty(), IrType::String, "inherited method call should resolve return type");
+            }
+        }
+    }
+
+    // ── _super variable reference ─────────────────────────────────────────
+
+    #[test]
+    fn check_super_variable_reference() {
+        let mut module = IrModule::new("");
+        let parent = IrClass {
+            name: "Parent".into(),
+            visibility: Visibility::Public,
+            is_abstract: false,
+            is_final: false,
+            type_params: vec![],
+            superclass: None,
+            interfaces: vec![],
+            fields: vec![],
+            methods: vec![],
+            constructors: vec![],
+        };
+        let child = IrClass {
+            name: "Sub".into(),
+            visibility: Visibility::Public,
+            is_abstract: false,
+            is_final: false,
+            type_params: vec![],
+            superclass: Some("Parent".into()),
+            interfaces: vec![],
+            fields: vec![],
+            methods: vec![IrMethod {
+                name: "test".into(),
+                visibility: Visibility::Public,
+                is_static: false,
+                is_abstract: false,
+                is_final: false,
+                is_synchronized: false,
+                type_params: vec![],
+                params: vec![],
+                return_ty: IrType::Void,
+                body: Some(vec![IrStmt::LocalVar {
+                    name: "s".into(),
+                    ty: IrType::Unknown,
+                    init: Some(IrExpr::Var {
+                        name: "_super".into(),
+                        ty: IrType::Unknown,
+                    }),
+                }]),
+                throws: vec![],
+            }],
+            constructors: vec![],
+        };
+        module.decls.push(IrDecl::Class(parent));
+        module.decls.push(IrDecl::Class(child));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[1] {
+            let body = cls.methods[0].body.as_ref().unwrap();
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[0] {
+                // _super should be rewritten to self._super with parent class type
+                assert_eq!(*e.ty(), IrType::Class("Parent".into()), "_super should resolve to parent type");
+            }
+        }
+    }
+
+    // ── Qualified method call on known class ──────────────────────────────
+
+    #[test]
+    fn check_qualified_method_call() {
+        let mut module = IrModule::new("");
+        let cls = IrClass {
+            name: "Helper".into(),
+            visibility: Visibility::Public,
+            is_abstract: false,
+            is_final: false,
+            type_params: vec![],
+            superclass: None,
+            interfaces: vec![],
+            fields: vec![],
+            methods: vec![
+                IrMethod {
+                    name: "compute".into(),
+                    visibility: Visibility::Public,
+                    is_static: false,
+                    is_abstract: false,
+                    is_final: false,
+                    is_synchronized: false,
+                    type_params: vec![],
+                    params: vec![],
+                    return_ty: IrType::Int,
+                    body: Some(vec![IrStmt::Return(Some(IrExpr::LitInt(42)))]),
+                    throws: vec![],
+                },
+                IrMethod {
+                    name: "test".into(),
+                    visibility: Visibility::Public,
+                    is_static: false,
+                    is_abstract: false,
+                    is_final: false,
+                    is_synchronized: false,
+                    type_params: vec![],
+                    params: vec![],
+                    return_ty: IrType::Void,
+                    body: Some(vec![
+                        IrStmt::LocalVar {
+                            name: "h".into(),
+                            ty: IrType::Class("Helper".into()),
+                            init: None,
+                        },
+                        IrStmt::LocalVar {
+                            name: "r".into(),
+                            ty: IrType::Unknown,
+                            init: Some(IrExpr::MethodCall {
+                                receiver: Some(Box::new(IrExpr::Var {
+                                    name: "h".into(),
+                                    ty: IrType::Class("Helper".into()),
+                                })),
+                                method_name: "compute".into(),
+                                args: vec![],
+                                ty: IrType::Unknown,
+                            }),
+                        },
+                    ]),
+                    throws: vec![],
+                },
+            ],
+            constructors: vec![],
+        };
+        module.decls.push(IrDecl::Class(cls));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[0] {
+            let body = cls.methods[1].body.as_ref().unwrap();
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
+                assert_eq!(*e.ty(), IrType::Int, "qualified method call should resolve return type");
+            }
+        }
+    }
+
+    // ── _super field access ───────────────────────────────────────────────
+
+    #[test]
+    fn check_super_field_access() {
+        let mut module = IrModule::new("");
+        let parent = IrClass {
+            name: "Base2".into(),
+            visibility: Visibility::Public,
+            is_abstract: false,
+            is_final: false,
+            type_params: vec![],
+            superclass: None,
+            interfaces: vec![],
+            fields: vec![],
+            methods: vec![],
+            constructors: vec![],
+        };
+        let child = IrClass {
+            name: "Derived2".into(),
+            visibility: Visibility::Public,
+            is_abstract: false,
+            is_final: false,
+            type_params: vec![],
+            superclass: Some("Base2".into()),
+            interfaces: vec![],
+            fields: vec![],
+            methods: vec![IrMethod {
+                name: "test".into(),
+                visibility: Visibility::Public,
+                is_static: false,
+                is_abstract: false,
+                is_final: false,
+                is_synchronized: false,
+                type_params: vec![],
+                params: vec![],
+                return_ty: IrType::Void,
+                body: Some(vec![IrStmt::LocalVar {
+                    name: "s".into(),
+                    ty: IrType::Unknown,
+                    init: Some(IrExpr::FieldAccess {
+                        receiver: Box::new(IrExpr::Var {
+                            name: "self".into(),
+                            ty: IrType::Class("Derived2".into()),
+                        }),
+                        field_name: "_super".into(),
+                        ty: IrType::Unknown,
+                    }),
+                }]),
+                throws: vec![],
+            }],
+            constructors: vec![],
+        };
+        module.decls.push(IrDecl::Class(parent));
+        module.decls.push(IrDecl::Class(child));
+        let checked = tc(module);
+        if let IrDecl::Class(cls) = &checked.decls[1] {
+            let body = cls.methods[0].body.as_ref().unwrap();
+            if let IrStmt::LocalVar { init: Some(e), .. } = &body[0] {
+                assert_eq!(*e.ty(), IrType::Class("Base2".into()), "_super field access should have parent type");
+            }
+        }
     }
 }

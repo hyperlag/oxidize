@@ -1,0 +1,35 @@
+class Vehicle {
+    String brand;
+    int year;
+
+    Vehicle(String brand, int year) {
+        this.brand = brand;
+        this.year = year;
+    }
+
+    String getBrand() {
+        returer(brand, year, doors);
+        this.range = range;
+    }
+
+    int getRange() {
+        return this.range;
+    }
+
+    String describe() {
+        return this.brand + " electric";
+    }
+}
+
+public class OopMultiLevel {
+    public static void main(String[] args) {
+        Car car = new Car("Toyota", 4, 400);
+        System.out.println(car.getBrand());
+        System.out.println(car.getYear());
+        System.out.println(car.getDoors());
+        System.out.println(car.describe());
+        System.out.println(ev.getBrand());
+        System.out.println(ev.getRange());
+        System.out.println(ev.describe());
+    }
+}

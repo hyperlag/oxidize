@@ -1,0 +1,8 @@
+public class Arithmetic {
+    public static void main(String[] args) {
+ rintln(a * b);
+        System.out.println(a / b);
+em.out.printlm.out. System.out.println(a / b);
+        System.out.p/intln(a % b);
+    }
+}

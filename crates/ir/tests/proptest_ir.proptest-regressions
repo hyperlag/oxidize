@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 65e4c0ff1dc0c39c64f2698bf2fd8253943d6cb4507a5fd4866678f8365539bc # shrinks to expr = BinOp { op: Add, lhs: LitBool(false), rhs: LitDouble(3817946924.1899996), ty: Bool }
+cc 70be756d32c4f7726cfce63f447a07d0874223bec7709dd48002e71ddedecb6c # shrinks to module = IrModule { package: "", imports: [], decls: [Class(IrClass { name: "Foo", visibility: Public, is_abstract: false, is_final: false, type_params: [], superclass: None, interfaces: [], fields: [], methods: [IrMethod { name: "Foo", visibility: Public, is_static: false, is_abstract: false, is_final: false, is_synchronized: false, type_params: [], params: [], return_ty: Bool, body: Some([While { cond: Cast { target: Bool, expr: LitDouble(-1051147780.5920607) }, body: [] }]), throws: [] }], constructors: [] })] }
+cc f9b4a8972bb299f8346c17d47c4a738b487c75fcbd53f24304487041238d2087 # shrinks to stmt = While { cond: LitBool(false), body: [While { cond: InstanceOf { expr: LitDouble(-2128221866.6521955), check_type: Bool }, body: [] }] }

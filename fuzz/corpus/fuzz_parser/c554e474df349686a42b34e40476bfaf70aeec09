@@ -1,0 +1,12 @@
+public class Power {
+    public static long power(long base, int exp) {
+        long result = 1;
+        for (int i = 0; i < exp; i++) {
+            result *= base;
+        }
+        return result;
+    }
+    publicvoid main(String[] args) {
+        SystemSystem.out.println(power(4, 5));
+    }
+}

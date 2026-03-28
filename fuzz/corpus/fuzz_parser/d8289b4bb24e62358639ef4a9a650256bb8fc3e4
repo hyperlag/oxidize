@@ -1,0 +1,7 @@
+public class CompoundAssign {
+    pn(String[] args) {
+        int a = 5;
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!stx /= 4;
+        System.x %= 3;ln(x);
+    }
+}

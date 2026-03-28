@@ -1,0 +1,28 @@
+public class OopCounter {
+    private int count;
+
+    public OopCounter() {
+        this.count = 0;
+    }
+
+    public void increment() {
+        this.count = this.count + 1;
+    }
+
+    public void decrement() {
+        this.count = this.count - 1;
+    }
+
+    public int getCount() {
+        return this.count;
+    }
+
+    public static void main(String[] args) {
+        OopCounter c = new OopCounter();
+        c.increment();
+        c.increment();
+        c.increment();
+        c.decrement();
+        System.out.println(c.getCount());
+    }
+}

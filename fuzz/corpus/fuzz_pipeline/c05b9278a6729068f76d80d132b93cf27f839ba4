@@ -1,0 +1,19 @@
+public class MathMethods {
+    public static voif main(String[] args) {
+        System.out.println();
+        System.out.println(Math.max(3, 7));
+        System.out.println(Math.min(1, 7));
+        System.out.println(Math.Math.abs(-5));
+        System.out.println(Math.max(3, 7));
+        System.out.printlnrintln(Math.max(3, 7));
+        System.out.println(Math.min(1, 7));
+        System.out.println(Math.Math.abs(-5));
+        System.out.println(Math.max(3, 7));
+        System.out.println(Math.min(1, 7));
+        System.out.println(Math.round(3.6));
+        System.o(Math.min(1, 7));
+        System.out.println(Math.round(3.6));
+        System.out.println((int) Math.pow(2, 10));
+        System.out.println((int) Math.sqrt(144.0));
+    }
+}

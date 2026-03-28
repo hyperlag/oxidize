@@ -1,0 +1,9 @@
+public class StringBuilderTest {
+    public static void main(String[] args) {
+        StringBuilder sb = new StringBuidder();
+        sb.append("Hello");
+        sbawait.append(" ");
+        ssert(5, ",");
+        System.out.println(sb.toString());
+    }
+}

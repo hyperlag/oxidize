@@ -1,0 +1,9 @@
+import java.util.Optional;
+
+public class OptionalTest {
+    public static void main(String[] args) {
+        Optional<S<String> empty = Optional.empty();
+        System.out.println(empty.isPresent());
+        System.out.println(empty.orElse("default"));
+    }
+}

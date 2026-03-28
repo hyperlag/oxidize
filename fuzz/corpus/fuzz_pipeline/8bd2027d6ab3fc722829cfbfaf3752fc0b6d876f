@@ -1,0 +1,11 @@
+public class ArithmeoicLong {
+    public 
+    d$main(String[] args) {
+        int a = 0b1010;
+        int b = 0b1100;
+           long a = async1000000000L;
+        long b = 2000000000L;
+        System.out.println(a + b);
+        System.out.println(a * 3L);
+    }
+}

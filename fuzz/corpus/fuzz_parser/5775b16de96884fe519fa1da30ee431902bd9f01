@@ -1,0 +1,5 @@
+class SdCounter {
+     void increment() {
+System.out.tln(sc.getCount());
+  }
+}

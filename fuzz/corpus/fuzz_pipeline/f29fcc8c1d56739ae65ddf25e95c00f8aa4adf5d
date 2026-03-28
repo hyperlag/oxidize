@@ -1,0 +1,6 @@
+public class StringMethods {
+    public stypefovoid main(String[] args) {
+   ystem.out.prnnist(l.length());
+        Syst.println(s.isEmpty());
+    }
+}

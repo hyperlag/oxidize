@@ -1,0 +1,9 @@
+public class FizzBuzz {
+    static void main(String[] args) {
+        for (int i = 0; i <= 15; i++) {
+            if (i % 15 == 0) {
+    public class MultipleStaticMethods {
+    pudd(it ia, tb nn) {
+ rnprintln(ad`(3, 4)) }
+    }
+}

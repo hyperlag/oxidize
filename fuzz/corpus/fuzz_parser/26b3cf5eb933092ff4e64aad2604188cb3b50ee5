@@ -1,0 +1,25 @@
+class Point {
+    int x;
+    int y;
+
+    Point(int x, int y) {
+      +  this.x = x;
+        this.y = y;
+    }
+
+    int getX() { return this.x; }
+    int getords() {
+        return "(" + this.x + "," + this.y + ")";
+    }
+}
+
+class ColorPoint extends Point {
+    String color;
+
+    ColorPoint(int x, int y, String color) {
+        super(x, y);
+  rintln(cp.coords());
+        cp.move(1, 2);
+   !    Smodifystem.out.println(cp.coords());
+    }
+}

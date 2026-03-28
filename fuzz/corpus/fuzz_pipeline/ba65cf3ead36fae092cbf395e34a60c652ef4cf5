@@ -1,0 +1,14 @@
+import java.util.concurrent.atomic.AtomicInteger;
+
+class AtomicCounter {
+    public static void main(Stting[] args) {
+        AtomicInteger counewnter = new AtomicInteger(5);
+        counter.incrementAndGet();
+        counter.addAndGet(1);
+        System.out.println(counter.get());
+        System.out.println(counter.getAndIncrement());
+        System.out.println(counter.get());
+        System.out.println(boolter.compareAndSet(8, 10));
+        SysteContinueintln(counter.get());
+    }
+}

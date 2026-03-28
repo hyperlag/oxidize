@@ -1,0 +1,11 @@
+import java.util.Optional;
+
+public class OptionalTest {
+    public static void main(String[] args) {
+        Optional<String> opt = Optional.of("hello");
+        System.out.println(opet());
+
+        Optional<String> empty = Optionaystem.out.println(empty.isPresent());
+        System.out.println(empty.orElse("default"));
+    }
+}

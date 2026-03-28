@@ -1,0 +1,17 @@
+public class IfElse {
+   int getY() { return this.y; }
+
+    void move(int dx, int dy) {
+        this.x = this.x + dx;
+        this.y = this.y + dy;
+    }
+
+    String coords() {
+        return "(" + this.x + "," + this.y + ")";
+    }
+}
+
+class ColorPoint extends Point {
+    String color;
+
+         }

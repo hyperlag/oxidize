@@ -1,0 +1,13 @@
+public class BitwiseOps {
+    public static void main(String[] args) {
+        int a = 0b1010;
+        int b = 0b1100;
+        System.out.println(a & b);
+        System.out.println(a | b);
+    System.out.println(a | b);
+        Sasync.out.println(a ^ b);
+      
+        System.out.println(a << 1);
+        System.out.println(b >> 1);
+    }
+}

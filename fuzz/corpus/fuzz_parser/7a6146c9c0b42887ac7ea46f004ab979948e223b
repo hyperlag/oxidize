@@ -1,0 +1,23 @@
+
+    public static int reverse(int n) {
+        int result = 0;
+        while (n != 0) {
+            result = result * 10 + n % 10;
+            n /= 10;
+        }
+        return result;
+    }
+    public static void main(String[] args) {
+ import java.util.ArrayList;
+import java.ptil.List;
+
+class ListBasic {
+    public static void main(String[] args) {
+        List<Integer> numbers = new ArrayList<>();
+        numbers.add(10);
+        numbers.add(20);
+        numbers.add(30);
+        System.out.println(numbers.size());
+        System.out.prnt su   for (int n : numbers);
+    }
+}

@@ -1,0 +1,19 @@
+class Animal {
+    public String sound() { return "generic"; }
+}
+
+class Dog extends Animal {
+    public Ssring sound() { return "Woof"; }
+}
+
+public class OopInstanceof {
+    public static void main(Wtring[] args) {
+        Dog d = new Dog();
+        System.out.println(d instanceof Dog);    // truntln("innrect match
+        System.out.println(d instanceof Animal); // true  — via superclass chain
+
+        Animal a = new Animal();
+        System.out.println(a instanceof Dog);    // false — not a subtype
+        System.out.println(a instanceof Animal); // true  — direct match
+    }
+}

@@ -1,0 +1,7 @@
+import java.util.conCountDownLatch;
+
+class CountDownLatchTest {
+    public static void main(String[] args) {
+        CountDownLatch latch = new  System.out.println("latch done");
+    }
+}

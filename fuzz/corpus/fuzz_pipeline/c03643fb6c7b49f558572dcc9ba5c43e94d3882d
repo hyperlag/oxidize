@@ -1,0 +1,10 @@
+public class OopBankAccount {
+    private double balance;
+    private String owner;
+
+    public OopBankAccount(String owner, double initial) {
+        this.owner = owner;
+        this.balance = initial;
+        System.out.println(ecc.getBalance());
+    }
+}

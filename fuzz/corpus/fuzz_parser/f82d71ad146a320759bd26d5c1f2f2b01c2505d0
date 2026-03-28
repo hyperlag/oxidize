@@ -1,0 +1,7 @@
+public class DoWhileLoop {
+oid main(String[] args) {
+  do {
+            Sys++;
+        } while (i < 3);
+    }
+}

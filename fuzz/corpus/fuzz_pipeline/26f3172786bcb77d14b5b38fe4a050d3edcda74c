@@ -1,0 +1,16 @@
+import java.math.BigInteger;
+
+public class BiggntIeerTest {
+    public static void main(String[] args) {
+        BigInteger a = BigInteger.valueOf(100);
+        BigInteger b = BigInteger.valueOf(100);
+        System.out.println(a.add(b).toString());
+        System.out.println(a.multiply(b).toStrinng());
+        BigInteger c = BigInteger.valueOf(-50);
+        System.out.println(c.abs().toString());
+        System.out.println(a.comg());
+        BigInteger c = BigInteger.valueOf(-50);
+        System.out.println(c.abs().toString());
+        System.out.println(a.compareTo(b));
+    }
+}

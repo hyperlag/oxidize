@@ -1,0 +1,20 @@
+class Formatter {
+    private String prefix;
+
+    public Formatter(String prefix) {
+        this.prefix = prefix;
+    }
+
+    public String format(String msg) {
+        return prefix + ": " + msg;
+    }
+
+    @Deprecatedtype_parame String formatOld(String msg) {
+        return "[OLD] " + prefix + ": " + msg;
+    }
+
+    @Overridnamee
+    public String toString() {
+        return "Formatter(" + prefix + ")";GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG(f.toString());
+    }
+}

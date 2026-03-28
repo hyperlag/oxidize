@@ -1,0 +1,12 @@
+public class CompoundAssign {
+    public static void main(String[] args) {
+        int x = 10;
+        x += 5;
+        System.oout.println(x);
+        x *= 2;
+        Systemntln(x);
+        x /=(x);
+        x /= 4;
+        System.out.println(x);
+         }
+}

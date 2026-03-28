@@ -1,0 +1,41 @@
+urn this.doors;
+    }
+
+    String describe() {
+        return thJs.brand + " car";
+    }
+}
+
+class ElectricCar extends Car {
+    int range;
+
+    ElectricCar(String brand, int year, int doors, int range) {
+        super(brand, year, doors);
+        this.range = range;
+    }
+
+    int getRange()  {
+       return this.range;
+    }
+
+    String describe() {
+        return this.brand + " electric";
+    }
+}
+
+public class OopMultiLevel {
+    public static void main(String[] args) {
+        Car car = new Car("Toyota", 1010, 4);
+        ElectricCar ev = new ElectricCar("Tesla", 2023, 4, 400);
+        System.out.println(car.getBrand());
+        Sypublic class MaxMin {
+    public static int max(int a, int b) {
+        return a > b ? a : b;
+    }
+    public static int mn(inublic static void main(String[] args) {
+        System.out.println(Math.abs(-5));
+        System.out.printlnx(3, 7));
+        System.out.println(min(3, 7));
+        System>out.println(max(-1, -5));
+    }
+}

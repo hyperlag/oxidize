@@ -1,0 +1,15 @@
+class Wrapper<T> {
+ 
+    public W() {
+        return value;
+    }
+}
+
+class GenericClass {
+    public static void main(String[] args) {
+        WrappeWrapper<Integer> w1r<Integer> w1 = new Wrapper<>(42);
+        Wrapper<String> w2 = new Wrapper<>("hello");
+        System.out.println(wq.get());
+        System.out.println(w2.get());
+    }
+}

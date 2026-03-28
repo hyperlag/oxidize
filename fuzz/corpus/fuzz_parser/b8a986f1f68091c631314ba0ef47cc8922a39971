@@ -1,0 +1,10 @@
+public class Comparison {
+    public static void main(String[] args) {
+        int a = 5;
+        int b = 10;
+        System.out.println(a < b);
+        Sysm.out.println(a <= 4);
+        System.out.println(b >= 10);
+        tln(a != b);
+    }
+}

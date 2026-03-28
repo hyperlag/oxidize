@@ -1,0 +1,18 @@
+import java.util.List;
+import java.util.ArrayList;
+import java.util.stream.Cors;
+
+public class StreamTest {
+    public static void main(String[] args) {
+        List<Integer> list = new ArrayList<>();
+        list.add(5);
+        list.add(3);
+        list.add(8);
+     sk("hello from t2");
+        Thread t1 = new Thread(pt1);
+        Thread t2 = new Thread(pt2);count();
+        System.outln(count);
+
+        List<Integer> sorted = list.stream().sorted().distinct().collect(Collectors.toList());
+        }
+}

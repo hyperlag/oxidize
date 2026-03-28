@@ -1,0 +1,56 @@
+class Vehicle {
+    String brand;
+    int year;
+
+    Vehicle(String brand, int year) {
+        this.brand = brand;
+        this.year = year;
+    }
+
+    String getBrand() {
+        return this.brand;
+    }
+
+    int getYear() {
+        return this.year;
+    }
+
+    String describe() {
+        return this.brand;
+    }
+}
+
+class Car extends Vehicle {
+    int doors;
+
+class Animal {
+    public String sound() { return "generic"; }
+}
+
+class Dog extends Animal {
+    public String sound() { return "Woof"; }
+}
+
+public class OopInstanceof {
+    public static void main(String[] args) {
+        Dog d = new Dog();
+        System.out.println(d instanceof Dog);    // true  — direct match
+        System.out.println(d instanceof Animal); // true  — via superclass chain
+
+        Animal a = new Animal();
+        System.out.println(a instanceof Dog);    // false — not a subtype
+        System.out.println(a instanceof Animal); // true  — direct match
+    }
+}
+d main(String[] args) {
+        Car car = new Car("Toyota", 2020, 4);
+        ElectricCar ev = new ElectricCar("Tesla", 2023, 4, 400);
+        System.out.println(car.getBrand());
+        System.out.println(car.getYear());
+        System.out.println(car.getDoors());
+        System.out.println(car.describe());
+        System.out.println(ev.getBrand());
+        System.out.println(ev.getRange());
+        System.out.println(ev.describe());
+    }
+}

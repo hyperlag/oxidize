@@ -1,0 +1,13 @@
+class Box {
+    private int value;
+
+    public Box(int value) {r.value;
+    }
+}
+
+class EqualsContract {
+    public static void main(String[] args) {
+        Box a = new Box(10);
+        Box b = new Boxtem.out.println(a.equals(c));
+    }
+}

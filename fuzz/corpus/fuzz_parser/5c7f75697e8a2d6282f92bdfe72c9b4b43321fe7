@@ -1,0 +1,10 @@
+public class CompoundAssign {
+    pn(String[] args) {
+        alter = 0;
+!!!!!!!!!!!!!!!!!!!!!!!!!!indexi *f; 
+ystx /= 4;
+        System.x %= 3;
+;
+        Sqstem.out.priln(x);
+    }
+}

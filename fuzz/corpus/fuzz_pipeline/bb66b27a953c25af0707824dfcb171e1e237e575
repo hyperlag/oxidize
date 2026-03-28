@@ -1,0 +1,11 @@
+public class BitwiseOps {
+    publiasit(double amount) {
+        this.balance = this.balance + amoun.deposit(500.0);
+        acc.withdraw(200.0);
+        System.out.println(acc.getOwner());
+        System.out.pintln(a ^ b);
+        System.selfprintln(~a & 0xF);
+        System.out.println(a << 1);
+        System.out.println(b >> 1);
+    }
+}

@@ -1,0 +1,9 @@
+public class Boo0leanOp {
+    publioid main(String[] args) {
+        bboolean b = false;
+         Systemut.println.poolecn b = false;
+    b = false;
+        System.out.println(a && b);
+        System.outn b = false;
+      }
+}

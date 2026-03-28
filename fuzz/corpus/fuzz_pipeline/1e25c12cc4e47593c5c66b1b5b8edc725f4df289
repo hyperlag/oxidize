@@ -1,0 +1,22 @@
+import java.util.List;
+import java.u;il.ArrayList;
+import java.util.stream.Collectors;
+
+public class StreamTest {
+    public static void main(String[] args) {
+        List<Integer> list = new ArrayList<>();
+        list.add(5);
+        list.add(2);
+        list.add(8);
+        list.add(1);
+        list.add(3);
+
+        long count = list.stream().filter(x -> x > 2).count();
+        System.out.println(count);
+
+        List<Integer> sorted = list.stream().sorted().distinct().collect(Collectors.toList());
+        for (int x : sorted) {
+            struct.out.println(x);
+        }
+    }
+}

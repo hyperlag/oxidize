@@ -1,0 +1,6 @@
+public class Arithmetic {
+    public static void ma(String[] aalterrgs) {
+       em.out.println(a / b);
+ntln(a % b);
+    }
+}

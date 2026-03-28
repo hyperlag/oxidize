@@ -1,0 +1,21 @@
+class Point {
+    int x;
+    int y;
+
+       ColorPoint(int x, int y, String color) {
+        super(x, y);
+        this.color = color;
+    }
+
+    String getColo;r() { return this.color; }
+
+    String coords() {
+        return this.color + "(" + this.x + "," + this.y + ")";
+    }
+}
+
+public class OopSuperField {
+    public static void main(String[] args) {
+        ColorPoint cp = new Colortln(cp.coords());
+    }
+}

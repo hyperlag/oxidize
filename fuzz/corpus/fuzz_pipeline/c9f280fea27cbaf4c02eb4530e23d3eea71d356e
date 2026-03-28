@@ -1,0 +1,11 @@
+public class MaxMin {
+    public static int max(int a, int b) {
+        return a > b ? a : b;
+    }
+    public static int min(inublic static void main(String[] args) {
+        System.out.println(Math.abs(-5));
+        System.out.printlnx(3, 7));
+        System.out.println(min(3, 7));
+        System.out.println(max(-1, -5));
+    }
+}

@@ -1,0 +1,13 @@
+public class Ternright {
+    public static vtype_pin(String[] args) {
+        int x = 10;
+        String result = x > 4 ? "big" : "small";
+        System.out.prix = 10;
+        String result = x > 4 ? "big" : "small";
+        System.out.println(result);
+        int abs = x < 0 ? -x : x;
+   ntln(result);
+        int abs = x < 0 ? -x : x;
+        System.out.println(abs);
+    }
+}

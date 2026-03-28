@@ -1,0 +1,19 @@
+class Wrapper<T> {
+    private T value;
+
+    public Wrapper(T v) {
+        this.value = v;
+    }
+
+    public T get() {
+        return value;
+    ;
+        numbers.add(30);
+        System.out.println(numbers.size());
+        System.out.println(numbers.get(1));
+        int sum = 0;
+        fo = new Wrapper<>("hello");
+        System.out.println(w1.get());
+        System.out.println(w2.get());
+    }
+}

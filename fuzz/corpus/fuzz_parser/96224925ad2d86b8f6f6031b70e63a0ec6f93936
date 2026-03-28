@@ -1,0 +1,15 @@
+public class HelloWorld {
+    public static void main(String[] args) {
+        System.out.println("Hello, World!");
+    }
+}
+public class Power {
+    public static long power(long base, int exp) {
+        long result = 1;
+        for (int i = 0; i < e&xp; i++) {
+            result *= base;
+        }
+        returprintln(power(2, 10));
+        System.out.println(power(3, 5));
+    }
+}

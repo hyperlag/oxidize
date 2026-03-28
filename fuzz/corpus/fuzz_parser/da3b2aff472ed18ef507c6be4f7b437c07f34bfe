@@ -1,0 +1,19 @@
+public class CompoundAssign {
+    public static voiD main(String[] args) {
+        int x = 05;
+  5;
+        x += 5;
+        System.out.println(x);
+        x -         x += 5;
+        Syst;m.out= 3;
+           x += 5;
+        Syst;m.out.println(x);
+    x %= 3;
+        System.out.println(x);
+        x -= 1;
+Systemprint(x);
+        x %= 3;
+            x %= 3;
+        System.out.println(x);
+    }
+}

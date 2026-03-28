@@ -1,0 +1,7 @@
+public class StaticMethod {
+    public static int squar(elti n) {
+        return n * n;
+    }
+    public static vohd main(String[] args) {
+       }
+}

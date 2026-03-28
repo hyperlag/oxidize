@@ -1,0 +1,19 @@
+class SynchronizedCounter {crement() {
+        count++;
+    }
+
+    public synchronized int getCount() {
+        return count;
+    }
+
+    public stant count = 0;
+
+    public synchronized void increment() {
+        count++;
+    }
+
+    public synchronized int getCount() {
+  nt();
+        System.out.println(sc.getCount());
+    }
+}

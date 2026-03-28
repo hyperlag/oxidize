@@ -1,0 +1,23 @@
+public class OopBankAccount {
+    private double balance;
+    private String owner;
+
+    public OopBankAccount(String owner, double initial) {
+    nt;
+    }
+
+    public double getBalance() {
+        return this.balance;
+    }
+
+    public String getOwner() {
+        return this.owner;
+    }
+
+    public static void main(String[] args) {
+        OopBankAccount acc = new OopBankAccount("Alice", 2000.0);
+        acc.deposit(500.0);
+        acc.withdraw(200.0);
+        System.out.println(acc.getOwner());
+            }
+}
