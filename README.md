@@ -36,7 +36,7 @@ Rust source (.rs)
 | `codegen` | Lowers annotated IR to Rust token streams via `proc-macro2` / `quote` |
 | `runtime` | `java-compat` crate: runtime types (`JString`, `JArray`, `JList`, `JMap`, `JOptional`, `JStream`, `JThread`, etc.) |
 | `cli` | `jtrans` binary: CLI driver with `translate`, `init-maven`, `init-gradle` subcommands, watch mode, incremental cache, and source map generation |
-| `tests` | Differential test suite (73 tests: translated Rust output vs. expected output) |
+| `tests` | Differential test suite (76 tests: translated Rust output vs. expected output) |
 
 ## Requirements
 
@@ -210,7 +210,7 @@ cargo test
 
 The differential integration tests in `crates/tests` compile and run each translated Rust
 program, then assert that stdout matches the expected output. No JDK is required to run
-the tests. The suite currently contains **73 differential tests** covering Stages 1–8:
+the tests. The suite currently contains **76 differential tests** covering Stages 1-9:
 
 ```bash
 cargo test -p tests -- --test-threads=4
@@ -231,8 +231,8 @@ The project follows a staged delivery plan:
 | 6 | Reflection and dynamic dispatch | Complete (59/59 tests) |
 | 7 | Standard library coverage: `Math`, `Optional`, `Stream`, `regex`, `BigInteger`, `LocalDate`, `StringBuilder`, `File` | Complete (66/66 tests) |
 | 8 | Build integration and tooling: `translate` subcommand, `--watch`, incremental cache, source maps, Cargo.toml generation, Maven/Gradle plugins | Complete (73/73 tests) |
-| 9 | Validation, fuzzing, and hardening | Planned |
-| 10 | Documentation and release | Planned |
+| 9 | Validation, fuzzing, and hardening: cargo-fuzz, cargo miri, proptest, real-world Java ports, 80%+ coverage | Complete (76/76 tests) |
+| 10 | Documentation and release | Complete |
 
 ### Stage 1: Supported Java features
 
@@ -368,6 +368,21 @@ The project follows a staged delivery plan:
 - Gradle integration: `jtrans init-gradle` generates a Kotlin DSL build script with `translateToRust` task
 - Recursive directory input: `--input src/` discovers all `.java` files
 - Legacy positional CLI mode preserved for backwards compatibility
+
+## Documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) -- IR design, pass ordering, codegen strategy, and testing approach
+- [TRANSLATION_REFERENCE.md](TRANSLATION_REFERENCE.md) -- every supported Java construct and its Rust equivalent
+- [LIMITATIONS.md](LIMITATIONS.md) -- unsupported Java features and known gaps
+- [PROJECT_PLAN.md](PROJECT_PLAN.md) -- staged delivery plan with task checklists
+
+### Rustdoc
+
+Generate API documentation for the `java-compat` runtime crate:
+
+```bash
+cargo doc -p java-compat --no-deps --open
+```
 
 ## Contributing
 
