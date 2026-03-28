@@ -1,7 +1,10 @@
 //! Top-level parse entry point and CST → IR lowering.
 
 use ir::{
-    decl::{IrClass, IrConstructor, IrField, IrInterface, IrMethod, IrParam, Visibility},
+    decl::{
+        IrClass, IrConstructor, IrEnum, IrEnumConstant, IrField, IrInterface, IrMethod, IrParam,
+        Visibility,
+    },
     expr::{BinOp, UnOp},
     stmt::{CatchClause, SwitchCase},
     IrDecl, IrExpr, IrModule, IrStmt, IrType,
@@ -102,14 +105,21 @@ fn lower_program(node: Node<'_>, src: &[u8]) -> Result<IrModule, ParseError> {
                 module.imports.push(import_text);
             }
             "class_declaration" => {
-                module.decls.push(IrDecl::Class(lower_class(child, src)?));
+                let (cls, inner_enums) = lower_class(child, src)?;
+                module.decls.push(IrDecl::Class(cls));
+                for enm in inner_enums {
+                    module.decls.push(IrDecl::Enum(enm));
+                }
             }
             "interface_declaration" => {
                 module
                     .decls
                     .push(IrDecl::Interface(lower_interface(child, src)?));
             }
-            _ => {} // skip unknown top-level nodes for Stage 1
+            "enum_declaration" => {
+                module.decls.push(IrDecl::Enum(lower_enum(child, src)?));
+            }
+            _ => {} // skip unknown top-level nodes
         }
     }
     Ok(module)
@@ -117,7 +127,7 @@ fn lower_program(node: Node<'_>, src: &[u8]) -> Result<IrModule, ParseError> {
 
 // ─── class ──────────────────────────────────────────────────────────────────
 
-fn lower_class(node: Node<'_>, src: &[u8]) -> Result<IrClass, ParseError> {
+fn lower_class(node: Node<'_>, src: &[u8]) -> Result<(IrClass, Vec<IrEnum>), ParseError> {
     let name = child_by_field(node, "name")
         .map(|n| text(n, src).to_owned())
         .unwrap_or_default();
@@ -182,6 +192,7 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<IrClass, ParseError> {
     let mut fields = Vec::new();
     let mut methods = Vec::new();
     let mut constructors = Vec::new();
+    let mut inner_enums = Vec::new();
 
     if let Some(body) = child_by_field(node, "body") {
         let mut cur = body.walk();
@@ -196,23 +207,29 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<IrClass, ParseError> {
                 "constructor_declaration" => {
                     constructors.push(lower_constructor(child, src)?);
                 }
+                "enum_declaration" => {
+                    inner_enums.push(lower_enum(child, src)?);
+                }
                 _ => {}
             }
         }
     }
 
-    Ok(IrClass {
-        name,
-        visibility,
-        is_abstract,
-        is_final,
-        type_params,
-        superclass,
-        interfaces,
-        fields,
-        methods,
-        constructors,
-    })
+    Ok((
+        IrClass {
+            name,
+            visibility,
+            is_abstract,
+            is_final,
+            type_params,
+            superclass,
+            interfaces,
+            fields,
+            methods,
+            constructors,
+        },
+        inner_enums,
+    ))
 }
 
 // ─── interface ──────────────────────────────────────────────────────────────
@@ -266,6 +283,95 @@ fn lower_interface(node: Node<'_>, src: &[u8]) -> Result<IrInterface, ParseError
         type_params,
         extends,
         methods,
+    })
+}
+
+// ─── enum ───────────────────────────────────────────────────────────────────
+
+fn lower_enum(node: Node<'_>, src: &[u8]) -> Result<IrEnum, ParseError> {
+    let name = child_by_field(node, "name")
+        .map(|n| text(n, src).to_owned())
+        .unwrap_or_default();
+    let visibility = extract_visibility(node, src);
+
+    let interfaces: Vec<String> = child_by_field(node, "interfaces")
+        .map(|ifaces_node| {
+            named_children(ifaces_node)
+                .into_iter()
+                .flat_map(|n| {
+                    if n.kind() == "type_identifier" || n.kind() == "generic_type" {
+                        vec![n]
+                    } else {
+                        named_children(n)
+                    }
+                })
+                .filter(|n| n.kind() == "type_identifier" || n.kind() == "generic_type")
+                .map(|n| text(n, src).to_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let mut constants = Vec::new();
+    let mut fields = Vec::new();
+    let mut methods = Vec::new();
+    let mut constructor = None;
+
+    if let Some(body) = child_by_field(node, "body") {
+        let mut cur = body.walk();
+        for child in body.named_children(&mut cur) {
+            match child.kind() {
+                "enum_constant" => {
+                    let const_name = named_children(child)
+                        .into_iter()
+                        .find(|n| n.kind() == "identifier")
+                        .map(|n| text(n, src).to_owned())
+                        .unwrap_or_default();
+                    let args = named_children(child)
+                        .into_iter()
+                        .find(|n| n.kind() == "argument_list")
+                        .map(|al| {
+                            named_children(al)
+                                .into_iter()
+                                .map(|a| lower_expr(a, src))
+                                .collect::<Result<Vec<_>, _>>()
+                        })
+                        .transpose()?
+                        .unwrap_or_default();
+                    constants.push(IrEnumConstant {
+                        name: const_name,
+                        args,
+                    });
+                }
+                "enum_body_declarations" => {
+                    let mut cur2 = child.walk();
+                    for decl in child.named_children(&mut cur2) {
+                        match decl.kind() {
+                            "field_declaration" => {
+                                fields.extend(lower_field(decl, src)?);
+                            }
+                            "method_declaration" => {
+                                methods.push(lower_method(decl, src)?);
+                            }
+                            "constructor_declaration" => {
+                                constructor = Some(lower_constructor(decl, src)?);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    Ok(IrEnum {
+        name,
+        visibility,
+        interfaces,
+        constants,
+        fields,
+        methods,
+        constructor,
     })
 }
 
@@ -648,7 +754,7 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                 body,
             }])
         }
-        "switch_statement" => {
+        "switch_statement" | "switch_expression" => {
             let expr = child_by_field(node, "condition")
                 .map(|n| {
                     let inner = if n.kind() == "parenthesized_expression" {
@@ -664,12 +770,28 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
             let body_node = child_by_field(node, "body").unwrap_or(node);
             let mut cases = Vec::new();
             let mut default: Option<Vec<IrStmt>> = None;
+
+            // Collect all switch_label + statement nodes, flattening
+            // switch_block_statement_group wrappers (tree-sitter-java 0.21).
+            let mut flat_children = Vec::new();
             let mut cur = body_node.walk();
+            for child in body_node.named_children(&mut cur) {
+                if child.kind() == "switch_block_statement_group" {
+                    let mut inner_cur = child.walk();
+                    for inner in child.named_children(&mut inner_cur) {
+                        flat_children.push((inner.kind().to_owned(), inner.id(), inner));
+                    }
+                } else {
+                    flat_children.push((child.kind().to_owned(), child.id(), child));
+                }
+            }
+
             let mut current_values: Vec<IrExpr> = Vec::new();
             let mut current_stmts: Vec<IrStmt> = Vec::new();
+            let mut is_default = false;
 
-            for child in body_node.named_children(&mut cur) {
-                match child.kind() {
+            for (kind, _id, child) in &flat_children {
+                match kind.as_str() {
                     "switch_label" => {
                         // flush previous case if any
                         if !current_values.is_empty() && !current_stmts.is_empty() {
@@ -681,12 +803,17 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                             }
                             current_stmts.clear();
                         }
-                        let label_text = text(child, src);
+                        if is_default && !current_stmts.is_empty() {
+                            default = Some(current_stmts.clone());
+                            current_stmts.clear();
+                            is_default = false;
+                        }
+                        let label_text = text(*child, src);
                         if label_text.contains("default") {
-                            // will be set when we see stmts
+                            is_default = true;
                         } else {
                             // `case <expr> :`
-                            for val_node in named_children(child) {
+                            for val_node in named_children(*child) {
                                 if let Ok(e) = lower_expr(val_node, src) {
                                     current_values.push(e);
                                 }
@@ -695,12 +822,14 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                     }
                     _ => {
                         // statement inside current case group
-                        current_stmts.extend(lower_stmt(child, src)?);
+                        current_stmts.extend(lower_stmt(*child, src)?);
                     }
                 }
             }
             // flush last group
-            if !current_values.is_empty() {
+            if is_default && !current_stmts.is_empty() {
+                default = Some(current_stmts);
+            } else if !current_values.is_empty() {
                 for val in current_values {
                     cases.push(SwitchCase {
                         value: val,

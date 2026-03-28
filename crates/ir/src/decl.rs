@@ -10,6 +10,8 @@ pub enum IrDecl {
     Class(IrClass),
     /// An interface declaration.
     Interface(IrInterface),
+    /// An enum declaration.
+    Enum(IrEnum),
 }
 
 /// Access visibility modifier.
@@ -94,6 +96,31 @@ pub struct IrInterface {
     pub type_params: Vec<String>,
     pub extends: Vec<String>,
     pub methods: Vec<IrMethod>,
+}
+
+/// A single enum constant, e.g. `MERCURY(3.303e+23, 2.4397e6)`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct IrEnumConstant {
+    pub name: String,
+    /// Constructor arguments (empty for simple enums).
+    pub args: Vec<crate::IrExpr>,
+}
+
+/// An enum declaration.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct IrEnum {
+    pub name: String,
+    pub visibility: Visibility,
+    /// Interfaces this enum implements.
+    pub interfaces: Vec<String>,
+    /// The enum constants in declaration order.
+    pub constants: Vec<IrEnumConstant>,
+    /// Instance fields (populated from field declarations inside the enum body).
+    pub fields: Vec<IrField>,
+    /// Instance and static methods defined on the enum.
+    pub methods: Vec<IrMethod>,
+    /// Constructor (at most one supported; private by convention).
+    pub constructor: Option<IrConstructor>,
 }
 
 #[cfg(test)]

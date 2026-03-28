@@ -2,7 +2,7 @@
 //! string using `proc-macro2` and `quote`.
 
 use ir::{
-    decl::{IrClass, IrConstructor, IrInterface, IrMethod, IrParam},
+    decl::{IrClass, IrConstructor, IrEnum, IrInterface, IrMethod, IrParam},
     expr::{BinOp, UnOp},
     stmt::SwitchCase,
     IrDecl, IrExpr, IrModule, IrStmt, IrType,
@@ -15,6 +15,12 @@ use thiserror::Error;
 thread_local! {
     /// Whether the currently-emitted method is static (no `self` receiver).
     static IN_STATIC_METHOD: Cell<bool> = const { Cell::new(false) };
+    /// Set of enum type names known in the current module.
+    static ENUM_NAMES: std::cell::RefCell<std::collections::HashSet<String>> =
+        std::cell::RefCell::new(std::collections::HashSet::new());
+    /// Field names of the enum currently being emitted (empty when not in an enum method).
+    static ENUM_FIELD_NAMES: std::cell::RefCell<std::collections::HashSet<String>> =
+        std::cell::RefCell::new(std::collections::HashSet::new());
 }
 
 /// Errors produced during code-generation.
@@ -68,6 +74,27 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
         })
         .collect();
 
+    let enum_map: std::collections::HashMap<String, &IrEnum> = module
+        .decls
+        .iter()
+        .filter_map(|d| {
+            if let IrDecl::Enum(e) = d {
+                Some((e.name.clone(), e))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Populate thread-local enum names for expression emission
+    ENUM_NAMES.with(|names| {
+        let mut names = names.borrow_mut();
+        names.clear();
+        for name in enum_map.keys() {
+            names.insert(name.clone());
+        }
+    });
+
     // Collect class names so we know what to emit a main() for
     let mut main_class: Option<String> = None;
 
@@ -77,10 +104,16 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
                 if cls.methods.iter().any(|m| m.name == "main" && m.is_static) {
                     main_class = Some(cls.name.clone());
                 }
-                items.push(emit_class(cls, &class_map, &interface_map)?);
+                items.push(emit_class(cls, &class_map, &interface_map, &enum_map)?);
             }
             IrDecl::Interface(iface) => {
                 items.push(emit_interface(iface)?);
+            }
+            IrDecl::Enum(enm) => {
+                if enm.methods.iter().any(|m| m.name == "main" && m.is_static) {
+                    main_class = Some(enm.name.clone());
+                }
+                items.push(emit_enum(enm, &enum_map)?);
             }
         }
     }
@@ -139,12 +172,234 @@ fn emit_interface(iface: &IrInterface) -> Result<TokenStream, CodegenError> {
     })
 }
 
+// ─── enum ───────────────────────────────────────────────────────────────────
+
+fn emit_enum(
+    enm: &IrEnum,
+    _enum_map: &std::collections::HashMap<String, &IrEnum>,
+) -> Result<TokenStream, CodegenError> {
+    let name = ident(&enm.name);
+
+    // Variant identifiers
+    let variant_idents: Vec<Ident> = enm.constants.iter().map(|c| ident(&c.name)).collect();
+
+    // Enum definition with derives
+    let enum_def = quote! {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        pub enum #name {
+            #(#variant_idents),*
+        }
+    };
+
+    let mut impl_methods: Vec<TokenStream> = Vec::new();
+
+    // __data() method for enums with constructor args
+    let has_fields = enm
+        .constructor
+        .as_ref()
+        .is_some_and(|c| !c.params.is_empty());
+    if has_fields {
+        let ctor = enm.constructor.as_ref().unwrap();
+        let field_types: Vec<TokenStream> = ctor.params.iter().map(|p| emit_type(&p.ty)).collect();
+        let data_arms: Vec<TokenStream> = enm
+            .constants
+            .iter()
+            .map(|c| {
+                let cname = ident(&c.name);
+                let arg_exprs: Vec<TokenStream> = c
+                    .args
+                    .iter()
+                    .map(|a| emit_expr(a).unwrap_or_else(|_| quote! { Default::default() }))
+                    .collect();
+                quote! { Self::#cname => (#(#arg_exprs),*,) }
+            })
+            .collect();
+        impl_methods.push(quote! {
+            fn __data(&self) -> (#(#field_types),*,) {
+                match self {
+                    #(#data_arms),*
+                }
+            }
+        });
+
+        // Field accessor methods (one per field, indexed into __data() tuple)
+        for (i, field) in enm.fields.iter().enumerate() {
+            let fname = ident(&field.name);
+            let fty = emit_type(&field.ty);
+            let idx = syn::Index::from(i);
+            impl_methods.push(quote! {
+                pub fn #fname(&self) -> #fty {
+                    self.__data().#idx
+                }
+            });
+        }
+    }
+
+    // name() method
+    let name_arms: Vec<TokenStream> = enm
+        .constants
+        .iter()
+        .map(|c| {
+            let cname = ident(&c.name);
+            let cname_str = &c.name;
+            quote! { Self::#cname => #cname_str }
+        })
+        .collect();
+    impl_methods.push(quote! {
+        pub fn name(&self) -> JString {
+            JString::from(match self {
+                #(#name_arms),*
+            })
+        }
+    });
+
+    // ordinal() method
+    let ordinal_arms: Vec<TokenStream> = enm
+        .constants
+        .iter()
+        .enumerate()
+        .map(|(i, c)| {
+            let cname = ident(&c.name);
+            let idx = i as i32;
+            let idx_lit = Literal::i32_unsuffixed(idx);
+            quote! { Self::#cname => #idx_lit }
+        })
+        .collect();
+    impl_methods.push(quote! {
+        pub fn ordinal(&self) -> i32 {
+            match self {
+                #(#ordinal_arms),*
+            }
+        }
+    });
+
+    // values() static method
+    let values_items: Vec<TokenStream> = enm
+        .constants
+        .iter()
+        .map(|c| {
+            let cname = ident(&c.name);
+            quote! { #name::#cname }
+        })
+        .collect();
+    impl_methods.push(quote! {
+        pub fn values() -> Vec<#name> {
+            vec![#(#values_items),*]
+        }
+    });
+
+    // valueOf(name) static method
+    let valueof_arms: Vec<TokenStream> = enm
+        .constants
+        .iter()
+        .map(|c| {
+            let cname = ident(&c.name);
+            let cname_str = &c.name;
+            quote! { #cname_str => #name::#cname }
+        })
+        .collect();
+    impl_methods.push(quote! {
+        pub fn valueOf(s: JString) -> #name {
+            match s.as_str() {
+                #(#valueof_arms,)*
+                _ => panic!("No enum constant {}", s),
+            }
+        }
+    });
+
+    // equals() for compatibility with Java's Object.equals()
+    impl_methods.push(quote! {
+        pub fn equals(&self, other: #name) -> bool {
+            *self == other
+        }
+    });
+
+    // User-defined methods
+    // Set enum field names so that field accesses on `self` become method calls.
+    ENUM_FIELD_NAMES.with(|names| {
+        let mut set = names.borrow_mut();
+        set.clear();
+        for f in &enm.fields {
+            set.insert(f.name.clone());
+        }
+    });
+    for method in &enm.methods {
+        let m = emit_enum_method(method)?;
+        impl_methods.push(m);
+    }
+    ENUM_FIELD_NAMES.with(|names| names.borrow_mut().clear());
+
+    let impl_block = quote! {
+        impl #name {
+            #(#impl_methods)*
+        }
+    };
+
+    // Display impl (calls name())
+    let display_impl = quote! {
+        impl std::fmt::Display for #name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.name())
+            }
+        }
+    };
+
+    Ok(quote! {
+        #enum_def
+        #impl_block
+        #display_impl
+    })
+}
+
+fn emit_enum_method(method: &IrMethod) -> Result<TokenStream, CodegenError> {
+    let mname = ident(&method.name);
+    let params = emit_params_sig(&method.params);
+    let ret_ty = emit_type(&method.return_ty);
+    let body_stmts = if let Some(body) = &method.body {
+        emit_stmts(body)?
+    } else {
+        vec![]
+    };
+
+    if method.is_static {
+        IN_STATIC_METHOD.with(|b| b.set(true));
+        let result = if method.return_ty == IrType::Void {
+            quote! {
+                pub fn #mname(#(#params),*) {
+                    #(#body_stmts)*
+                }
+            }
+        } else {
+            quote! {
+                pub fn #mname(#(#params),*) -> #ret_ty {
+                    #(#body_stmts)*
+                }
+            }
+        };
+        IN_STATIC_METHOD.with(|b| b.set(false));
+        Ok(result)
+    } else if method.return_ty == IrType::Void {
+        Ok(quote! {
+            pub fn #mname(&self, #(#params),*) {
+                #(#body_stmts)*
+            }
+        })
+    } else {
+        Ok(quote! {
+            pub fn #mname(&self, #(#params),*) -> #ret_ty {
+                #(#body_stmts)*
+            }
+        })
+    }
+}
+
 // ─── class ──────────────────────────────────────────────────────────────────
 
 fn emit_class(
     cls: &IrClass,
     class_map: &std::collections::HashMap<String, &IrClass>,
     interface_map: &std::collections::HashMap<String, &IrInterface>,
+    _enum_map: &std::collections::HashMap<String, &IrEnum>,
 ) -> Result<TokenStream, CodegenError> {
     let name = ident(&cls.name);
 
@@ -811,10 +1066,30 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
             default,
         } => {
             let expr_ts = emit_expr(expr)?;
-            let case_arms = cases
-                .iter()
-                .map(emit_switch_case)
-                .collect::<Result<Vec<_>, _>>()?;
+
+            // Check if we're switching on an enum type
+            let enum_type_name = if let IrType::Class(ref name) = expr.ty() {
+                let is_enum = ENUM_NAMES.with(|names| names.borrow().contains(name.as_str()));
+                if is_enum {
+                    Some(name.clone())
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            let case_arms = if let Some(ref ename) = enum_type_name {
+                cases
+                    .iter()
+                    .map(|c| emit_enum_switch_case(c, ename))
+                    .collect::<Result<Vec<_>, _>>()?
+            } else {
+                cases
+                    .iter()
+                    .map(emit_switch_case)
+                    .collect::<Result<Vec<_>, _>>()?
+            };
             let default_arm = if let Some(def) = default {
                 let def_ts = emit_stmts(def)?;
                 quote! { _ => { #(#def_ts)* } }
@@ -893,11 +1168,35 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
     }
 }
 
+/// Strip trailing `break;` from a switch-case body (Java needs it, Rust match doesn't).
+fn strip_switch_breaks(stmts: &[IrStmt]) -> Vec<IrStmt> {
+    let mut out: Vec<IrStmt> = stmts.to_vec();
+    while matches!(out.last(), Some(IrStmt::Break(None))) {
+        out.pop();
+    }
+    out
+}
+
 fn emit_switch_case(case: &SwitchCase) -> Result<TokenStream, CodegenError> {
     let val = emit_expr(&case.value)?;
-    let body = emit_stmts(&case.body)?;
+    let body = emit_stmts(&strip_switch_breaks(&case.body))?;
     Ok(quote! {
         #val => { #(#body)* }
+    })
+}
+
+fn emit_enum_switch_case(case: &SwitchCase, enum_name: &str) -> Result<TokenStream, CodegenError> {
+    let enum_ident = ident(enum_name);
+    // Case value is a bare Var with the constant name (e.g., RED)
+    let const_name = match &case.value {
+        IrExpr::Var { name, .. } => name.clone(),
+        IrExpr::FieldAccess { field_name, .. } => field_name.clone(),
+        _ => return emit_switch_case(case),
+    };
+    let const_ident = ident(&const_name);
+    let body = emit_stmts(&strip_switch_breaks(&case.body))?;
+    Ok(quote! {
+        #enum_ident::#const_ident => { #(#body)* }
     })
 }
 
@@ -1024,6 +1323,15 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             field_name,
             ty,
         } => {
+            // Enum constant access: Color.RED → Color::RED
+            if let IrExpr::Var { name, .. } = receiver.as_ref() {
+                let is_enum = ENUM_NAMES.with(|names| names.borrow().contains(name.as_str()));
+                if is_enum {
+                    let enum_ident = ident(name);
+                    let const_ident = ident(field_name);
+                    return Ok(quote! { #enum_ident::#const_ident });
+                }
+            }
             // System.out / System.err — emit as the receiver for println calls
             if let IrExpr::Var { name, .. } = receiver.as_ref() {
                 if name == "System" && (field_name == "out" || field_name == "err") {
@@ -1046,6 +1354,15 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 if let IrType::Array(_) = receiver.ty() {
                     return Ok(quote! { (#recv).length() });
                 }
+                // fallback for Vec (e.g. Enum.values().length)
+                return Ok(quote! { ((#recv).len() as i32) });
+            }
+            // Enum field access on self → call accessor method
+            let is_enum_field =
+                ENUM_FIELD_NAMES.with(|names| names.borrow().contains(field_name.as_str()));
+            if is_enum_field {
+                let field = ident(field_name);
+                return Ok(quote! { (#recv).#field() });
             }
             let field = ident(field_name);
             // Non-Copy types must be cloned when read as a value.
@@ -1316,6 +1633,13 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             #( __list.add(#args_ts); )*
                             __list
                         } });
+                    }
+                    // Enum static method calls: Color.values(), Color.valueOf(...)
+                    let is_enum = ENUM_NAMES.with(|names| names.borrow().contains(name.as_str()));
+                    if is_enum {
+                        let enum_ident = ident(name);
+                        let m = ident(method_name);
+                        return Ok(quote! { #enum_ident::#m(#(#args_ts),*) });
                     }
                 }
 

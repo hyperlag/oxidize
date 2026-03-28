@@ -436,6 +436,76 @@ impl<T: Clone + Default + std::fmt::Debug> Wrapper<T> {
 
 Generic type parameters get `Clone + Default + Debug` bounds.
 
+## Enums
+
+### Simple Enum
+
+```java
+enum Color { RED, GREEN, BLUE }
+```
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Color { RED, GREEN, BLUE }
+impl Color {
+    pub fn name(&self) -> JString { ... }
+    pub fn ordinal(&self) -> i32 { ... }
+    pub fn values() -> Vec<Color> { ... }
+    pub fn valueOf(s: JString) -> Color { ... }
+    pub fn equals(&self, other: Color) -> bool { ... }
+}
+impl std::fmt::Display for Color { ... }
+```
+
+### Enum with Fields
+
+```java
+enum Coin {
+    PENNY(1), NICKEL(5), DIME(10), QUARTER(25);
+    private final int cents;
+    Coin(int cents) { this.cents = cents; }
+    int getCents() { return cents; }
+}
+```
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Coin { PENNY, NICKEL, DIME, QUARTER }
+impl Coin {
+    fn __data(&self) -> (i32,) {
+        match self {
+            Self::PENNY => (1,),
+            Self::NICKEL => (5,),
+            Self::DIME => (10,),
+            Self::QUARTER => (25,),
+        }
+    }
+    pub fn cents(&self) -> i32 { self.__data().0 }
+    pub fn getCents(&self) -> i32 { return self.cents(); }
+    // ... name(), ordinal(), values(), valueOf(), equals()
+}
+```
+
+Constructor arguments are stored via a `__data()` method that maps each variant
+to a tuple. Fields become accessor methods indexing into the tuple.
+
+### Enum Switch
+
+```java
+switch (color) {
+    case RED: System.out.println("red"); break;
+    case GREEN: System.out.println("green"); break;
+}
+```
+```rust
+match color {
+    Color::RED => { println!("{}", JString::from("red")); }
+    Color::GREEN => { println!("{}", JString::from("green")); }
+    _ => {}
+}
+```
+
+Bare case labels (e.g., `case RED`) are qualified with the enum type name.
+Trailing `break` statements are stripped (Rust match arms do not fall through).
+
 ## Collections
 
 ### List

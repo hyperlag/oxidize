@@ -88,7 +88,7 @@ with `LinkedList`, `ArrayDeque`, `PriorityQueue`, `TreeMap`, `TreeSet`,
 
 The following are **not** supported:
 
-- `EnumMap`, `EnumSet` (blocked on enum support)
+- `EnumMap`, `EnumSet`
 - `Spliterator`
 - Map `keySet()`/`values()`/`entrySet()` iteration
 
@@ -139,10 +139,22 @@ The following are **not** supported:
 
 ## Language Features
 
-### Enums
+### Enums (Advanced)
 
-Java `enum` declarations are not supported. Enums with fields, methods, and
-constructors (a common Java pattern) are particularly complex to translate.
+Basic Java enums are supported, including:
+
+- Simple unit enums (e.g., `enum Color { RED, GREEN, BLUE }`)
+- Enums with fields, constructors, and methods
+- Built-in methods: `name()`, `ordinal()`, `values()`, `valueOf()`, `equals()`
+- Enum switch statements
+- Enum equality comparisons (`==`, `.equals()`)
+
+The following advanced enum features are **not** supported:
+
+- Constant-specific class bodies (methods that differ per variant)
+- Abstract methods declared on the enum and implemented per constant
+- Enums implementing interfaces
+- `EnumMap` and `EnumSet`
 
 ### Records (Java 16+)
 

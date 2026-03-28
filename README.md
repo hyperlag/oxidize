@@ -344,6 +344,7 @@ The project follows a staged delivery plan:
 | `Semaphore` | `java_compat::JSemaphore` |
 | `Thread` | `java_compat::JThread` |
 | `ClassName` | `ClassName` (generated struct) |
+| `enum EnumName` | `enum EnumName` (generated Rust enum) |
 
 ### Stage 7: Standard library coverage
 
@@ -368,6 +369,17 @@ The project follows a staged delivery plan:
 - Gradle integration: `jtrans init-gradle` generates a Kotlin DSL build script with `translateToRust` task
 - Recursive directory input: `--input src/` discovers all `.java` files
 - Legacy positional CLI mode preserved for backwards compatibility
+
+### Stage 9: Enum support
+
+- Simple enums: `enum Color { RED, GREEN, BLUE }` with unit variants
+- Enums with fields and constructors: data stored via `__data()` match with tuple accessors
+- Built-in enum methods: `name()`, `ordinal()`, `values()`, `valueOf()`, `equals()`
+- User-defined enum methods (static and instance)
+- Enum switch statements with bare constant labels (`case RED:`)
+- Enum equality via `==` and `.equals()` (derives `PartialEq`, `Eq`)
+- Inner enums promoted to top-level Rust enums
+- `Display` impl for enums (calls `name()`)
 
 ## Documentation
 
