@@ -1,8 +1,0 @@
-/home/kenneth/build/oxidize/fuzz/target/debug/deps/tree_sitter_java-8471f1eb2cfeff2b.d: /home/kenneth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-java-0.21.0/bindings/rust/lib.rs /home/kenneth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-java-0.21.0/bindings/rust/../../src/node-types.json /home/kenneth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-java-0.21.0/bindings/rust/../../queries/highlights.scm /home/kenneth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-java-0.21.0/bindings/rust/../../queries/tags.scm
-
-/home/kenneth/build/oxidize/fuzz/target/debug/deps/libtree_sitter_java-8471f1eb2cfeff2b.rmeta: /home/kenneth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-java-0.21.0/bindings/rust/lib.rs /home/kenneth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-java-0.21.0/bindings/rust/../../src/node-types.json /home/kenneth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-java-0.21.0/bindings/rust/../../queries/highlights.scm /home/kenneth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-java-0.21.0/bindings/rust/../../queries/tags.scm
-
-/home/kenneth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-java-0.21.0/bindings/rust/lib.rs:
-/home/kenneth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-java-0.21.0/bindings/rust/../../src/node-types.json:
-/home/kenneth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-java-0.21.0/bindings/rust/../../queries/highlights.scm:
-/home/kenneth/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tree-sitter-java-0.21.0/bindings/rust/../../queries/tags.scm:

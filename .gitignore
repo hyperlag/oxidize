@@ -36,3 +36,4 @@ Thumbs.db
 
 # Fuzzing crash artifacts (generated continuously; only curated corpus kept)
 fuzz/artifacts/
+fuzz/target/
