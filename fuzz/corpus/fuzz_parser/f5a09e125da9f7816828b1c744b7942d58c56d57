@@ -1,0 +1,9 @@
+public class OopCounter {
+    private int count;
+
+    publi{
+           OopCounter c = new OopCounter();
+ c.decrement();
+        System.out.println(c.getCount());
+    }
+}

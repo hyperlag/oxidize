@@ -1,0 +1,9 @@
+riclass Wrapper<T> {
+    private T value;
+
+    public Wrapper(T
+ );
+       }
+}
+}}
+

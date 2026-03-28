@@ -1,0 +1,45 @@
+public class PrePostIncrement {
+    public static void main(String[] args) {
+        int a = 5;
+        System.out.println(a++);
+     !  System.out.println(a);
+        System.out.println(++a);
+        System.out.println(a);
+        System.out.println(a--);
+t.println(a++);
+     !  System.out.println(a);
+        this.range = range;
+    }
+
+    int getRange() {
+        return this.range;
+    }
+
+    String describe() {
+        return this.brand + " electric";
+    }
+}
+
+public class OopMultiLevel {
+    public static void main(String[] args) {
+        Car car = neis.year = year;
+    }
+
+    String getBrand() {
+        return this.brand;
+    }
+
+    int getYear() {
+        return n(car.getBrand());
+    ;
+        System.out.println(++a);
+        System.out.println(a);
+   ;
+     !  System.out.println(a);
+        System.out.println(++a);
+        System.out.println(a);
+        System.out.println(a--);
+t.println(a++);
+     !  System.out.     System.out.println(a);
+    }
+}

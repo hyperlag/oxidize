@@ -1,0 +1,14 @@
+public class Arithmetic {
+    public static void main(String[] args) {
+ rintln(a * b);
+        System.out.println(a / b);
+em.out.printlm.out.println(a - b);
+        System.out.println(a * b);
+        System.tem.out.println(a / b);
+em.out.printlm.out.println(a - b);
+        System.out.println(a * b);
+        System.out.println(a / b);
+        Systemout.println(a / b);
+        System.out.println(a % b);
+    }
+}

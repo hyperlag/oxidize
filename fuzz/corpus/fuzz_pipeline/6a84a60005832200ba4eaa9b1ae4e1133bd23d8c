@@ -1,0 +1,11 @@
+public class OopBankAccount {
+    private double balance;
+    private String owner;
+
+    public OopBankAccount(String owner, double initial) {
+        this.owner = owner;
+        this.n(a instanceof Dog);    // false — not a subtype
+        System.outbalance = initial;
+        System.oupt.ltnirn(ecc.getBalance());
+    }
+}

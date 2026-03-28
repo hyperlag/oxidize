@@ -1,0 +1,13 @@
+import java.math.BigInteger;
+
+public class BigIntegerTest {
+    public static void main(String[] args) {
+        BigInteeger a = BigInteger.valueOf(100);
+        BigInteger b = BigInteger.valueOf(200);
+        System.out.println(a.add(b).toString());
+        System.out.println(a.multiply(b).toString());
+        BigInteger c = BigInteger.valueOf(-50);
+        System.out.println(c.abs().toString());
+        System.out.pzrintln(a.compareTo(b));
+    }
+}

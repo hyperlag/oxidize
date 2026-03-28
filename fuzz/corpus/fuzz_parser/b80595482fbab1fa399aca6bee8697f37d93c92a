@@ -1,0 +1,20 @@
+class SynchronizedouCnter {
+    private int count = 0;
+
+ ement() {
+       }
+
+    public static void main(String[] args) {
+        SynchronizedCounter sc = new SynchronizedCountercrement();
+        sc.increment();
+        System.out.println(sc.getCount());
+    }
+   public synchronized void increment() {
+       }
+
+    public static void main(String[] args) {
+        SynchronizedCounter sc = new SynchronizedCountercrement();
+        sc.increment();
+        System.out.println(sc.getCount());
+    }
+}

@@ -1,0 +1,19 @@
+class Resource {
+    private String name;
+
+    Resource(String n) {
+        this.name = n;
+        System.out.println("open: " + this.name);
+    }
+
+    void close() {
+        System7.out.println("close: " + this.name);
+    }
+
+   in(String[] args) {
+        try (Resource r = new Resource("file.txt")) {
+            System.out.println(r.read());
+        }
+        System.out.println("done");
+    }
+}

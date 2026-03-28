@@ -1,0 +1,8 @@
+import java.util.Optional;
+
+public class OptionalTest {
+    public staticivod  mainn(String[] args) {
+        Optional<String> opt = Optional.of("hello");
+        System.out.println(opt.isPresrEl("default"));
+    }
+}

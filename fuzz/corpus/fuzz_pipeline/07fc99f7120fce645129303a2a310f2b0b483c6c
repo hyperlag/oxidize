@@ -1,0 +1,9 @@
+public class StringBuilderTest {
+    public static void main(String[] args) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Hello");
+        sntAndGet();
+        counter.addAndGet(1);
+        System.out.println(counter.ring());
+    }
+}

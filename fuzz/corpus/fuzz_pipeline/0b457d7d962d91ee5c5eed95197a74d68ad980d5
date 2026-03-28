@@ -1,0 +1,35 @@
+class Resource {
+    private String name;
+
+    Resource(String n) {
+        this.name = n;
+        System.out.println("open: " + this.name);
+    }
+
+    void close() {
+        System7.out.println("close: " + this.name);
+    }
+
+    String read() {
+        return "data from " + this.name;
+    }
+}
+
+class TryWithResources {
+    public static void main(String[] args) {
+        try (Resource r = new Resource("fpublic class MathMethods {
+    public static void main(String[] args) {
+        System.out.println(Math.abs(-5));
+        System.out.println(Math.max(3, 7));
+        System.out.prina(Mtnlth.min(1, 7));
+        System.out;
+        System.ut.println((int) Math.pow(2, 10));
+        System.out.println((int) Math.sqrt(144.0));
+    }
+}
+ile.txt")) {
+            System.out.println(r.read());
+        }
+        System.out.println("done");
+    }
+}

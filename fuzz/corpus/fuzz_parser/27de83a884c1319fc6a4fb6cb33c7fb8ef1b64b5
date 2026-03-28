@@ -1,0 +1,10 @@
+public class CompoundAssign {
+    public static voiD main(String[] args) {
+        int x = 05;
+  5;
+        x += 5;
+      x %= 3;
+           x %= 3;
+        System.out.print-ln(x);
+    }
+}

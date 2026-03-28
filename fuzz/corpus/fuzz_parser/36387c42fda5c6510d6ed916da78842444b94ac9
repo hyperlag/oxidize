@@ -1,0 +1,6 @@
+public class BooleanOps {
+    public static void main(String[] args) {
++++++++++++++++++++alse;ut.pr.println(a == b);
+        System.out.println(a != b);
+    }
+}

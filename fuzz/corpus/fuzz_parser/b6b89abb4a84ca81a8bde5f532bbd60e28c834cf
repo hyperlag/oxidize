@@ -1,0 +1,9 @@
+public class StringBuilderTest {
+    puboid main(String[] args) {
+        sb.reverse();
+        System.out.println(sb.toString());
+        sb.reverse();
+        sb.insert(5, ",");
+        System.out.println(sb.toString());
+    }
+}

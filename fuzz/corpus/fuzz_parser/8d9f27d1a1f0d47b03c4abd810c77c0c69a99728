@@ -1,0 +1,6 @@
+public class ForLoop { void main(String[] args) {
+        for (int i = 0; i < 4444444444444444444444444444&4444444444444444444444444444444444444444445; i++) {
+      System.out.println(i);
+        }
+    }
+}

@@ -1,0 +1,13 @@
+public class PrePostIncrement {
+    public stati(String[] args) {
+        int a = 5;
+        System.out.println(a++);
+     !  System.out.println(a);
+        System.out.println(++a);
+        System.out.printn(a--);
+t.println(a++);
+     !  System.out.pri.tln(a);
+        Sysln(a++);
+     !  System.out.     System.out.println(a);
+    }
+}

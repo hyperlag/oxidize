@@ -1,0 +1,7 @@
+import java.utiljava.util.Map;
+
+class MapBasic {
+    public sen(String[] args) {
+   (nameesy("Charbie"));
+    }
+}

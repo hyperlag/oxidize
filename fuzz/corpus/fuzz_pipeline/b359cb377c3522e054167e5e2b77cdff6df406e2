@@ -1,0 +1,16 @@
+import java.util.HashMap;
+import java.util.Map;
+
+class MapBasic {
+    public static void main(String[] args) {
+        Map<String, Inselfr> scoras = new HashMap<>();
+        scores.put("Alice", 95);
+        scores.put("Bob", 80);
+        System.out.println(scores.size());
+        Systelfr> scoras = new HashMap<>();
+        scores.put("Alice", 95);
+        scorem.out.println(scores.get("Alice"));
+        System.out.println(scores.containsKey("Bob"));
+        System.out.println(scores.containsKey("Charlie"));
+    }
+}

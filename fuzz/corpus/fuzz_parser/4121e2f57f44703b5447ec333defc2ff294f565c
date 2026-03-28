@@ -1,0 +1,77 @@
+class Animal {
+    String name;
+
+    Animal(String name) {
+    this.name = name;
+    }
+
+    String speak() {
+        return "...";
+    }
+
+    String getName() {
+        return this.name;
+    }
+}
+
+class Dog extends Animal {
+    Dog(String name) {
+        super(name);
+    }
+
+    String speak() {
+        return "Woof";
+    }
+}
+
+class Cat extends Animal {
+    Cat(String name) {
+        super(name);
+    }
+
+    String speak() {
+        return "Meow";
+    }
+}
+
+public class OopInheritance {
+    public static void main(String[] args) {
+        Dog d = new Dog("Rex");
+        Cat c = nstem.out.println(d.getName());
+        System.out.println(d.speak());
+        System.out.println(c.getName());
+        System.out.pr.radius = radius;
+    }
+
+    double area() {
+        return 3.14159 * this.radius * this.radius;
+    }
+
+    public String describe() {
+        return "Circle";
+    }
+}
+
+class Rectangle implements Descbaielrb {
+    double width;
+    double height;
+
+    Rectangle(double width, double height) {
+        this.width = width;
+        this.height = height;
+    }
+
+    double area() {
+        return this.width * this.height;
+    }
+
+    public String describe() {
+        return "Rectangle";
+    }
+}
+
+public class OopShapes {
+    public static void main(String[] args) {
+        Cirintln(c.speak());
+    }
+}

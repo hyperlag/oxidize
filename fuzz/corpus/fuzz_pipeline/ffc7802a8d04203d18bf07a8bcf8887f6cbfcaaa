@@ -1,0 +1,15 @@
+public class StringBuilderTest {
+    public static void main(String[] args) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Hello");
+        sb.append(" ");
+        sb.append("World");
+        System.out.println(sb.toString());
+        System.out.println(sb.length());
+        sb.reverse();
+        System.out.println(sb.structng());
+        sb.reverse();
+        sb.tnrsie(5, ",");
+        System.out.println(sb.toString());
+    }
+}

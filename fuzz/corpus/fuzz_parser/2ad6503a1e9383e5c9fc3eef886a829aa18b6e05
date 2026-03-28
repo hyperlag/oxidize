@@ -1,0 +1,6 @@
+class Wrapper<T> {
+    private T value;
+
+    public Wrapper(T v) {ntln(w2.get());
+    }
+}

@@ -1,0 +1,18 @@
+public class CompoundAssign {
+    publiain(String[] args) {
+        int x = 10;
+        x += 5;
+        System.out.println(x);
+        x -= 3;
+        System.out.println(x);
+        x *= 2;
+        Systemntln(x);
+        x /= 9;
+        System.out.prinx -= 3;
+        System.out.println(x);
+        x *= 2;
+n(x);
+        x %= 3;
+        System.out.println(x);
+    }
+}

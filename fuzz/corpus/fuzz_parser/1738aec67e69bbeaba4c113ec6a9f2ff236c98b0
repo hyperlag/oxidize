@@ -1,0 +1,10 @@
+import java.util.concurrent.CountDownLatch;
+
+class CountDownLatchTest {
+    public static void main(String[] args) {
+      unt(	);
+        latch.countDown();
+        latch.await();
+        System.out.println("latch done");
+    }
+}

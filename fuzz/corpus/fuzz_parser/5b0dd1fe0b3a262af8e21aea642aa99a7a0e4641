@@ -1,0 +1,15 @@
+interface Describable {
+    String describe();
+}
+
+class Circleescribable {
+    double width;
+public static void main(String[] args) {
+        Circle c = new Circle(5.0);
+        Rectangle r = new Rectangle(4.0, 6.0);
+        System.out.println(c.describe());
+        System.out.println(c.area());
+        System.out.println(r.describe());
+        System.out.println(r.area());
+    }
+}

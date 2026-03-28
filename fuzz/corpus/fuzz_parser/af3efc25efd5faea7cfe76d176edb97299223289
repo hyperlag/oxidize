@@ -1,0 +1,10 @@
+public class CompoundAssign {
+    pn(String[] args) {
+        int a = 5;
+ pi *f; 
+ystx /= 4;
+        System.x %= 3;
+;
+        System.out.priln(x);
+    }
+}

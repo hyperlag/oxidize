@@ -735,4 +735,77 @@ mod tests {
         assert!(output_dir.join("src").join("helloworld.rs").exists());
         assert!(output_dir.join("src").join("arithmetic.rs").exists());
     }
+
+    // ── Stage 9: Real-world validation programs ───────────────────────────
+
+    #[test]
+    fn test_json_parser() {
+        check(
+            "JsonParser.java",
+            "STRING:hello world
+NUM:42
+NUM:-17
+BOOL:true
+BOOL:false
+NULL
+OBJ:{name=STRING:Alice, age=NUM:30}
+ARR:[NUM:1, NUM:2, NUM:3]
+OBJ:{person=OBJ:{name=STRING:Bob}, active=BOOL:true}
+ARR:[STRING:hello, NUM:42, BOOL:true, NULL]
+STRING:line1
+line2
+JSON parser tests complete",
+        );
+    }
+
+    #[test]
+    fn test_csv_parser() {
+        check(
+            "CsvParser.java",
+            "Rows: 5
+Cols: 3
+Header[0]: name
+Header[1]: age
+Header[2]: city
+Cell[1,0]: Alice
+Cell[1,1]: 30
+Cell[2,0]: Bob
+Cell[4,2]: Chicago
+Sum of ages: 120
+--- Filter city=NYC ---
+name,age,city
+Alice,30,NYC
+Carol,30,NYC
+Sum of x: 9
+Sum of y: 12
+CSV parser tests complete",
+        );
+    }
+
+    #[test]
+    fn test_expr_calc() {
+        check(
+            "ExprCalc.java",
+            "2 + 3 = 5
+10 - 4 = 6
+3 * 7 = 21
+20 / 4 = 5
+2 + 3 * 4 = 14
+(2 + 3) * 4 = 20
+((2 + 3) * (4 - 1)) = 15
+-5 + 3 = -2
+100 - 2 * 3 * 4 + 5 = 81
+RPN 3 4 + = 7
+RPN 5 3 - 4 * = 8
+RPN 2 3 + 4 5 + * = 45
+fib(10) = 55
+fib(20) = 6765
+gcd(12, 8) = 4
+lcm(12, 8) = 24
+2^10 = 1024
+3^5 = 243
+Primes up to 30: 2 3 5 7 11 13 17 19 23 29
+Expression calculator tests complete",
+        );
+    }
 }

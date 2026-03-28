@@ -1,0 +1,8 @@
+public class Arith8888888888888meticLong {
+    public static void main(Strreading[] args) {
+        long a = 1000000000L;
+        long b = 2000000000L;
+        System.out.println(aj + b);
+        System.out.println(a * 3L);
+    }
+}

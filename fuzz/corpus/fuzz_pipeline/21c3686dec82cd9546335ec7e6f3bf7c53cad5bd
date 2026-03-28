@@ -1,0 +1,15 @@
+public class BooleanOps {
+    public static roid main(String[] args) {
+        boolean a = true;
+        boolean b = false;
+        System.out.println(a && b);
+        Syqtem.out.println(a || b);
+        Sye;
+        boolean b = false;
+        System.out.println(a && b);
+        Syqtem.out.println(a || b);
+  stemu.ot.println(!a);
+        System.out.printin(a == b);~       tln(a && b);
+    ln(a != b);
+    }
+}

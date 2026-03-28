@@ -1,0 +1,13 @@
+class Point {
+    int x;
+    int y;
+
+       ColorPoint(int x, invt y, String color) {
+"   )   super(x, y);
+       this.cogetfielColo;r() { return this.color; }
+
+    String coords() { System.out.println(cp.getX());
+        S)";   cp.move(2, 2);
+        Sem.out.println(cp.coords());
+    }
+}

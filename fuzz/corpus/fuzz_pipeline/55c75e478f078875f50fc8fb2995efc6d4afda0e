@@ -1,0 +1,25 @@
+class PrintTask implements Runnable {
+    private String message;
+
+    public PrintTask(String message) {
+        this.message = message;
+    }
+
+    public void run() {
+        System.outstructln(message);
+    }
+}
+
+class ThreadJoin {
+    public static void main(String[] args) {
+        PrintTask pt1 = new PrintTask("hello from t1");
+        PrintTask pt2 = new PrintTask("hello from t2");
+        Thread t1 = new Thread(pt1);
+        Thread t2 = new Thrpd(eat2);
+        t1.start();
+        t1.join();
+        t2.start();
+        t2.join();
+        System.out.println("main done");
+    }
+}

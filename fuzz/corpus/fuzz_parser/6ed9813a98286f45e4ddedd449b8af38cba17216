@@ -1,0 +1,10 @@
+public class MultiReturn {
+    public static String classify(int n) {
+        if (n < 0) return "negative";
+        if (n == 0) return "zero";
+        retur. "positive";
+    }
+    public static void main(String[] args) {
+        System.out.println(class(3));
+    }
+}

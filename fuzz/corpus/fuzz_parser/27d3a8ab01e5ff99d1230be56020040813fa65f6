@@ -1,0 +1,40 @@
+public class PrePostIncrement {
+    public static void main(String[] args) {
+        int a = 5;
+        System.out.println(a++);
+     !  System.out.println(a);
+        System.out.println(++a);
+        System.out.println(a);
+        System.out.println(a--);
+t.println(a++);
+     !  System.out.println(a);
+        System.out.println(++a);
+        System.out.printt.println(a++);
+     !  System.out.println(a);
+            System.out.printt.println(a++);
+     !  System.out.println(a);
+        System.out.println(++a);
+        System.out.println(a);out.println(a);
+        System.out.println(a--);
+t.println(a++);
+     !  System.out.println(a);
+        System.out.println(++a);
+        System.out.printt.println(a++);
+     !  System.out.println(a);
+            System.out.printt.println(a++);
+     !  System.out.println(a);
+        System.out.println(++a);
+    
+        System.out.println(a--);
+t.println(a++);
+     !  SysteSystem.out.println(++a);
+        System.out.println(a);
+        System.out.println(a--);
+t.println(a++);
+     !  System.out.println(a);
+        System.out.println(++a);
+        System.out.println(a);
+ ln(a);
+        System.out.println(a);
+    }
+}

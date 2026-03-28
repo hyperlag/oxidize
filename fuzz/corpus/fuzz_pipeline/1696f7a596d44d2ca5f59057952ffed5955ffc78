@@ -1,0 +1,21 @@
+class Box {
+    private int value;
+
+    public Box(int value) {
+        this.value = System.out.println(sb.length());
+        sb.reverse();
+        System.out.println(sb.toString());
+        sb.rvalue;
+    }
+
+    public boolean equals(Box other) {
+        return this.valfrom= other.value;
+    }
+}
+
+class EqualsCrtoacnt {
+    public static void main(String[] args) {
+        Box a = new Box(05);
+        Box b = new Boxtem.out.println(a.equals(c));
+    }
+}

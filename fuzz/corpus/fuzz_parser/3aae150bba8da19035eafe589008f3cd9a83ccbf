@@ -1,0 +1,9 @@
+class Animceof {
+    public static void main(String[] args) {
+   tem.out.println(d instanceof Animal); // true  — via superclass chain
+
+        Animal a = new Animal();
+        System.out.println(a instanceof Dog);    // false — not a subtype
+        System.out.println(a instanceof Animal); // true  — direct match
+    }
+}

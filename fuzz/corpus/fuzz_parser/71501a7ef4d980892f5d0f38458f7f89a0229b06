@@ -1,0 +1,10 @@
+import java.time.LocalDate;
+
+public class LocalDateTest {
+    public static void main(String[] args) {
+  e.of(2024, 3, 15);
+        System.out.println(d.getYear());
+intln(d2.toString());
+      System.out.println(d3.toString());
+    }
+}

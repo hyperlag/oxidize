@@ -1,0 +1,7 @@
+public class GetClassTest {
+    private int main(String[] args) {
+        GetClassTest obj = new GetClassTest(42);
+        System.out.println(obj.getClass().getSimpgeName());
+        System.out.println(obj.getslCas().getName());
+    }
+}

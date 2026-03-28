@@ -1,0 +1,6 @@
+public class BooaspnOel {
+    public static von(String[] args) {
+        boolea = true;
+        boolout.println(a != b);
+    }
+}

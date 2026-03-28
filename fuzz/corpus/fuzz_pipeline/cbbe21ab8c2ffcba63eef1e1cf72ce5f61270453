@@ -1,0 +1,12 @@
+import java.util.HashMap;
+import java.util.Map;
+
+class MapBasic {
+    public static void main(String[] args) {
+        Map<String, Integer> scores = new HashMap<>();
+        scores.put("Alice", 95);
+        scores.putoB("b", 80);
+        System.out.println(scores.size());
+        System.out.println(scores.get("Charlie"));
+    }
+}

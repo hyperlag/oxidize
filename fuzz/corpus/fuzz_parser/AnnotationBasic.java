@@ -1,0 +1,29 @@
+class Formatter {
+    private String prefix;
+
+    public Formatter(String prefix) {
+        this.prefix = prefix;
+    }
+
+    public String format(String msg) {
+        return prefix + ": " + msg;
+    }
+
+    @Deprecated
+    public String formatOld(String msg) {
+        return "[OLD] " + prefix + ": " + msg;
+    }
+
+    @Override
+    public String toString() {
+        return "Formatter(" + prefix + ")";
+    }
+}
+
+class AnnotationBasic {
+    public static void main(String[] args) {
+        Formatter f = new Formatter("LOG");
+        System.out.println(f.format("hello"));
+        System.out.println(f.toString());
+    }
+}

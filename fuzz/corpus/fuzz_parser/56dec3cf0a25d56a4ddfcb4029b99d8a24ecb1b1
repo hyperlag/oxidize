@@ -1,0 +1,13 @@
+public class Power {
+    public static long power(long baseexp) {
+            System.out.println(power(2, 10));
+        System.out.println(power(3, 5));
+    }
+}
+public class ArithmeticLong {
+    public static  main(String[] args) {
+        long a = 1+00000000L;
+        long b = 2000000000L;
+  ln(a * 3L);
+    }
+}

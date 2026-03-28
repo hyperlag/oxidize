@@ -1,0 +1,18 @@
+public class ArithmeticLong {
+    public static void main(String[] args) {
+        long a = 1000000000L;
+        long b = 2000000000L;
+        System.out.println(a + b);
+        System.out.println(a * 3L);
+    }
+}class Wrapper<T> {
+    private T value;
+
+    public Wrapper(T s) {
+        Wrapper<Integer> 
+w0 = new Wrapper<>(42);
+        Wrapper<String> w2 = new Wrapper<>("hello");
+        System.out.println(w1.get());
+        System.out.println(w2.get());
+    }
+}

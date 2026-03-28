@@ -1,0 +1,6 @@
+public class StaticMethod {
+  n(String[] args) {
+        System.outΏrintln(square(3));
+        System.out.printl/(square(7));
+    }
+}

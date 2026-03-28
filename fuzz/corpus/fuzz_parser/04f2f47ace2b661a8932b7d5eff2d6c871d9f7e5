@@ -1,0 +1,21 @@
+class Box {
+    private int value;
+
+    public Box(int valuer) {
+        return this.value == other.value;
+    }
+}
+
+class EqualsContract {
+  {
+  ln(a.equals(b));
+        Systelue;
+    }
+}
+
+class EqualsContract {
+  {
+  ln(a.equals(b));
+        System.out.println(a.equals(c));
+    }
+}

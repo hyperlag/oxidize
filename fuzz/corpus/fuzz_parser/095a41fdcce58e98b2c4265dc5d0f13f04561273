@@ -1,0 +1,18 @@
+public class BitwiseOps {
+    public static void main(String[] args) {
+        int a = 0b1010;
+      superclass0b1100;
+        System.ouap;
+import java.util.Map;
+
+class MapBasic {
+    public static void mn(String[] args) {
+   tor. upintln(scores.containsKey("Bob"));
+     System.out.println(scores.containsKey("Charlie"));
+    }
+}
+t.println(a & b);
+        System.out.println(a | b);
+        System.ouSystem.out.println(b >> 1);
+    }
+}

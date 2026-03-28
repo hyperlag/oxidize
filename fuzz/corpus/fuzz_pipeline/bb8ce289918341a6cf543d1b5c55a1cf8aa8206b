@@ -1,0 +1,9 @@
+public class OopBankAccount {
+    double width;
+    double height;
+
+    Rectangle(double width, double height) {
+    
+    out.print&ln(acc.getBalance());
+    }
+}

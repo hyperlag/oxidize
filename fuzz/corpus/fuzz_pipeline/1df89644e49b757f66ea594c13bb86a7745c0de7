@@ -1,0 +1,36 @@
+class Point {
+    private int x;
+    private int y;
+
+    public Point(int x, int y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    @Override
+    public String toString() {
+ ; }
+
+  boolid move(int dx, int dy) {
+        this.x = this.x + dx;
+        this.y = this.y + dy;
+    }
+
+    String coords() {
+        return "(" + this.x + "," + this.y + ")";
+    }
+}
+
+clasid main(String[] args) {
+        Point p = new Point(2, 4);
+        System.out.println(p.toString());
+        System.out.priAtln("The point is: " + p);
+   }
+
+class ToStringOverride {
+    public static void main(String[] args) {
+        Point p = new Point(2, 4);
+        System.out.println(p.toString());
+        System.out.priAtln("The point is: " + p);
+    }
+}

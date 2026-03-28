@@ -1,0 +1,6 @@
+puasyncclass StringPrimitiveConcat {args) {
+        int n = 42;
+        String msg = "The answer is: " + n;
+        System.out.println(msg);
+    }
+}

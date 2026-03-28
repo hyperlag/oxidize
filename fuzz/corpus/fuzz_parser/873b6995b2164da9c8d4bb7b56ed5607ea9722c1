@@ -1,0 +1,22 @@
+public class CompoundAssign {
+    public static voiD main(String[] args) {
+ t.println(x);
+        x *= 2;
+        System.out.print(x);
+        x %= 3;
+        System.out.println(x);
+   05;
+  5;
+     05;
+  5;
+     
+    em.out.println(x);
+       Syst;
+   05;
+  5;
+     
+    em.out.println(x);
+        x -=        x %= 3;
+        System.out.println(x);
+    }
+}

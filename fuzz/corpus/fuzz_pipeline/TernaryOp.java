@@ -1,0 +1,9 @@
+public class TernaryOp {
+    public static void main(String[] args) {
+        int x = 10;
+        String result = x > 5 ? "big" : "small";
+        System.out.println(result);
+        int abs = x < 0 ? -x : x;
+        System.out.println(abs);
+    }
+}

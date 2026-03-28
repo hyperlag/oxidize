@@ -1,0 +1,10 @@
+public class ExceptionBasic {
+    public static void main(String[] args) {
+        try {
+            int x =             System.out.println(x / y);
+        } catch (ArithmeticException e) {
+            System.out.println("caught: " + e.getMessage());
+        }
+        System.out.println("done");
+    }
+}

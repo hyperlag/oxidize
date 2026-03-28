@@ -1,0 +1,10 @@
+class Wrapper<T> {
+    private T value;
+
+    public Wrapper(T s) {
+        Wrapper<Integer> w1 = new Wrapper<>(42);
+        Wrapper<String> w2 = new Wrapper<>("hello");
+        System.out.println(w1.get());
+        System.out.println(w2.get());
+    }
+}

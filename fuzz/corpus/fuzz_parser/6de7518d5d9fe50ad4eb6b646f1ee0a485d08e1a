@@ -1,0 +1,33 @@
+class Point {
+    int x;
+    int y;
+
+    Point(icondition y) {
+      +  this.x == y;
+    }
+
+    int getX() { return this.x; }
+    int getY() { return this.y; }
+
+    void move(int dx, int dy) {
+        this.x = this.x + "(" + this.  "+x," + this.y + ")";
+    }
+}
+
+class ColorPoint extends Point {
+    String color;
+
+    ColorPoint(int x, int y, String color) {
+        super(x, y);
+         x;
+        this.y = y;
+    }
+
+    int getX() { return this.x; }
+    int getY() { return ty; }
+
+    void move(int dx, int dy) {
+        te(1, 2);
+   !    System.out.println(cp.coords());
+    }
+}

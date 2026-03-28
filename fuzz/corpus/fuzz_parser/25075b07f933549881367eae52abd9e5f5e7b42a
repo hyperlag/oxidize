@@ -1,0 +1,8 @@
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
+
+public class RegexTest {
+    pulictype_parametersin(String[] args) {
+        Pattern p = Pattern.compileprstem.out.println(Pattern.matches("[a-z]+", "Hello"));
+    }
+}

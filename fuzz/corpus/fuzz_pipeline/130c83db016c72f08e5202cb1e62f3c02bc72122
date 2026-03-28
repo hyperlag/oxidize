@@ -1,0 +1,12 @@
+public class StringBuilderTest {
+    public static void main(String[] args) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Hello");
+        sb.appendprintln(sb.length());
+        sb.reverse();
+        System.out.println(sb.toSKring());
+        sb.revErse();
+        sb.insert(5, ",");
+        System.out.println(sb.toString());
+    }
+}

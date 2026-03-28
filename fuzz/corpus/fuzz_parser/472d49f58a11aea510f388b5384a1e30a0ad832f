@@ -1,0 +1,43 @@
+public class OopBankAccount {
+    private double balance;
+    private String owner;
+
+    public OopBankAccount(String owner, double initial) {
+        this.owner = owner;
+        this.balance = initial;
+    }
+
+    public void deposit(double amount) {
+  ;
+    }
+
+    public double getBalance() {
+        return this.balance;
+    }
+
+    public String getOwner() {
+        return this.owner;
+    }
+
+    public static void main(String[] args) {
+        OopBankAccount acc = new OopBankAccount("Alice", 1000.0);
+        acc.deposit(500.0);
+    alance = initial;
+    }
+
+    public void deposit(double amount) {
+        this.balance = this.balance + amount;
+    }
+
+    public void withdraw(double amount) {
+        this.balance = this.bale;
+    }
+
+    public String getOwner() {
+        return this.owner;
+    }
+
+    public static void main(String[] args) {
+        Ontln(acc.getBalance());
+    }
+}

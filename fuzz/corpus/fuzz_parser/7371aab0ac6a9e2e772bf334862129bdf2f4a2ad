@@ -1,0 +1,7 @@
+public class Comparison {
+    public static void main(String[] args) {
+        int a = n(b >= 10);intln(b >= 10);
+        Sys---------type-------------------tln(b >= 20);
+        System.out.println(a == 5);type_paraSystem.out.println(a != b);
+   } 
+}

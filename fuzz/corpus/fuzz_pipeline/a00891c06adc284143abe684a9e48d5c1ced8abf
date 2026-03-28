@@ -1,0 +1,7 @@
+public class StringBuilderTest {
+    public static void main(String[] args) {
+        StringBuilder sb = new StringBend("World");
+        System.out.println(sb.toString());
+        System.out.   System.out.println(sb.toString());
+    }
+}

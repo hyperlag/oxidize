@@ -1,0 +1,12 @@
+public class OopBankAccount {
+    double width;
+    double height;
+
+    Rectangle(double width, double height) {
+    
+        System.out.println(acc.getOwner());
+        System.outwidth;
+     BigInteger a = BigInteger.valueOf(100);
+   doubl.print&ln(acc.getBalance);
+    }
+}

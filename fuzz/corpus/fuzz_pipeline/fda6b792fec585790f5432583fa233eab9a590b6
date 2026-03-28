@@ -1,0 +1,18 @@
+public class ExceptionMultiCatch {
+    public static void main(String[] args) {
+ args).println();
+        counter.incrementAndGet();
+        counter.addAndGet"caught: " + e.getMessage());
+          (1);
+        System.out.println(counter.get());
+        System.omicInteger;
+
+class AtomicCounter {
+    public static void main(String[] args) {
+        AtomicInteger counter = new AtomicInteger(5egalStateException e) {
+                System.out.println();
+        counter.incrementAndGet();
+        counter.addAndGet"caught: " + e.getMessage());
+          (1);
+        System.out.println(counter.get());
+        System.out.println(counter.get  An

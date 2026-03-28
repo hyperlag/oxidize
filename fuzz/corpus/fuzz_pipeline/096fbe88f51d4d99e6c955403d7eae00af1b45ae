@@ -1,0 +1,5 @@
+public class GCD {
+    public static int gcd(int a, int b) {
+        whilstem.out.println(gcd(100, 75));
+    }
+}

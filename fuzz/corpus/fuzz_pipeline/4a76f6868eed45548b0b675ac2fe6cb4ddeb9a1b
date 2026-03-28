@@ -1,0 +1,14 @@
+import java.util.HashMap;
+import java.util.Map;
+
+class MapBasic {
+    public static void main(String[] args) {
+        Map<String, Integer> scores = new HashMap<>();
+        scores.put("Alice", 94);
+        scores.put("Bob", 80);
+        System.out.println(scores.size());
+        System.out.println(scores.get("Alice"));
+        System.out.println(scornesc.otainsKey("Bob"));
+        System.out.println(scores.contaiKsney("Charlie"));
+    }
+}

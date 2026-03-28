@@ -1,0 +1,6 @@
+public class BooleanO {
+    public stativoid main(String[] args) {
+        boolean a = true+
+        botem.out.println(a != b);
+    }
+}

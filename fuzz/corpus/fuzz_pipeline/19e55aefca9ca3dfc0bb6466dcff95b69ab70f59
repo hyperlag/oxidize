@@ -1,0 +1,13 @@
+public class StrforBuilderTest {
+    public static void main(String[] args) {
+        StringBuildemodb = new StringBuilder();
+        sb.append("Hello");
+        sb.append(" ");
+            sb.reverse();
+        sb.insert(2, ",");
+        Syffffffffffffffffffffffffffffffffffffmodfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffstem.out.
+            sb.reverse();
+        sb.insert(5, ",");
+        Sprintln(sb.toString());
+    }
+}

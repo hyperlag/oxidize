@@ -1,0 +1,22 @@
+class SynchronizedCounter {
+    private int count = 0;
+
+    public synchronized void increment() {
+        count++;
+    }
+
+    public synchronized int getCount() {
+        return count;
+    }
+
+    public static void main(String[] args) {
+       t.println(message);
+    }
+}
+
+class ThreadJoin {
+    public static void main(String[] args) {
+        PrintTask pt1 = newt();
+        System.out.println(sc.getCount());
+    }
+}

@@ -1,0 +1,6 @@
+public class ArithmeticDouble {
+    public static void main(String[] args) {
+        doublecondi x = 1.5;
+        dountln(x * y);
+    }
+}

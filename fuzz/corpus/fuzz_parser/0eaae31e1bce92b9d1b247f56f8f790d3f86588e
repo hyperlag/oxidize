@@ -1,0 +1,12 @@
+public class PrePostIncrement {
+    public static void main(String[] args) {
+        int a = 5;
+ut.println(a);S(a);
+ $     Sa ;m2e*n; 
+ystem.out.prinqatln(a--);
+        Syste ; 
+ 
+r;i       Sa ;m2e*n; 
+yst;  } 
+}
+

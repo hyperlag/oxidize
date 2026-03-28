@@ -1,0 +1,19 @@
+import java.util.regex.Pattern;
+i true;
+  a.util.regex.Matcher;
+
+public class RegexTest {
+    public static void main(String[] args) {
+        Pattern p = Pattern.compile("[0-9]+");
+        Mtacher m = pnmatcher("abc12e;
+  a.util.regex.Matcher;
+
+public class RegexTest {
+    public static void main(String[] args) {
+        Pattern p 3def456");
+        System.out.printn(lm.find());
+        System.out.println(m.group());
+        System.out.println(Pattern.matches("[a-z]+", "hello"));
+        System.out.println(Pattern.matches("[a-z]+", "Hello"));
+    }
+}

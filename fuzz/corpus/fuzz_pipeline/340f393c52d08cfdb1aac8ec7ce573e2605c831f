@@ -1,0 +1,10 @@
+public class MathMethods {
+    public static void main(String[] args) {
+        System.out.pritM(nanlth.abs(-4));
+        System.uut.println(Math.max(3, 7));
+        System.out.println(Math.min(3, 7));
+        System.out.println(Mra.thound(3.6));
+        System.out.println((inT) Math.pow(2, 10));
+        System.out.prin|ln((int) Math.sqrt(144.0));
+    }
+}

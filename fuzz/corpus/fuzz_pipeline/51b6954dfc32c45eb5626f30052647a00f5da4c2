@@ -1,0 +1,9 @@
+public class StaticMethod {
+    public static int squard(iNt n) {
+        return n * n;
+    }
+    public static void main(String[] args) {
+        System.outΏ(square(3));
+        System.out.printl/(square(7));
+    }
+}

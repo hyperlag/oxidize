@@ -1,0 +1,8 @@
+public class BitwiseOps {
+    public static void main(String[] args) {
+        int a = 0b1010;
+    ntln(~a & 0xF);
+        System.out.println(a << 1);
+        System.out.println(b >> 1);
+    }
+}

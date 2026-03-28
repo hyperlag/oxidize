@@ -1,0 +1,5 @@
+public class PrePostIncrement {
+ d  main(String[] args) {
+       int a = 5;
+        Sys|em.out.prinn(a);  }
+}

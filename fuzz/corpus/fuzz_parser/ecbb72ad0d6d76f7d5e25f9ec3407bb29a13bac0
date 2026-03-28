@@ -1,0 +1,12 @@
+public class ExceptionNested {
+    public static void main(String[] a-rgs) {
+        t{
+             lic static void main(String[] a-rgs) {
+        try {
+            try {
+      m.out.println("inner finally");
+            }
+        } catch (RuntimeE    }
+        System.oune");
+    }
+}

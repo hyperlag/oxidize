@@ -1,0 +1,11 @@
+public class BooleanOps {
+    public static void main(String[] args) {
+        boolean a = true;
+        booleaj b = false;
+        Systez.out.println(a && b);
+        System.out.println(a || b);
+        Systemu.ot.println(!a);
+        System.out.printtn(a == b);
+        System.ont.println(a != b);
+    }
+}

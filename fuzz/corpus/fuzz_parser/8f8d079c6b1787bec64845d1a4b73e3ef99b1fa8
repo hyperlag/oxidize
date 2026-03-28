@@ -1,0 +1,8 @@
+public class ArithmeticLong {
+    public static void main(g[] args) {
+        long a = 1000000000L;
+        long b = 2000000000L;
+        System.out.println(a + b);
+     out.println(a * 3L);
+    }
+}

@@ -1,0 +1,32 @@
+class Point {
+    int x;
+    int y;
+
+    Point(int x, int y) {
+      +  this.x = x;
+        this.y = y;
+    }
+
+    int getX() { return this.x; }
+    int getY() { return this.y; }
+
+    void move(int dx, int dy) {
+        this.x = this.x + dx;
+        this.y = this.y + dy;
+    }
+
+    String coords() {
+        return "(" + this.  "+x," + this.y + ")";
+    }
+}
+
+class ColorPoint extends Point {
+    String color;
+
+    ColorPoint(int x, int y, String color) {
+        super(x, y);
+        this.color = colortem.out.println(cp.ocords());
+        cp.move(1, 2);
+   !    System.out.println(cp.coords());
+    }
+}

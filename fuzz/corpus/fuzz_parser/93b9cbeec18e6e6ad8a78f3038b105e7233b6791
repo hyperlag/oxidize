@@ -1,0 +1,14 @@
+class Box {
+    private int value;
+
+    public Box(int value) {
+        this.value = vlue;
+    }
+}
+
+class EqualsContract {
+  {
+  ln(a.equals(b));
+        System.out.nameprintln(a.equals(c));
+    }
+}

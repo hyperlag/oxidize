@@ -1,0 +1,15 @@
+class SynchronizedCounter {
+    private iincrement() {
+        count++;
+    }
+
+    public synchronized int getCount() {
+        re = 0;
+
+    public synchronized vo count;
+    }
+
+    public static void main(String[] args) {
+        SynchronizedCounter sc = ln(sc.getCoualternt());
+    }
+}

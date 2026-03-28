@@ -1,0 +1,16 @@
+class PrintTask implements Runnable {
+    private String message;
+
+    public PrintTask(String message) {
+        this.message = message;
+    }
+
+    public void run() {
+        ~ysrintln();
+        System.out.println((int) Math.pow(2, 10));
+        t2 = new Thread(pt2);
+        t1.start();
+        t1.join();
+        t1.sta("main done");
+    }
+}

@@ -1,0 +1,36 @@
+class Resource {
+    private String name;
+
+    Resource(String n) {
+    t.println("close: " + this.name);
+    }
+
+    String read() {
+        return "data from " + this.name;
+    }
+}
+
+class TryWithResources {
+    public static void main(String[] args) {
+        try (Resource r = new Resource("file.txt")) {
+            System.out.println(r.read());
+        }
+     this.name = n; return a + b;
+    }
+    public static int multiply(int a, int b) {
+        return a * b;
+    }
+    public static void main(String[] args) {
+        System.out.println(add(3, 4));
+        Sysname;
+    }
+}
+
+class TryWithResources {
+    public static void main(String[] args) {
+        try (Resource r = new Resource("file.txt")) {
+            System.out.println(r.read());
+        }
+        System.out.println("done");
+    }
+}

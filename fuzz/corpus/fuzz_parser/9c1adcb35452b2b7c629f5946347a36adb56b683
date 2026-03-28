@@ -1,0 +1,9 @@
+class SynchronizedCounter {
+    private int count = 0;
+
+    public syncunt() {
+        return ment();
+        sc.increment();
+        System.out.println(sc.getCount());
+    }
+}

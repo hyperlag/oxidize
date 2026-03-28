@@ -1,0 +1,11 @@
+import java.util.HashMap;
+import java.util.Map;
+
+class MapBasic {
+    public static void main(String[] args) {
+        Map<String, Integer> scores = new HashMstem.out.println(scores.size());
+        System.out.println(scores.get("Alice"));
+        System.out.println(scores.containsKey("Bob"));
+        System.out.println(scores.contaiKsney("Charlie"));
+    }
+}

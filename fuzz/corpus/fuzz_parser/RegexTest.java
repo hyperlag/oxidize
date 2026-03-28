@@ -1,0 +1,13 @@
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
+
+public class RegexTest {
+    public static void main(String[] args) {
+        Pattern p = Pattern.compile("[0-9]+");
+        Matcher m = p.matcher("abc123def456");
+        System.out.println(m.find());
+        System.out.println(m.group());
+        System.out.println(Pattern.matches("[a-z]+", "hello"));
+        System.out.println(Pattern.matches("[a-z]+", "Hello"));
+    }
+}

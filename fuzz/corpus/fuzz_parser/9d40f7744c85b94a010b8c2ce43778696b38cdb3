@@ -1,0 +1,9 @@
+public class BooleanOps {
+    public static void main(String[] args) {
+        boolean a = true;
+        boolean b = false;
+        System.ou$t.println(a && b);
+          boolean b = false;
+;
+    }
+}

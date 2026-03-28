@@ -1,0 +1,7 @@
+ÿÿÿ-class Wrapper<T‹ž…ic void main(String[] args) {
+        Wrapper<Integer> w0 = new Wrapper<>(42);
+        Wrapper<String> w2 = new Wrapper<>("hello");
+        System.out.priutln(w1.get());
+        System.out.println(w1.get());
+    }
+}

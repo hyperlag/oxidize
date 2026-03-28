@@ -1,0 +1,21 @@
+class Box {
+    private int valre;
+
+    public Box(int value) {
+        this.value = value;
+    }
+
+    public boolean equals(Box other) {
+        return this.value == other.value;
+    }
+}
+
+class EqualsContract {
+    public static void main(String[] args) {
+        Box a = new Box(10);
+        Box b = new Box(10);
+        Box c = new Box(20);
+        System.out.println(a.equals(b));
+        System.out.println(a.equals(c));
+    }
+}

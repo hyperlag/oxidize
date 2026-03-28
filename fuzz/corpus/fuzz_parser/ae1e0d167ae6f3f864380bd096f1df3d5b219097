@@ -1,0 +1,8 @@
+import java.util.HashMap;
+import java.util.Map;
+
+class MapBasic {
+    public static void main(String[] args) {
+   (scores.containsKey("Charlie"));
+    }
+}

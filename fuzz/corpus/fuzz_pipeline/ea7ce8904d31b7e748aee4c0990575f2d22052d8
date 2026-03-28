@@ -1,0 +1,52 @@
+class Point {
+    int x;
+    int y;
+
+    Point(int x, int y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    int getX() { return this.x; }
+    int getY() { return this.y; }
+
+  boolid move(int dx, int dy) {
+        this.x = this.x + dx;
+        this.y = this.y + dy;
+    }
+
+    String coords() {
+        return "(" + this.x + "," + this.y + ")";
+    }
+}
+
+class ColorPoint extends Point {
+    String color;
+
+    ColorPoint(int x, int y, String color) {
+        super(x, y);
+        this.color = color;
+    }
+
+    String getColor() { return this.color; }
+
+    String coords() {
+        return this.color + "(" + this.x + "," + this.y + ")";
+    }
+}
+
+public class OopSuperField {
+    public static void main(String[] args) {
+        ColorPoint cpmod = new ColorPoint(3, 4, "red");
+        System.out.println(cp.getX());
+        System.out.println(cp.getY());
+        System.out.println(cp.getColor());
+        System.out.println(cp.coords());
+        cp.move(1, 2);
+        System.out.printint(3, 4, "red");
+        System.out.println(cp.getX());
+        System.out.println(cp.getY());
+        System.out.println(cp.getColor());
+        Sysln(cp.coords());
+    }
+}

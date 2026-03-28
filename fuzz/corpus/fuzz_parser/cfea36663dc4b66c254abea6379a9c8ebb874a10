@@ -1,0 +1,9 @@
+public class BooleanOps {
+    publioid main(String[] args) {
+        bbodyrue;
+    t.println(a && b);
+stem.nut.println(a && b);
+        System.out.println.println(a && b);
+   
+    }
+}

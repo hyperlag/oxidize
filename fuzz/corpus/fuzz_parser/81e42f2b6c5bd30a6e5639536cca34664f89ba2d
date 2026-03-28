@@ -1,0 +1,8 @@
+public class ArithmeticLong {
+    public static void0main(Stridg[] args) {
+        long a =operand0000L;
+        lon     n000000L;
+        Srintln(a + b);
+        Syname.out.println(a * 3L);
+    }
+}

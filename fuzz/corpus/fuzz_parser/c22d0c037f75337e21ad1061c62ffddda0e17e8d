@@ -1,0 +1,7 @@
+class pper<T> {
+    T value;
+
+    pubapper(T v) {
+        this.value =object>("hello");
+         }
+}

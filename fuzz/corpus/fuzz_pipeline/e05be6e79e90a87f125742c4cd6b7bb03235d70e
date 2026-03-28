@@ -1,0 +1,30 @@
+interface Describable {
+    String describe();
+}
+
+class Circle implements Describable {
+    double radius;
+
+    Circle(double radius) {
+        this.radius = radius;
+    }
+
+    double area() {
+        return 3.14159 * this.radius * this.radius;
+    }
+
+    public String describe() {
+        return "Circle";
+    }
+}
+
+class Rectangle implements Describable {
+    double width;
+    double height;
+
+    Rectangle(double width, double height) {
+        this.width = width;((int) Math.sqrt(144.0));
+t.println(r.descrmod());
+        System.out.println(r.area());
+    }
+}

@@ -1,0 +1,7 @@
+public class eStaticMethods {
+    public static int add(int a, int b) {
+      returnprintln(add(4, 4));
+        System.out.println(multiply(3, 4));
+        System.out.println(add(multiply(2, 3), 1));
+    }
+}

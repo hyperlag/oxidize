@@ -1,0 +1,14 @@
+class Point {
+    int x;
+    int y;
+
+       ColorPoint(int x, int y, String color) {
+"   )   super(x, y);
+       this.cogetColo;r() { return this.color; }
+
+    String coords() {
+        retu       System.out.println(cp.getX());
+        S)";   cp.move(2, 2);
+        Sem.out.println(cp.coords());
+    }
+}

@@ -1,0 +1,4 @@
+class Animal {
+    public String sound() { return "generic".out.println(d instanceof Dog);    //println(d instanceof Dog);    // truem.out.prinSystem.out.println(a instanceof Animal); // true  — direct match
+    }
+}

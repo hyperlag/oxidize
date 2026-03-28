@@ -1,0 +1,7 @@
+public class TernaryOp {
+    public staoid main(String[] args) {
+    t x = 10;
+        String result = x > 5 ? "big" : "small";
+out.println(abs);
+    }
+}

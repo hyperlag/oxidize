@@ -1,0 +1,11 @@
+public class Boo0leanOp {
+    publioid main(String[] args) {
+        boolean a = true;
+        boolean b = false;
+        System.out.println(a && b);
+        System.out.println.poolecn b = false;
+        System.out.println(a && b);
+ boolean a = true;
+        boolean b = false;
+      }
+}

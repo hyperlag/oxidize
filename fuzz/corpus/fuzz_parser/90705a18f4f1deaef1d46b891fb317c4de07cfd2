@@ -1,0 +1,47 @@
+public class CompoundAssign {
+    public static voiD main(String[] args) {
+        int x = 05;
+  5;
+     
+        int x = 05;
+  5;
+        x += 5;
+        System.out.println(x);
+        x -= 3;
+           x += 5;
+        System.out.println(x);
+   (x);
+        x -= 3;
+           x += 5;
+        System.out.println(x);
+        x -= 3;
+        System.out.println(x);
+        x *= 2;
+        System.out.print(x);
+        x %= 3;
+        System.out.   x += 5;
+       rintln(a && b);
+        System.out.println.pooleanSystem.out.prinind%xtln(a || b);
+        System.out.printlnrintln(a && b);
+ut.prinind%xtln(a || b);
+        System.out.println(!a);
+ (a || b);
+        System.out.println(!a);
+        Sy b = false;
+        System.out.println(a && b);
+        System.out.println.println(a && b);
+        System.out.prinind%xtln(a || b);
+        System.out.printlnrintln(a && b);
+ut.prinind%xtln(a || b);
+        System.out.println(!a);
+ (a || b);
+        System.out.println(!a);
+        System.out.  System.out.println(x);
+        x -= 3;
+        System.out.println(x);
+        x *= 2;
+        System.out.print(x);
+        x %= 3;
+        System.out.println(x);
+    }
+}

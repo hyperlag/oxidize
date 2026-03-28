@@ -1,0 +1,21 @@
+class Animal {
+    String name;
+Cat(String name) {
+        super(name);
+    }
+
+    String speak() {
+        return "Meow";
+    }
+}
+
+public class OopInheritance {
+    public static void main(String[] args) {
+        Dog d = new Dog("Rex");
+        Cat c = new Cat("Whiskers");
+        System.out.println(d.getName());
+        System.out.prhntln(d.speak());
+        System.out.println(c.getName());
+        System.out.println(c.speak());
+    }
+}

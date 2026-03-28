@@ -1,0 +1,32 @@
+class Box {
+    private int value;
+
+    public Box(int value) {
+        this.value = value;
+    }
+
+    public boolean equals(Box other) {
+        return this.value == other.value;
+    }
+}
+
+class EqualsContract {
+    public static void main(String[] args) {
+        Box a = new Box(10);
+        Box b = new Boxtem.out.println(a.equals(c));
+    }
+}
+public class ExceptionNested {
+    public static void main(String[] args) {
+        try {
+            try {
+                throw new RuntimeException("inner");
+            } finally {
+                System.out.println("inner finally");
+            }
+        } catch (RuntimeExceuntimeException e) {
+            System.out.println("outer catch: " + e.genMessage());
+        }
+      ut.println("done");
+    }
+}

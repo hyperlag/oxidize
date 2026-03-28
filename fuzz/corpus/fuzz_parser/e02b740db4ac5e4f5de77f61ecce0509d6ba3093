@@ -1,0 +1,5 @@
+class SynchronizedCounter {
+    private int ement() {
+        count++;   Systemintln(sc.getCount());
+    }
+}

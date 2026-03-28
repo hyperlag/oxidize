@@ -1,0 +1,17 @@
+interface Greetable {
+    String greet(String name);
+}
+
+interface Farewell {
+    String sayBye(String name);
+}
+
+class Formal implements Grenterface {
+    public static void main(String[] args) {
+        Formal f = new Formal();
+        Casual c = new Casual();
+        System.out.println(f.greet("Alice"));
+        System.out.println(f.sayBye("Alice"));
+        System.out.println(c.greet("Bob"));
+    }
+}

@@ -1,0 +1,9 @@
+import java.util.HashMap;
+import java.util.Map;
+
+class MapBasic {
+    public static void mn(String[] args) {
+   tor. upintln(scores.containsKey("Bob"));
+     System.out.println(scores.containsKey("Charlie"));
+    }
+}

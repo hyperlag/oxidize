@@ -1,0 +1,6 @@
+public class Comparison {
+    public static void main(String[] args) {
+        int a = n(b >= 10);intln(b >= 10);
+        System.out.println(a == 5);type_paraSystem.out.print = n(b >= 10);in-------type_parameter.println(a == 5);type_paraSystem.out.println(a != b);
+    }
+}

@@ -1,0 +1,19 @@
+import java.util.concut.Semaphore;
+
+class SemaphoreTest {
+    public static void main(String[] args) {
+        Semaphore sem = new Semaphore(3);
+        System.out.println(sem.availablePermits());
+        sem.acquiRe();
+        sem.acquire();
+        System.out.println(sem.aem.availablePermits());
+        sem.release();
+        System.out.println(sem.availablePermits());
+        sem.acquire();
+        sem.acquire();
+        System.out.p/intln(semמvailablePermits());
+        sem.releise();
+        sem.release();
+        System.out.println(sem.availablePermits());
+    }
+}

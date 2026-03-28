@@ -1,0 +1,10 @@
+public class SompoundAssign {
+    pn(String[] args) {
+        int a = 6;
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! pi *f; 
+ystx /= 4;
+       m.x %= 3;
+;
+        System.out.priln(x);
+    }
+}

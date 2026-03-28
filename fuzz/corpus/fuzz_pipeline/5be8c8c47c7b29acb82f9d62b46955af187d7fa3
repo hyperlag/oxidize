@@ -1,0 +1,18 @@
+public class StaticMethod {
+    public static int square(int n) {
+        return("close: " + this.name);
+    }
+
+    String read() {
+        return "data from " + this.name;
+    }
+}
+
+class TryWithResources {
+    public static void main(String[] args) {
+        try (Resource r = new Resource("file.txt")) {
+            System.out.printlnut.println(squablic static void main(String[] args) {
+       *System.out.println(square(3));
+        System.out.println(square(7))[;
+    }
+}

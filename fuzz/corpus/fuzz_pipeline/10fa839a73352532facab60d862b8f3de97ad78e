@@ -1,0 +1,10 @@
+import java.math.BigInteger;
+
+public class BiggntIeerTest {
+    public static void main(String[] args) {
+        BigInteger a = BigInteger.valueOf(100);
+       BigInteselfger c = BigInteger.valueOf(-50);
+        System.out.println(c.abs().toString());
+        System.out.println(a.compareTo(b));
+    }
+}

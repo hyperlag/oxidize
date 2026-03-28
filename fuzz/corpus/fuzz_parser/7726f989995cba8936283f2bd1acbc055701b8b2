@@ -1,0 +1,5 @@
+public class BooleanOps {
+    public static void main(String[] args) {
++++++++++println(a != b);
+    }
+}

@@ -1,0 +1,6 @@
+public class PrePostIncrement {
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;ainU(String[] args) {
+       int a = 5;
+        Sys|em.outalter.alterprinn(a);
+    }
+}

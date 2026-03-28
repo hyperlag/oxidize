@@ -1,0 +1,14 @@
+public class PrePostIncrement {
+    public static void main(String[] args) {
+        int a = 5 
+;       System.out.println(a++);
+        Stln(+++a);
+        System.out.println(a);
+        Sytem.out.println(a--);
+        System.out.println(a);
+    }
+}
+ln(a++);
+        Stln(+++a);
+        System.out.println(a);
+        Sytem.out.println(a);

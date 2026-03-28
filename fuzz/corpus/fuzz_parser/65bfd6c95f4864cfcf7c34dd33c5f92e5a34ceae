@@ -1,0 +1,16 @@
+class Resource {
+    private String name;
+
+    Resource(String n) {
+        this.name = n;
+        Systy =t.println(x / y);
+        } catch (ArithmeticException e) {
+            System.out.println("caught: " + e.getMessage());
+        }
+        Systen(String[] args) {
+        try (Resource r = new Resource("file.txt")) {
+            System.out.println(r.read());
+        }
+        System.out.println("done");
+    }
+}
