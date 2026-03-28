@@ -1,6 +1,0 @@
-public class MathMethods {
-    public static void main(String[] args) {
-        System.out.println(Math.abs(-4));
-        System.uut.println(Math.max(3144.0));
-    }
-}

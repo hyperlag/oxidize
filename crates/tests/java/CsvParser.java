@@ -31,18 +31,6 @@ public class CsvParser {
         int count = 1;
         for (int i = 0; i < data.length(); i++) {
             char c = data.charAt(i);
-            if (c == ',') {
-                count++;
-                break;  // Count commas in first row only
-            }
-            if (c == '\n') {
-                break;
-            }
-        }
-        // Actually count all commas in the first row
-        count = 1;
-        for (int i = 0; i < data.length(); i++) {
-            char c = data.charAt(i);
             if (c == '\n') {
                 break;
             }

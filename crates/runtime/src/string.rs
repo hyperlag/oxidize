@@ -58,19 +58,35 @@ impl JString {
     }
 
     /// Java `String.substring(int beginIndex, int endIndex)`.
+    ///
+    /// Indices are Unicode scalar values (not UTF-16 code units). Panics with
+    /// `StringIndexOutOfBoundsException` if `begin < 0`, `end < begin`, or
+    /// `end` exceeds the character count.
     pub fn substring_range(&self, begin: i32, end: i32) -> JString {
+        assert!(begin >= 0 && end >= begin, "StringIndexOutOfBoundsException");
+        let len = end
+            .checked_sub(begin)
+            .expect("StringIndexOutOfBoundsException") as usize;
         let s: String = self
             .0
             .chars()
             .skip(begin as usize)
-            .take((end - begin) as usize)
+            .take(len)
             .collect();
+        assert_eq!(
+            s.chars().count(),
+            len,
+            "StringIndexOutOfBoundsException"
+        );
         JString(Arc::from(s.as_str()))
     }
 
     /// Java `String.trim()`.
+    ///
+    /// Removes only characters with code point `<= '\u0020'`, matching
+    /// Java's `String.trim()` semantics (not Rust's Unicode-aware `trim()`).
     pub fn trim(&self) -> JString {
-        JString::from(self.0.trim())
+        JString::from(self.0.trim_matches(|c: char| c <= ' '))
     }
 
     /// Java `String.contains(CharSequence s)`.

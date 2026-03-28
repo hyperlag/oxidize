@@ -40,9 +40,14 @@ public class JsonParser {
 
     private void expect(char expected) {
         skipWhitespace();
+        if (pos >= input.length()) {
+            throw new RuntimeException(
+                "ERROR at position " + pos + ": expected '" + expected + "' but reached end of input");
+        }
         char c = advance();
         if (c != expected) {
-            System.out.println("ERROR: expected '" + expected + "' but got '" + c + "'");
+            throw new RuntimeException(
+                "ERROR at position " + (pos - 1) + ": expected '" + expected + "' but got '" + c + "'");
         }
     }
 

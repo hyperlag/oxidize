@@ -33,3 +33,6 @@ run_tests*.sh
 
 # OS
 Thumbs.db
+
+# Fuzzing crash artifacts (generated continuously; only curated corpus kept)
+fuzz/artifacts/
