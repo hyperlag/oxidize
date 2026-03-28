@@ -68,12 +68,7 @@ impl JString {
             "StringIndexOutOfBoundsException: begin={begin}, end={end}"
         );
         let len = (end - begin) as usize;
-        let s: String = self
-            .0
-            .chars()
-            .skip(begin as usize)
-            .take(len)
-            .collect();
+        let s: String = self.0.chars().skip(begin as usize).take(len).collect();
         assert_eq!(
             s.chars().count(),
             len,
