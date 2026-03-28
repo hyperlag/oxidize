@@ -63,10 +63,11 @@ impl JString {
     /// `StringIndexOutOfBoundsException` if `begin < 0`, `end < begin`, or
     /// `end` exceeds the character count.
     pub fn substring_range(&self, begin: i32, end: i32) -> JString {
-        assert!(begin >= 0 && end >= begin, "StringIndexOutOfBoundsException");
-        let len = end
-            .checked_sub(begin)
-            .expect("StringIndexOutOfBoundsException") as usize;
+        assert!(
+            begin >= 0 && end >= begin,
+            "StringIndexOutOfBoundsException: begin={begin}, end={end}"
+        );
+        let len = (end - begin) as usize;
         let s: String = self
             .0
             .chars()
@@ -76,7 +77,7 @@ impl JString {
         assert_eq!(
             s.chars().count(),
             len,
-            "StringIndexOutOfBoundsException"
+            "StringIndexOutOfBoundsException: end index {end} exceeds string length"
         );
         JString(Arc::from(s.as_str()))
     }
