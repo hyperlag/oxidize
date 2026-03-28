@@ -10,6 +10,9 @@ use std::sync::{
 
 // ─── AtomicInteger ───────────────────────────────────────────────────────────
 
+/// Thread-safe atomic integer.
+///
+/// Mapping: `java.util.concurrent.atomic.AtomicInteger` → `JAtomicInteger`.
 #[derive(Debug, Clone, Default)]
 pub struct JAtomicInteger(Arc<AtomicI32>);
 
@@ -70,6 +73,9 @@ impl std::fmt::Display for JAtomicInteger {
 
 // ─── AtomicLong ──────────────────────────────────────────────────────────────
 
+/// Thread-safe atomic long.
+///
+/// Mapping: `java.util.concurrent.atomic.AtomicLong` → `JAtomicLong`.
 #[derive(Debug, Clone, Default)]
 pub struct JAtomicLong(Arc<AtomicI64>);
 
@@ -130,6 +136,9 @@ impl std::fmt::Display for JAtomicLong {
 
 // ─── AtomicBoolean ───────────────────────────────────────────────────────────
 
+/// Thread-safe atomic boolean.
+///
+/// Mapping: `java.util.concurrent.atomic.AtomicBoolean` → `JAtomicBoolean`.
 #[derive(Debug, Clone, Default)]
 pub struct JAtomicBoolean(Arc<AtomicBool>);
 
