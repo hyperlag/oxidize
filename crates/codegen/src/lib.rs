@@ -1411,23 +1411,23 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 return Ok(quote! { (#l + #r) });
             }
             // Char arithmetic: Java allows char ± char and char ± int → int.
-            if lhs.ty() == &IrType::Char || rhs.ty() == &IrType::Char {
-                if matches!(op, BinOp::Sub | BinOp::Add) {
-                    let l_cast = if lhs.ty() == &IrType::Char {
-                        quote! { (#l as i32) }
-                    } else {
-                        l.clone()
-                    };
-                    let r_cast = if rhs.ty() == &IrType::Char {
-                        quote! { (#r as i32) }
-                    } else {
-                        r.clone()
-                    };
-                    let op_ts = emit_binop(op);
-                    return Ok(quote! { (#l_cast #op_ts #r_cast) });
-                }
-                // Char comparison — keep as-is (Rust supports char == char).
+            if (lhs.ty() == &IrType::Char || rhs.ty() == &IrType::Char)
+                && matches!(op, BinOp::Sub | BinOp::Add)
+            {
+                let l_cast = if lhs.ty() == &IrType::Char {
+                    quote! { (#l as i32) }
+                } else {
+                    l.clone()
+                };
+                let r_cast = if rhs.ty() == &IrType::Char {
+                    quote! { (#r as i32) }
+                } else {
+                    r.clone()
+                };
+                let op_ts = emit_binop(op);
+                return Ok(quote! { (#l_cast #op_ts #r_cast) });
             }
+            // Char comparison — keep as-is (Rust supports char == char).
             let op_ts = emit_binop(op);
             Ok(quote! { (#l #op_ts #r) })
         }
@@ -1874,7 +1874,9 @@ mod tests {
     fn generate_hello_world() {
         let mut module = IrModule::new("");
         let print = sysout_println(IrExpr::LitString("Hello".into()));
-        module.decls.push(IrDecl::Class(make_class("Hello", vec![print])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("Hello", vec![print])));
         let code = gen(&module);
         assert!(code.contains("println!"), "should contain println macro");
         assert!(code.contains("Hello"), "should contain the string literal");
@@ -1893,7 +1895,9 @@ mod tests {
             ty: IrType::Int,
         };
         let stmt = sysout_println(expr);
-        module.decls.push(IrDecl::Class(make_class("Arith", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("Arith", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains('+'), "should contain addition");
     }
@@ -1902,8 +1906,12 @@ mod tests {
     fn generate_comparison_ops() {
         let mut module = IrModule::new("");
         let ops = vec![
-            IrBinOp::Lt, IrBinOp::Le, IrBinOp::Gt, IrBinOp::Ge,
-            IrBinOp::Eq, IrBinOp::Ne,
+            IrBinOp::Lt,
+            IrBinOp::Le,
+            IrBinOp::Gt,
+            IrBinOp::Ge,
+            IrBinOp::Eq,
+            IrBinOp::Ne,
         ];
         let mut stmts = Vec::new();
         for op in ops {
@@ -1941,7 +1949,7 @@ mod tests {
         };
         let stmts: Vec<IrStmt> = vec![neg, not, bitnot]
             .into_iter()
-            .map(|e| sysout_println(e))
+            .map(sysout_println)
             .collect();
         module.decls.push(IrDecl::Class(make_class("Unary", stmts)));
         let code = gen(&module);
@@ -1959,7 +1967,9 @@ mod tests {
             ty: IrType::Int,
         };
         let stmt = sysout_println(ternary);
-        module.decls.push(IrDecl::Class(make_class("Tern", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("Tern", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("if"), "ternary should use if expression");
     }
@@ -1974,11 +1984,16 @@ mod tests {
             ty: IrType::String,
         };
         let stmt = sysout_println(concat);
-        module.decls.push(IrDecl::Class(make_class("Cat", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("Cat", vec![stmt])));
         let code = gen(&module);
         // Concat produces JString::from(format!(...)) or similar
-        assert!(code.contains("JString::from") || code.contains("format!"),
-            "string concat should use JString::from or format!, got: {}", code);
+        assert!(
+            code.contains("JString::from") || code.contains("format!"),
+            "string concat should use JString::from or format!, got: {}",
+            code
+        );
     }
 
     #[test]
@@ -1989,7 +2004,9 @@ mod tests {
             expr: Box::new(IrExpr::LitInt(42)),
         };
         let stmt = sysout_println(cast);
-        module.decls.push(IrDecl::Class(make_class("CastTest", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("CastTest", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("as f64"), "should contain cast to f64");
     }
@@ -2007,10 +2024,7 @@ mod tests {
             IrExpr::LitString("test".into()),
             IrExpr::LitNull,
         ];
-        let stmts: Vec<IrStmt> = lits
-            .into_iter()
-            .map(|e| sysout_println(e))
-            .collect();
+        let stmts: Vec<IrStmt> = lits.into_iter().map(sysout_println).collect();
         module.decls.push(IrDecl::Class(make_class("Lits", stmts)));
         let code = gen(&module);
         assert!(code.contains("true"), "should contain bool literal");
@@ -2028,7 +2042,9 @@ mod tests {
             then_: vec![IrStmt::Return(None)],
             else_: Some(vec![IrStmt::Return(None)]),
         };
-        module.decls.push(IrDecl::Class(make_class("IfElse", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("IfElse", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("if"), "should contain if");
         assert!(code.contains("else"), "should contain else");
@@ -2041,7 +2057,9 @@ mod tests {
             cond: IrExpr::LitBool(false),
             body: vec![IrStmt::Break(None)],
         };
-        module.decls.push(IrDecl::Class(make_class("WhileLoop", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("WhileLoop", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("while"), "should contain while");
         assert!(code.contains("break"), "should contain break");
@@ -2054,7 +2072,9 @@ mod tests {
             body: vec![IrStmt::Continue(None)],
             cond: IrExpr::LitBool(false),
         };
-        module.decls.push(IrDecl::Class(make_class("DoWhile", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("DoWhile", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("loop"), "do-while should use loop");
     }
@@ -2087,7 +2107,9 @@ mod tests {
             }],
             body: vec![],
         };
-        module.decls.push(IrDecl::Class(make_class("ForLoop", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ForLoop", vec![stmt])));
         gen(&module); // just verify it doesn't fail
     }
 
@@ -2308,7 +2330,10 @@ mod tests {
         }];
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
-        assert!(code.contains("&mut self"), "instance method should have self");
+        assert!(
+            code.contains("&mut self"),
+            "instance method should have self"
+        );
     }
 
     #[test]
@@ -2375,7 +2400,10 @@ mod tests {
             .decls
             .push(IrDecl::Class(make_class("ListTest", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("JList::new()"), "ArrayList should become JList");
+        assert!(
+            code.contains("JList::new()"),
+            "ArrayList should become JList"
+        );
     }
 
     #[test]
@@ -2447,9 +2475,10 @@ mod tests {
             rhs: Box::new(IrExpr::LitInt(5)),
             ty: IrType::Int,
         });
-        module
-            .decls
-            .push(IrDecl::Class(make_class("CompAssign", vec![init, add_assign])));
+        module.decls.push(IrDecl::Class(make_class(
+            "CompAssign",
+            vec![init, add_assign],
+        )));
         let code = gen(&module);
         assert!(code.contains("+="), "should contain +=");
     }
@@ -2476,9 +2505,7 @@ mod tests {
                 init: None,
             })
             .collect();
-        module
-            .decls
-            .push(IrDecl::Class(make_class("Types", stmts)));
+        module.decls.push(IrDecl::Class(make_class("Types", stmts)));
         let code = gen(&module);
         assert!(code.contains("i32"), "should contain i32");
         assert!(code.contains("i64"), "should contain i64");
@@ -2535,9 +2562,10 @@ mod tests {
             then_: vec![],
             else_: None,
         };
-        module
-            .decls
-            .push(IrDecl::Class(make_class("InstanceOfTest", vec![init, check])));
+        module.decls.push(IrDecl::Class(make_class(
+            "InstanceOfTest",
+            vec![init, check],
+        )));
         let code = gen(&module);
         assert!(
             code.contains("_instanceof"),
@@ -2634,9 +2662,10 @@ mod tests {
             index: Box::new(IrExpr::LitInt(0)),
             ty: IrType::Int,
         });
-        module
-            .decls
-            .push(IrDecl::Class(make_class("ArrAccess", vec![arr_init, access])));
+        module.decls.push(IrDecl::Class(make_class(
+            "ArrAccess",
+            vec![arr_init, access],
+        )));
         let code = gen(&module);
         assert!(code.contains("get("), "array access should use get()");
     }
@@ -2746,12 +2775,16 @@ mod tests {
             init: Some(IrExpr::LitString("b".into())),
         };
         let stmt = IrStmt::Expr(call);
-        module
-            .decls
-            .push(IrDecl::Class(make_class("StrEquals", vec![init1, init2, stmt])));
+        module.decls.push(IrDecl::Class(make_class(
+            "StrEquals",
+            vec![init1, init2, stmt],
+        )));
         let code = gen(&module);
-        assert!(code.contains(".equals(& ") || code.contains(".equals(&"),
-            "String equals should add &, got: {}", code);
+        assert!(
+            code.contains(".equals(& ") || code.contains(".equals(&"),
+            "String equals should add &, got: {}",
+            code
+        );
     }
 
     #[test]
@@ -2780,9 +2813,10 @@ mod tests {
             init: None,
         };
         let stmt = IrStmt::Expr(call);
-        module
-            .decls
-            .push(IrDecl::Class(make_class("BoxEquals", vec![init1, init2, stmt])));
+        module.decls.push(IrDecl::Class(make_class(
+            "BoxEquals",
+            vec![init1, init2, stmt],
+        )));
         let code = gen(&module);
         assert!(
             !code.contains("equals(& "),
@@ -2894,7 +2928,10 @@ mod tests {
         module.decls.push(IrDecl::Class(parent));
         module.decls.push(IrDecl::Class(child));
         let code = gen(&module);
-        assert!(code.contains("_super: Animal"), "child should have parent field");
+        assert!(
+            code.contains("_super: Animal"),
+            "child should have parent field"
+        );
     }
 
     #[test]
@@ -2922,8 +2959,10 @@ mod tests {
         };
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
-        assert!(code.contains("Container<T>") || code.contains("Container < T >"),
-            "should have generic parameter");
+        assert!(
+            code.contains("Container<T>") || code.contains("Container < T >"),
+            "should have generic parameter"
+        );
     }
 
     #[test]
@@ -2993,7 +3032,10 @@ mod tests {
         };
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
-        assert!(code.contains("impl Greetable for Hello"), "should implement trait");
+        assert!(
+            code.contains("impl Greetable for Hello"),
+            "should implement trait"
+        );
     }
 
     // ── Math static methods ───────────────────────────────────────────────
@@ -3011,7 +3053,9 @@ mod tests {
             ty: IrType::Int,
         };
         let stmt = sysout_println(call);
-        module.decls.push(IrDecl::Class(make_class("MathAbs", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("MathAbs", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains(".abs()"), "should contain abs()");
     }
@@ -3038,7 +3082,9 @@ mod tests {
             ty: IrType::Int,
         };
         let stmts = vec![sysout_println(max_call), sysout_println(min_call)];
-        module.decls.push(IrDecl::Class(make_class("MathMaxMin", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("MathMaxMin", stmts)));
         let code = gen(&module);
         assert!(code.contains("__a"), "should contain max/min helper vars");
     }
@@ -3065,7 +3111,9 @@ mod tests {
             ty: IrType::Double,
         };
         let stmts = vec![sysout_println(pow), sysout_println(sqrt)];
-        module.decls.push(IrDecl::Class(make_class("MathPowSqrt", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("MathPowSqrt", stmts)));
         let code = gen(&module);
         assert!(code.contains("powf"), "should contain powf");
         assert!(code.contains("sqrt"), "should contain sqrt");
@@ -3075,18 +3123,23 @@ mod tests {
     fn generate_math_floor_ceil_round() {
         let mut module = IrModule::new("");
         let methods = vec!["floor", "ceil", "round"];
-        let stmts: Vec<IrStmt> = methods.into_iter().map(|m| {
-            sysout_println(IrExpr::MethodCall {
-                receiver: Some(Box::new(IrExpr::Var {
-                    name: "Math".into(),
-                    ty: IrType::Class("Math".into()),
-                })),
-                method_name: m.into(),
-                args: vec![IrExpr::LitDouble(1.5)],
-                ty: IrType::Double,
+        let stmts: Vec<IrStmt> = methods
+            .into_iter()
+            .map(|m| {
+                sysout_println(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "Math".into(),
+                        ty: IrType::Class("Math".into()),
+                    })),
+                    method_name: m.into(),
+                    args: vec![IrExpr::LitDouble(1.5)],
+                    ty: IrType::Double,
+                })
             })
-        }).collect();
-        module.decls.push(IrDecl::Class(make_class("MathRound", stmts)));
+            .collect();
+        module
+            .decls
+            .push(IrDecl::Class(make_class("MathRound", stmts)));
         let code = gen(&module);
         assert!(code.contains("floor"), "should contain floor");
         assert!(code.contains("ceil"), "should contain ceil");
@@ -3097,18 +3150,23 @@ mod tests {
     fn generate_math_trig() {
         let mut module = IrModule::new("");
         let methods = vec!["sin", "cos", "tan", "log", "exp"];
-        let stmts: Vec<IrStmt> = methods.into_iter().map(|m| {
-            sysout_println(IrExpr::MethodCall {
-                receiver: Some(Box::new(IrExpr::Var {
-                    name: "Math".into(),
-                    ty: IrType::Class("Math".into()),
-                })),
-                method_name: m.into(),
-                args: vec![IrExpr::LitDouble(1.0)],
-                ty: IrType::Double,
+        let stmts: Vec<IrStmt> = methods
+            .into_iter()
+            .map(|m| {
+                sysout_println(IrExpr::MethodCall {
+                    receiver: Some(Box::new(IrExpr::Var {
+                        name: "Math".into(),
+                        ty: IrType::Class("Math".into()),
+                    })),
+                    method_name: m.into(),
+                    args: vec![IrExpr::LitDouble(1.0)],
+                    ty: IrType::Double,
+                })
             })
-        }).collect();
-        module.decls.push(IrDecl::Class(make_class("MathTrig", stmts)));
+            .collect();
+        module
+            .decls
+            .push(IrDecl::Class(make_class("MathTrig", stmts)));
         let code = gen(&module);
         assert!(code.contains("sin"), "should contain sin");
         assert!(code.contains("cos"), "should contain cos");
@@ -3127,7 +3185,9 @@ mod tests {
             ty: IrType::Double,
         };
         let stmt = sysout_println(call);
-        module.decls.push(IrDecl::Class(make_class("MathRandom", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("MathRandom", vec![stmt])));
         gen(&module);
     }
 
@@ -3146,9 +3206,15 @@ mod tests {
             ty: IrType::Int,
         };
         let stmt = sysout_println(call);
-        module.decls.push(IrDecl::Class(make_class("ParseInt", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ParseInt", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("parse::"), "should contain parse::, got: {}", code);
+        assert!(
+            code.contains("parse::"),
+            "should contain parse::, got: {}",
+            code
+        );
     }
 
     #[test]
@@ -3164,10 +3230,14 @@ mod tests {
             ty: IrType::String,
         };
         let stmt = sysout_println(call);
-        module.decls.push(IrDecl::Class(make_class("StrValueOf", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("StrValueOf", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("JString::from") || code.contains("to_string"),
-            "should convert to string");
+        assert!(
+            code.contains("JString::from") || code.contains("to_string"),
+            "should convert to string"
+        );
     }
 
     // ── Synchronized method ───────────────────────────────────────────────
@@ -3212,8 +3282,10 @@ mod tests {
         });
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
-        assert!(code.contains("Mutex") || code.contains("OnceLock"),
-            "synchronized should use Mutex/OnceLock");
+        assert!(
+            code.contains("Mutex") || code.contains("OnceLock"),
+            "synchronized should use Mutex/OnceLock"
+        );
     }
 
     // ── toString → Display impl ───────────────────────────────────────────
@@ -3232,13 +3304,18 @@ mod tests {
             type_params: vec![],
             params: vec![],
             return_ty: IrType::String,
-            body: Some(vec![IrStmt::Return(Some(IrExpr::LitString("Point".into())))]),
+            body: Some(vec![IrStmt::Return(Some(IrExpr::LitString(
+                "Point".into(),
+            )))]),
             throws: vec![],
         }];
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
-        assert!(code.contains("impl") && code.contains("Display"),
-            "toString should generate Display impl, got: {}", code);
+        assert!(
+            code.contains("impl") && code.contains("Display"),
+            "toString should generate Display impl, got: {}",
+            code
+        );
     }
 
     // ── Volatile (atomic) field ───────────────────────────────────────────
@@ -3258,8 +3335,10 @@ mod tests {
         });
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
-        assert!(code.contains("AtomicI32") || code.contains("Atomic"),
-            "volatile int should use AtomicI32");
+        assert!(
+            code.contains("AtomicI32") || code.contains("Atomic"),
+            "volatile int should use AtomicI32"
+        );
     }
 
     // ── Collectors.toList ─────────────────────────────────────────────────
@@ -3287,7 +3366,9 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("Collections", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("Collections", stmts)));
         let code = gen(&module);
         assert!(code.contains("JSet::new()"), "HashSet should become JSet");
         assert!(code.contains("JMap::new()"), "TreeMap should become JMap");
@@ -3305,10 +3386,14 @@ mod tests {
             },
             body: vec![IrStmt::Expr(IrExpr::LitInt(1))],
         };
-        module.decls.push(IrDecl::Class(make_class("SyncBlock", vec![sync])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("SyncBlock", vec![sync])));
         let code = gen(&module);
-        assert!(code.contains("__sync_block_monitor") || code.contains("lock"),
-            "synchronized block should acquire lock");
+        assert!(
+            code.contains("__sync_block_monitor") || code.contains("lock"),
+            "synchronized block should acquire lock"
+        );
     }
 
     // ── Super constructor call ────────────────────────────────────────────
@@ -3425,7 +3510,9 @@ mod tests {
             }],
             finally: None,
         };
-        module.decls.push(IrDecl::Class(make_class("MultiCatch", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("MultiCatch", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("catch_unwind"), "should use catch_unwind");
     }
@@ -3448,7 +3535,9 @@ mod tests {
             args: vec![IrExpr::LitString("error".into())],
             ty: IrType::Void,
         });
-        module.decls.push(IrDecl::Class(make_class("StdErr", vec![print])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("StdErr", vec![print])));
         let code = gen(&module);
         assert!(code.contains("eprintln!"), "should use eprintln!");
     }
@@ -3468,10 +3557,15 @@ mod tests {
             ty: IrType::Void,
         };
         let stmt = IrStmt::Expr(call);
-        module.decls.push(IrDecl::Class(make_class("SleepTest", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("SleepTest", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("JThread::sleep") || code.contains("thread::sleep"),
-            "should use JThread::sleep, got: {}", code);
+        assert!(
+            code.contains("JThread::sleep") || code.contains("thread::sleep"),
+            "should use JThread::sleep, got: {}",
+            code
+        );
     }
 
     // ── For loop with continue → labeled blocks ──────────────────────────
@@ -3487,21 +3581,31 @@ mod tests {
             })),
             cond: Some(IrExpr::BinOp {
                 op: IrBinOp::Lt,
-                lhs: Box::new(IrExpr::Var { name: "i".into(), ty: IrType::Int }),
+                lhs: Box::new(IrExpr::Var {
+                    name: "i".into(),
+                    ty: IrType::Int,
+                }),
                 rhs: Box::new(IrExpr::LitInt(10)),
                 ty: IrType::Bool,
             }),
             update: vec![IrExpr::UnOp {
                 op: IrUnOp::PreInc,
-                operand: Box::new(IrExpr::Var { name: "i".into(), ty: IrType::Int }),
+                operand: Box::new(IrExpr::Var {
+                    name: "i".into(),
+                    ty: IrType::Int,
+                }),
                 ty: IrType::Int,
             }],
             body: vec![IrStmt::Continue(None)],
         }];
-        module.decls.push(IrDecl::Class(make_class("ForContinue", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ForContinue", stmts)));
         let code = gen(&module);
-        assert!(code.contains("for_body") || code.contains("for_loop") || code.contains("loop"),
-            "should use labeled loops for continue");
+        assert!(
+            code.contains("for_body") || code.contains("for_loop") || code.contains("loop"),
+            "should use labeled loops for continue"
+        );
     }
 
     // ── String method receiver dispatch ──────────────────────────────────
@@ -3510,13 +3614,18 @@ mod tests {
     fn generate_string_length() {
         let mut module = IrModule::new("");
         let call = IrExpr::MethodCall {
-            receiver: Some(Box::new(IrExpr::Var { name: "s".into(), ty: IrType::String })),
+            receiver: Some(Box::new(IrExpr::Var {
+                name: "s".into(),
+                ty: IrType::String,
+            })),
             method_name: "length".into(),
             args: vec![],
             ty: IrType::Int,
         };
         let stmt = sysout_println(call);
-        module.decls.push(IrDecl::Class(make_class("StrLen", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("StrLen", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("length()"), "should emit length() call");
     }
@@ -3525,29 +3634,41 @@ mod tests {
     fn generate_string_substring() {
         let mut module = IrModule::new("");
         let call = IrExpr::MethodCall {
-            receiver: Some(Box::new(IrExpr::Var { name: "s".into(), ty: IrType::String })),
+            receiver: Some(Box::new(IrExpr::Var {
+                name: "s".into(),
+                ty: IrType::String,
+            })),
             method_name: "substring".into(),
             args: vec![IrExpr::LitInt(0), IrExpr::LitInt(3)],
             ty: IrType::String,
         };
         let stmt = sysout_println(call);
-        module.decls.push(IrDecl::Class(make_class("StrSub", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("StrSub", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("substring") || code.contains("slice"),
-            "should map substring");
+        assert!(
+            code.contains("substring") || code.contains("slice"),
+            "should map substring"
+        );
     }
 
     #[test]
     fn generate_string_contains() {
         let mut module = IrModule::new("");
         let call = IrExpr::MethodCall {
-            receiver: Some(Box::new(IrExpr::Var { name: "s".into(), ty: IrType::String })),
+            receiver: Some(Box::new(IrExpr::Var {
+                name: "s".into(),
+                ty: IrType::String,
+            })),
             method_name: "contains".into(),
             args: vec![IrExpr::LitString("x".into())],
             ty: IrType::Bool,
         };
         let stmt = sysout_println(call);
-        module.decls.push(IrDecl::Class(make_class("StrContains", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("StrContains", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("contains"), "should map contains");
     }
@@ -3557,29 +3678,42 @@ mod tests {
         let mut module = IrModule::new("");
         let stmts = vec![
             sysout_println(IrExpr::MethodCall {
-                receiver: Some(Box::new(IrExpr::Var { name: "s".into(), ty: IrType::String })),
+                receiver: Some(Box::new(IrExpr::Var {
+                    name: "s".into(),
+                    ty: IrType::String,
+                })),
                 method_name: "trim".into(),
                 args: vec![],
                 ty: IrType::String,
             }),
             sysout_println(IrExpr::MethodCall {
-                receiver: Some(Box::new(IrExpr::Var { name: "s".into(), ty: IrType::String })),
+                receiver: Some(Box::new(IrExpr::Var {
+                    name: "s".into(),
+                    ty: IrType::String,
+                })),
                 method_name: "toLowerCase".into(),
                 args: vec![],
                 ty: IrType::String,
             }),
             sysout_println(IrExpr::MethodCall {
-                receiver: Some(Box::new(IrExpr::Var { name: "s".into(), ty: IrType::String })),
+                receiver: Some(Box::new(IrExpr::Var {
+                    name: "s".into(),
+                    ty: IrType::String,
+                })),
                 method_name: "toUpperCase".into(),
                 args: vec![],
                 ty: IrType::String,
             }),
         ];
-        module.decls.push(IrDecl::Class(make_class("StrOps", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("StrOps", stmts)));
         let code = gen(&module);
         assert!(code.contains("trim"), "should have trim");
-        assert!(code.contains("to_lowercase") || code.contains("toLowerCase"),
-            "should map toLowerCase");
+        assert!(
+            code.contains("to_lowercase") || code.contains("toLowerCase"),
+            "should map toLowerCase"
+        );
     }
 
     #[test]
@@ -3587,19 +3721,27 @@ mod tests {
         let mut module = IrModule::new("");
         let stmts = vec![
             sysout_println(IrExpr::MethodCall {
-                receiver: Some(Box::new(IrExpr::Var { name: "s".into(), ty: IrType::String })),
+                receiver: Some(Box::new(IrExpr::Var {
+                    name: "s".into(),
+                    ty: IrType::String,
+                })),
                 method_name: "startsWith".into(),
                 args: vec![IrExpr::LitString("x".into())],
                 ty: IrType::Bool,
             }),
             sysout_println(IrExpr::MethodCall {
-                receiver: Some(Box::new(IrExpr::Var { name: "s".into(), ty: IrType::String })),
+                receiver: Some(Box::new(IrExpr::Var {
+                    name: "s".into(),
+                    ty: IrType::String,
+                })),
                 method_name: "endsWith".into(),
                 args: vec![IrExpr::LitString("y".into())],
                 ty: IrType::Bool,
             }),
         ];
-        module.decls.push(IrDecl::Class(make_class("StrCheck", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("StrCheck", stmts)));
         let code = gen(&module);
         assert!(code.contains("startsWith"), "should emit startsWith call");
         assert!(code.contains("endsWith"), "should emit endsWith call");
@@ -3609,13 +3751,18 @@ mod tests {
     fn generate_string_replace() {
         let mut module = IrModule::new("");
         let call = IrExpr::MethodCall {
-            receiver: Some(Box::new(IrExpr::Var { name: "s".into(), ty: IrType::String })),
+            receiver: Some(Box::new(IrExpr::Var {
+                name: "s".into(),
+                ty: IrType::String,
+            })),
             method_name: "replace".into(),
             args: vec![IrExpr::LitString("a".into()), IrExpr::LitString("b".into())],
             ty: IrType::String,
         };
         let stmt = sysout_println(call);
-        module.decls.push(IrDecl::Class(make_class("StrReplace", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("StrReplace", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("replace"), "should map replace");
     }
@@ -3625,22 +3772,32 @@ mod tests {
         let mut module = IrModule::new("");
         let stmts = vec![
             sysout_println(IrExpr::MethodCall {
-                receiver: Some(Box::new(IrExpr::Var { name: "s".into(), ty: IrType::String })),
+                receiver: Some(Box::new(IrExpr::Var {
+                    name: "s".into(),
+                    ty: IrType::String,
+                })),
                 method_name: "indexOf".into(),
                 args: vec![IrExpr::LitString("x".into())],
                 ty: IrType::Int,
             }),
             sysout_println(IrExpr::MethodCall {
-                receiver: Some(Box::new(IrExpr::Var { name: "s".into(), ty: IrType::String })),
+                receiver: Some(Box::new(IrExpr::Var {
+                    name: "s".into(),
+                    ty: IrType::String,
+                })),
                 method_name: "isEmpty".into(),
                 args: vec![],
                 ty: IrType::Bool,
             }),
         ];
-        module.decls.push(IrDecl::Class(make_class("StrIdx", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("StrIdx", stmts)));
         let code = gen(&module);
-        assert!(code.contains("indexOf") || code.contains("index_of"),
-            "should map indexOf");
+        assert!(
+            code.contains("indexOf") || code.contains("index_of"),
+            "should map indexOf"
+        );
     }
 
     // ── New constructors for runtime types ────────────────────────────────
@@ -3657,9 +3814,14 @@ mod tests {
                 ty: IrType::Class("AtomicLong".into()),
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("NewAtomicLong", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("NewAtomicLong", stmts)));
         let code = gen(&module);
-        assert!(code.contains("JAtomicLong::new"), "should use JAtomicLong::new");
+        assert!(
+            code.contains("JAtomicLong::new"),
+            "should use JAtomicLong::new"
+        );
     }
 
     #[test]
@@ -3674,9 +3836,14 @@ mod tests {
                 ty: IrType::Class("AtomicBoolean".into()),
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("NewAtomBool", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("NewAtomBool", stmts)));
         let code = gen(&module);
-        assert!(code.contains("JAtomicBoolean::new"), "should use JAtomicBoolean::new");
+        assert!(
+            code.contains("JAtomicBoolean::new"),
+            "should use JAtomicBoolean::new"
+        );
     }
 
     #[test]
@@ -3691,9 +3858,14 @@ mod tests {
                 ty: IrType::Class("CountDownLatch".into()),
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("NewLatch", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("NewLatch", stmts)));
         let code = gen(&module);
-        assert!(code.contains("JCountDownLatch::new"), "should use JCountDownLatch::new");
+        assert!(
+            code.contains("JCountDownLatch::new"),
+            "should use JCountDownLatch::new"
+        );
     }
 
     #[test]
@@ -3708,9 +3880,14 @@ mod tests {
                 ty: IrType::Class("Semaphore".into()),
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("NewSemaphore", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("NewSemaphore", stmts)));
         let code = gen(&module);
-        assert!(code.contains("JSemaphore::new"), "should use JSemaphore::new");
+        assert!(
+            code.contains("JSemaphore::new"),
+            "should use JSemaphore::new"
+        );
     }
 
     #[test]
@@ -3727,8 +3904,10 @@ mod tests {
         }];
         module.decls.push(IrDecl::Class(make_class("NewSB", stmts)));
         let code = gen(&module);
-        assert!(code.contains("JStringBuilder::new_from_string"),
-            "should use JStringBuilder::new_from_string");
+        assert!(
+            code.contains("JStringBuilder::new_from_string"),
+            "should use JStringBuilder::new_from_string"
+        );
     }
 
     #[test]
@@ -3743,9 +3922,14 @@ mod tests {
                 ty: IrType::Class("BigInteger".into()),
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("NewBigInt", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("NewBigInt", stmts)));
         let code = gen(&module);
-        assert!(code.contains("JBigInteger::from_string"), "should use JBigInteger::from_string");
+        assert!(
+            code.contains("JBigInteger::from_string"),
+            "should use JBigInteger::from_string"
+        );
     }
 
     #[test]
@@ -3760,7 +3944,9 @@ mod tests {
                 ty: IrType::Class("File".into()),
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("NewFile", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("NewFile", stmts)));
         let code = gen(&module);
         assert!(code.contains("JFile::new"), "should use JFile::new");
     }
@@ -3773,13 +3959,21 @@ mod tests {
             ty: IrType::Class("File".into()),
             init: Some(IrExpr::New {
                 class: "File".into(),
-                args: vec![IrExpr::LitString("/tmp".into()), IrExpr::LitString("test.txt".into())],
+                args: vec![
+                    IrExpr::LitString("/tmp".into()),
+                    IrExpr::LitString("test.txt".into()),
+                ],
                 ty: IrType::Class("File".into()),
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("NewFile2", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("NewFile2", stmts)));
         let code = gen(&module);
-        assert!(code.contains("JFile::new_child"), "should use JFile::new_child");
+        assert!(
+            code.contains("JFile::new_child"),
+            "should use JFile::new_child"
+        );
     }
 
     #[test]
@@ -3790,11 +3984,16 @@ mod tests {
             ty: IrType::Class("Thread".into()),
             init: Some(IrExpr::New {
                 class: "Thread".into(),
-                args: vec![IrExpr::Var { name: "task".into(), ty: IrType::Class("Runnable".into() )}],
+                args: vec![IrExpr::Var {
+                    name: "task".into(),
+                    ty: IrType::Class("Runnable".into()),
+                }],
                 ty: IrType::Class("Thread".into()),
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("NewThread", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("NewThread", stmts)));
         let code = gen(&module);
         assert!(code.contains("JThread::new"), "should use JThread::new");
     }
@@ -3816,10 +4015,14 @@ mod tests {
             rhs: Box::new(IrExpr::LitInt(42)),
             ty: IrType::Int,
         })];
-        module.decls.push(IrDecl::Class(make_class("VolWrite", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("VolWrite", stmts)));
         let code = gen(&module);
-        assert!(code.contains("store") && code.contains("SeqCst"),
-            "volatile write should use .store with SeqCst");
+        assert!(
+            code.contains("store") && code.contains("SeqCst"),
+            "volatile write should use .store with SeqCst"
+        );
     }
 
     // ── print / printf variants ───────────────────────────────────────────
@@ -3840,7 +4043,9 @@ mod tests {
             args: vec![IrExpr::LitString("hello".into())],
             ty: IrType::Void,
         });
-        module.decls.push(IrDecl::Class(make_class("PrintNoLn", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("PrintNoLn", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("print!"), "should use print! macro");
     }
@@ -3858,10 +4063,15 @@ mod tests {
                 ty: IrType::Class("PrintStream".into()),
             })),
             method_name: "printf".into(),
-            args: vec![IrExpr::LitString("hello %s".into()), IrExpr::LitString("world".into())],
+            args: vec![
+                IrExpr::LitString("hello %s".into()),
+                IrExpr::LitString("world".into()),
+            ],
             ty: IrType::Void,
         });
-        module.decls.push(IrDecl::Class(make_class("Printf", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("Printf", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("print!"), "printf should use print! macro");
     }
@@ -3881,10 +4091,14 @@ mod tests {
             ty: IrType::Long,
         };
         let stmt = sysout_println(call);
-        module.decls.push(IrDecl::Class(make_class("ParseLong", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ParseLong", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("parseLong") || code.contains("parse::") || code.contains("i64"),
-            "should emit parseLong call");
+        assert!(
+            code.contains("parseLong") || code.contains("parse::") || code.contains("i64"),
+            "should emit parseLong call"
+        );
     }
 
     #[test]
@@ -3900,10 +4114,14 @@ mod tests {
             ty: IrType::Double,
         };
         let stmt = sysout_println(call);
-        module.decls.push(IrDecl::Class(make_class("ParseDouble", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ParseDouble", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("parseDouble") || code.contains("parse::") || code.contains("f64"),
-            "should emit parseDouble call");
+        assert!(
+            code.contains("parseDouble") || code.contains("parse::") || code.contains("f64"),
+            "should emit parseDouble call"
+        );
     }
 
     // ── Stream API ────────────────────────────────────────────────────────
@@ -3911,18 +4129,18 @@ mod tests {
     #[test]
     fn generate_stream_filter_map() {
         let mut module = IrModule::new("");
-        let stmts = vec![
-            sysout_println(IrExpr::MethodCall {
-                receiver: Some(Box::new(IrExpr::Var {
-                    name: "list".into(),
-                    ty: IrType::Class("JList".into()),
-                })),
-                method_name: "stream".into(),
-                args: vec![],
-                ty: IrType::Class("JStream".into()),
-            }),
-        ];
-        module.decls.push(IrDecl::Class(make_class("StreamTest", stmts)));
+        let stmts = vec![sysout_println(IrExpr::MethodCall {
+            receiver: Some(Box::new(IrExpr::Var {
+                name: "list".into(),
+                ty: IrType::Class("JList".into()),
+            })),
+            method_name: "stream".into(),
+            args: vec![],
+            ty: IrType::Class("JStream".into()),
+        })];
+        module
+            .decls
+            .push(IrDecl::Class(make_class("StreamTest", stmts)));
         let code = gen(&module);
         assert!(code.contains("stream"), "should use stream");
     }
@@ -3932,7 +4150,10 @@ mod tests {
     #[test]
     fn generate_list_add_get_size() {
         let mut module = IrModule::new("");
-        let list_var = Box::new(IrExpr::Var { name: "list".into(), ty: IrType::Class("ArrayList".into()) });
+        let list_var = Box::new(IrExpr::Var {
+            name: "list".into(),
+            ty: IrType::Class("ArrayList".into()),
+        });
         let stmts = vec![
             IrStmt::Expr(IrExpr::MethodCall {
                 receiver: Some(list_var.clone()),
@@ -3953,10 +4174,14 @@ mod tests {
                 ty: IrType::Int,
             }),
         ];
-        module.decls.push(IrDecl::Class(make_class("ListOps", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ListOps", stmts)));
         let code = gen(&module);
-        assert!(code.contains("add") && code.contains("get") && code.contains("size"),
-            "should have list methods");
+        assert!(
+            code.contains("add") && code.contains("get") && code.contains("size"),
+            "should have list methods"
+        );
     }
 
     // ── Array assign ──────────────────────────────────────────────────────
@@ -3966,14 +4191,19 @@ mod tests {
         let mut module = IrModule::new("");
         let stmts = vec![IrStmt::Expr(IrExpr::Assign {
             lhs: Box::new(IrExpr::ArrayAccess {
-                array: Box::new(IrExpr::Var { name: "arr".into(), ty: IrType::Array(Box::new(IrType::Int)) }),
+                array: Box::new(IrExpr::Var {
+                    name: "arr".into(),
+                    ty: IrType::Array(Box::new(IrType::Int)),
+                }),
                 index: Box::new(IrExpr::LitInt(0)),
                 ty: IrType::Int,
             }),
             rhs: Box::new(IrExpr::LitInt(42)),
             ty: IrType::Int,
         })];
-        module.decls.push(IrDecl::Class(make_class("ArrSet", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ArrSet", stmts)));
         let code = gen(&module);
         assert!(code.contains(".set("), "array assignment should use .set()");
     }
@@ -3987,7 +4217,9 @@ mod tests {
             name: "x".into(),
             ty: IrType::Double,
         });
-        module.decls.push(IrDecl::Class(make_class("PrintDouble", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("PrintDouble", vec![stmt])));
         let code = gen(&module);
         // Double arguments might use {:?} for float formatting
         assert!(code.contains("println!"), "should use println!");
@@ -4013,9 +4245,14 @@ mod tests {
                 },
             }),
         };
-        module.decls.push(IrDecl::Class(make_class("GenList", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("GenList", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("JList"), "should map ArrayList<T> to JList<T>");
+        assert!(
+            code.contains("JList"),
+            "should map ArrayList<T> to JList<T>"
+        );
     }
 
     #[test]
@@ -4029,9 +4266,14 @@ mod tests {
             },
             init: None,
         };
-        module.decls.push(IrDecl::Class(make_class("GenMap", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("GenMap", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("JMap"), "should map HashMap<K,V> to JMap<K,V>");
+        assert!(
+            code.contains("JMap"),
+            "should map HashMap<K,V> to JMap<K,V>"
+        );
     }
 
     #[test]
@@ -4045,7 +4287,9 @@ mod tests {
             },
             init: None,
         };
-        module.decls.push(IrDecl::Class(make_class("GenSet", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("GenSet", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("JSet"), "should map HashSet<T> to JSet<T>");
     }
@@ -4061,9 +4305,14 @@ mod tests {
             },
             init: None,
         };
-        module.decls.push(IrDecl::Class(make_class("GenOpt", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("GenOpt", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("JOptional"), "should map Optional<T> to JOptional<T>");
+        assert!(
+            code.contains("JOptional"),
+            "should map Optional<T> to JOptional<T>"
+        );
     }
 
     #[test]
@@ -4077,9 +4326,14 @@ mod tests {
             },
             init: None,
         };
-        module.decls.push(IrDecl::Class(make_class("GenStream", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("GenStream", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("JStream"), "should map Stream<T> to JStream<T>");
+        assert!(
+            code.contains("JStream"),
+            "should map Stream<T> to JStream<T>"
+        );
     }
 
     // ── Atomic type emission ──────────────────────────────────────────────
@@ -4092,9 +4346,14 @@ mod tests {
             ty: IrType::Atomic(Box::new(IrType::Int)),
             init: None,
         };
-        module.decls.push(IrDecl::Class(make_class("AtomicIntTy", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("AtomicIntTy", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("AtomicI32"), "should emit AtomicI32 for Atomic<Int>");
+        assert!(
+            code.contains("AtomicI32"),
+            "should emit AtomicI32 for Atomic<Int>"
+        );
     }
 
     #[test]
@@ -4105,9 +4364,14 @@ mod tests {
             ty: IrType::Atomic(Box::new(IrType::Long)),
             init: None,
         };
-        module.decls.push(IrDecl::Class(make_class("AtomicLngTy", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("AtomicLngTy", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("AtomicI64"), "should emit AtomicI64 for Atomic<Long>");
+        assert!(
+            code.contains("AtomicI64"),
+            "should emit AtomicI64 for Atomic<Long>"
+        );
     }
 
     #[test]
@@ -4118,9 +4382,14 @@ mod tests {
             ty: IrType::Atomic(Box::new(IrType::Bool)),
             init: None,
         };
-        module.decls.push(IrDecl::Class(make_class("AtomicBoolTy", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("AtomicBoolTy", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("AtomicBool"), "should emit AtomicBool for Atomic<Bool>");
+        assert!(
+            code.contains("AtomicBool"),
+            "should emit AtomicBool for Atomic<Bool>"
+        );
     }
 
     // ── Keyword sanitization ──────────────────────────────────────────────
@@ -4130,11 +4399,25 @@ mod tests {
         let mut module = IrModule::new("");
         // Use Rust keywords as variable names — they should be sanitized
         let stmts = vec![
-            IrStmt::LocalVar { name: "type".into(), ty: IrType::Int, init: Some(IrExpr::LitInt(1)) },
-            IrStmt::LocalVar { name: "match".into(), ty: IrType::Int, init: Some(IrExpr::LitInt(2)) },
-            IrStmt::LocalVar { name: "loop".into(), ty: IrType::Int, init: Some(IrExpr::LitInt(3)) },
+            IrStmt::LocalVar {
+                name: "type".into(),
+                ty: IrType::Int,
+                init: Some(IrExpr::LitInt(1)),
+            },
+            IrStmt::LocalVar {
+                name: "match".into(),
+                ty: IrType::Int,
+                init: Some(IrExpr::LitInt(2)),
+            },
+            IrStmt::LocalVar {
+                name: "loop".into(),
+                ty: IrType::Int,
+                init: Some(IrExpr::LitInt(3)),
+            },
         ];
-        module.decls.push(IrDecl::Class(make_class("Keywords", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("Keywords", stmts)));
         let code = gen(&module);
         assert!(code.contains("type_"), "should sanitize 'type' keyword");
         assert!(code.contains("match_"), "should sanitize 'match' keyword");
@@ -4148,10 +4431,15 @@ mod tests {
         let mut module = IrModule::new("");
         let cast = IrExpr::Cast {
             target: IrType::Long,
-            expr: Box::new(IrExpr::Var { name: "x".into(), ty: IrType::Int }),
+            expr: Box::new(IrExpr::Var {
+                name: "x".into(),
+                ty: IrType::Int,
+            }),
         };
         let stmt = sysout_println(cast);
-        module.decls.push(IrDecl::Class(make_class("CastExpr", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("CastExpr", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("as i64"), "should emit cast as i64");
     }
@@ -4162,11 +4450,16 @@ mod tests {
     fn generate_instanceof_expr() {
         let mut module = IrModule::new("");
         let expr = IrExpr::InstanceOf {
-            expr: Box::new(IrExpr::Var { name: "obj".into(), ty: IrType::Class("Object".into()) }),
+            expr: Box::new(IrExpr::Var {
+                name: "obj".into(),
+                ty: IrType::Class("Object".into()),
+            }),
             check_type: IrType::Class("String".into()),
         };
         let stmt = sysout_println(expr);
-        module.decls.push(IrDecl::Class(make_class("InstOf", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("InstOf", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("_instanceof"), "should emit _instanceof call");
     }
@@ -4180,7 +4473,10 @@ mod tests {
             params: vec!["x".into()],
             body: Box::new(IrExpr::BinOp {
                 op: IrBinOp::Mul,
-                lhs: Box::new(IrExpr::Var { name: "x".into(), ty: IrType::Int }),
+                lhs: Box::new(IrExpr::Var {
+                    name: "x".into(),
+                    ty: IrType::Int,
+                }),
                 rhs: Box::new(IrExpr::LitInt(2)),
                 ty: IrType::Int,
             }),
@@ -4191,9 +4487,14 @@ mod tests {
             ty: IrType::Unknown,
             init: Some(lambda),
         };
-        module.decls.push(IrDecl::Class(make_class("Lambda", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("Lambda", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("|x|") || code.contains("| x"), "should emit lambda closure");
+        assert!(
+            code.contains("|x|") || code.contains("| x"),
+            "should emit lambda closure"
+        );
     }
 
     // ── CompoundAssign (bitwise) ──────────────────────────────────────────
@@ -4204,36 +4505,53 @@ mod tests {
         let stmts = vec![
             IrStmt::Expr(IrExpr::CompoundAssign {
                 op: IrBinOp::BitAnd,
-                lhs: Box::new(IrExpr::Var { name: "x".into(), ty: IrType::Int }),
+                lhs: Box::new(IrExpr::Var {
+                    name: "x".into(),
+                    ty: IrType::Int,
+                }),
                 rhs: Box::new(IrExpr::LitInt(0xFF)),
                 ty: IrType::Int,
             }),
             IrStmt::Expr(IrExpr::CompoundAssign {
                 op: IrBinOp::BitOr,
-                lhs: Box::new(IrExpr::Var { name: "x".into(), ty: IrType::Int }),
+                lhs: Box::new(IrExpr::Var {
+                    name: "x".into(),
+                    ty: IrType::Int,
+                }),
                 rhs: Box::new(IrExpr::LitInt(1)),
                 ty: IrType::Int,
             }),
             IrStmt::Expr(IrExpr::CompoundAssign {
                 op: IrBinOp::BitXor,
-                lhs: Box::new(IrExpr::Var { name: "x".into(), ty: IrType::Int }),
+                lhs: Box::new(IrExpr::Var {
+                    name: "x".into(),
+                    ty: IrType::Int,
+                }),
                 rhs: Box::new(IrExpr::LitInt(0x0F)),
                 ty: IrType::Int,
             }),
             IrStmt::Expr(IrExpr::CompoundAssign {
                 op: IrBinOp::Shl,
-                lhs: Box::new(IrExpr::Var { name: "x".into(), ty: IrType::Int }),
+                lhs: Box::new(IrExpr::Var {
+                    name: "x".into(),
+                    ty: IrType::Int,
+                }),
                 rhs: Box::new(IrExpr::LitInt(2)),
                 ty: IrType::Int,
             }),
             IrStmt::Expr(IrExpr::CompoundAssign {
                 op: IrBinOp::Shr,
-                lhs: Box::new(IrExpr::Var { name: "x".into(), ty: IrType::Int }),
+                lhs: Box::new(IrExpr::Var {
+                    name: "x".into(),
+                    ty: IrType::Int,
+                }),
                 rhs: Box::new(IrExpr::LitInt(1)),
                 ty: IrType::Int,
             }),
         ];
-        module.decls.push(IrDecl::Class(make_class("CompBit", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("CompBit", stmts)));
         let code = gen(&module);
         assert!(code.contains("&="), "should emit &=");
         assert!(code.contains("|="), "should emit |=");
@@ -4248,13 +4566,21 @@ mod tests {
     fn generate_math_abs_long() {
         let mut module = IrModule::new("");
         let call = IrExpr::MethodCall {
-            receiver: Some(Box::new(IrExpr::Var { name: "Math".into(), ty: IrType::Class("Math".into()) })),
+            receiver: Some(Box::new(IrExpr::Var {
+                name: "Math".into(),
+                ty: IrType::Class("Math".into()),
+            })),
             method_name: "abs".into(),
-            args: vec![IrExpr::Var { name: "n".into(), ty: IrType::Long }],
+            args: vec![IrExpr::Var {
+                name: "n".into(),
+                ty: IrType::Long,
+            }],
             ty: IrType::Long,
         };
         let stmt = sysout_println(call);
-        module.decls.push(IrDecl::Class(make_class("MathAbsLong", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("MathAbsLong", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("i64"), "should cast to i64 for long abs");
     }
@@ -4263,16 +4589,27 @@ mod tests {
     fn generate_math_max_long() {
         let mut module = IrModule::new("");
         let call = IrExpr::MethodCall {
-            receiver: Some(Box::new(IrExpr::Var { name: "Math".into(), ty: IrType::Class("Math".into()) })),
+            receiver: Some(Box::new(IrExpr::Var {
+                name: "Math".into(),
+                ty: IrType::Class("Math".into()),
+            })),
             method_name: "max".into(),
             args: vec![
-                IrExpr::Var { name: "a".into(), ty: IrType::Long },
-                IrExpr::Var { name: "b".into(), ty: IrType::Long },
+                IrExpr::Var {
+                    name: "a".into(),
+                    ty: IrType::Long,
+                },
+                IrExpr::Var {
+                    name: "b".into(),
+                    ty: IrType::Long,
+                },
             ],
             ty: IrType::Long,
         };
         let stmt = sysout_println(call);
-        module.decls.push(IrDecl::Class(make_class("MathMaxLong", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("MathMaxLong", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("i64"), "should cast to i64 for long max");
     }
@@ -4281,16 +4618,27 @@ mod tests {
     fn generate_math_min_double() {
         let mut module = IrModule::new("");
         let call = IrExpr::MethodCall {
-            receiver: Some(Box::new(IrExpr::Var { name: "Math".into(), ty: IrType::Class("Math".into()) })),
+            receiver: Some(Box::new(IrExpr::Var {
+                name: "Math".into(),
+                ty: IrType::Class("Math".into()),
+            })),
             method_name: "min".into(),
             args: vec![
-                IrExpr::Var { name: "a".into(), ty: IrType::Double },
-                IrExpr::Var { name: "b".into(), ty: IrType::Double },
+                IrExpr::Var {
+                    name: "a".into(),
+                    ty: IrType::Double,
+                },
+                IrExpr::Var {
+                    name: "b".into(),
+                    ty: IrType::Double,
+                },
             ],
             ty: IrType::Double,
         };
         let stmt = sysout_println(call);
-        module.decls.push(IrDecl::Class(make_class("MathMinDbl", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("MathMinDbl", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("f64"), "should cast to f64 for double min");
     }
@@ -4304,13 +4652,21 @@ mod tests {
         let mut stmts = vec![];
         for m in &methods {
             stmts.push(sysout_println(IrExpr::MethodCall {
-                receiver: Some(Box::new(IrExpr::Var { name: "Math".into(), ty: IrType::Class("Math".into()) })),
+                receiver: Some(Box::new(IrExpr::Var {
+                    name: "Math".into(),
+                    ty: IrType::Class("Math".into()),
+                })),
                 method_name: (*m).into(),
-                args: vec![IrExpr::Var { name: "x".into(), ty: IrType::Double }],
+                args: vec![IrExpr::Var {
+                    name: "x".into(),
+                    ty: IrType::Double,
+                }],
                 ty: IrType::Double,
             }));
         }
-        module.decls.push(IrDecl::Class(make_class("MathLog", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("MathLog", stmts)));
         let code = gen(&module);
         assert!(code.contains("ln()"), "should map log to ln()");
         assert!(code.contains("log10()"), "should emit log10()");
@@ -4323,30 +4679,54 @@ mod tests {
     fn generate_optional_empty() {
         let mut module = IrModule::new("");
         let call = IrExpr::MethodCall {
-            receiver: Some(Box::new(IrExpr::Var { name: "Optional".into(), ty: IrType::Class("Optional".into()) })),
+            receiver: Some(Box::new(IrExpr::Var {
+                name: "Optional".into(),
+                ty: IrType::Class("Optional".into()),
+            })),
             method_name: "empty".into(),
             args: vec![],
             ty: IrType::Class("Optional".into()),
         };
-        let stmt = IrStmt::LocalVar { name: "o".into(), ty: IrType::Unknown, init: Some(call) };
-        module.decls.push(IrDecl::Class(make_class("OptEmpty", vec![stmt])));
+        let stmt = IrStmt::LocalVar {
+            name: "o".into(),
+            ty: IrType::Unknown,
+            init: Some(call),
+        };
+        module
+            .decls
+            .push(IrDecl::Class(make_class("OptEmpty", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("JOptional::empty"), "should emit JOptional::empty()");
+        assert!(
+            code.contains("JOptional::empty"),
+            "should emit JOptional::empty()"
+        );
     }
 
     #[test]
     fn generate_optional_of_nullable() {
         let mut module = IrModule::new("");
         let call = IrExpr::MethodCall {
-            receiver: Some(Box::new(IrExpr::Var { name: "Optional".into(), ty: IrType::Class("Optional".into()) })),
+            receiver: Some(Box::new(IrExpr::Var {
+                name: "Optional".into(),
+                ty: IrType::Class("Optional".into()),
+            })),
             method_name: "ofNullable".into(),
             args: vec![IrExpr::LitString("hello".into())],
             ty: IrType::Class("Optional".into()),
         };
-        let stmt = IrStmt::LocalVar { name: "o".into(), ty: IrType::Unknown, init: Some(call) };
-        module.decls.push(IrDecl::Class(make_class("OptNullable", vec![stmt])));
+        let stmt = IrStmt::LocalVar {
+            name: "o".into(),
+            ty: IrType::Unknown,
+            init: Some(call),
+        };
+        module
+            .decls
+            .push(IrDecl::Class(make_class("OptNullable", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("JOptional::of_nullable"), "should emit JOptional::of_nullable()");
+        assert!(
+            code.contains("JOptional::of_nullable"),
+            "should emit JOptional::of_nullable()"
+        );
     }
 
     // ── Pattern static methods ────────────────────────────────────────────
@@ -4355,30 +4735,53 @@ mod tests {
     fn generate_pattern_compile() {
         let mut module = IrModule::new("");
         let call = IrExpr::MethodCall {
-            receiver: Some(Box::new(IrExpr::Var { name: "Pattern".into(), ty: IrType::Class("Pattern".into()) })),
+            receiver: Some(Box::new(IrExpr::Var {
+                name: "Pattern".into(),
+                ty: IrType::Class("Pattern".into()),
+            })),
             method_name: "compile".into(),
             args: vec![IrExpr::LitString("\\d+".into())],
             ty: IrType::Class("Pattern".into()),
         };
-        let stmt = IrStmt::LocalVar { name: "p".into(), ty: IrType::Unknown, init: Some(call) };
-        module.decls.push(IrDecl::Class(make_class("PatCompile", vec![stmt])));
+        let stmt = IrStmt::LocalVar {
+            name: "p".into(),
+            ty: IrType::Unknown,
+            init: Some(call),
+        };
+        module
+            .decls
+            .push(IrDecl::Class(make_class("PatCompile", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("JPattern::compile"), "should emit JPattern::compile()");
+        assert!(
+            code.contains("JPattern::compile"),
+            "should emit JPattern::compile()"
+        );
     }
 
     #[test]
     fn generate_pattern_matches() {
         let mut module = IrModule::new("");
         let call = IrExpr::MethodCall {
-            receiver: Some(Box::new(IrExpr::Var { name: "Pattern".into(), ty: IrType::Class("Pattern".into()) })),
+            receiver: Some(Box::new(IrExpr::Var {
+                name: "Pattern".into(),
+                ty: IrType::Class("Pattern".into()),
+            })),
             method_name: "matches".into(),
-            args: vec![IrExpr::LitString("\\d+".into()), IrExpr::LitString("123".into())],
+            args: vec![
+                IrExpr::LitString("\\d+".into()),
+                IrExpr::LitString("123".into()),
+            ],
             ty: IrType::Bool,
         };
         let stmt = sysout_println(call);
-        module.decls.push(IrDecl::Class(make_class("PatMatch", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("PatMatch", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("JPattern::static_matches"), "should emit JPattern::static_matches()");
+        assert!(
+            code.contains("JPattern::static_matches"),
+            "should emit JPattern::static_matches()"
+        );
     }
 
     // ── LocalDate static methods ──────────────────────────────────────────
@@ -4387,30 +4790,54 @@ mod tests {
     fn generate_localdate_of() {
         let mut module = IrModule::new("");
         let call = IrExpr::MethodCall {
-            receiver: Some(Box::new(IrExpr::Var { name: "LocalDate".into(), ty: IrType::Class("LocalDate".into()) })),
+            receiver: Some(Box::new(IrExpr::Var {
+                name: "LocalDate".into(),
+                ty: IrType::Class("LocalDate".into()),
+            })),
             method_name: "of".into(),
             args: vec![IrExpr::LitInt(2024), IrExpr::LitInt(1), IrExpr::LitInt(15)],
             ty: IrType::Class("LocalDate".into()),
         };
-        let stmt = IrStmt::LocalVar { name: "d".into(), ty: IrType::Unknown, init: Some(call) };
-        module.decls.push(IrDecl::Class(make_class("LdOf", vec![stmt])));
+        let stmt = IrStmt::LocalVar {
+            name: "d".into(),
+            ty: IrType::Unknown,
+            init: Some(call),
+        };
+        module
+            .decls
+            .push(IrDecl::Class(make_class("LdOf", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("JLocalDate::of"), "should emit JLocalDate::of()");
+        assert!(
+            code.contains("JLocalDate::of"),
+            "should emit JLocalDate::of()"
+        );
     }
 
     #[test]
     fn generate_localdate_now() {
         let mut module = IrModule::new("");
         let call = IrExpr::MethodCall {
-            receiver: Some(Box::new(IrExpr::Var { name: "LocalDate".into(), ty: IrType::Class("LocalDate".into()) })),
+            receiver: Some(Box::new(IrExpr::Var {
+                name: "LocalDate".into(),
+                ty: IrType::Class("LocalDate".into()),
+            })),
             method_name: "now".into(),
             args: vec![],
             ty: IrType::Class("LocalDate".into()),
         };
-        let stmt = IrStmt::LocalVar { name: "d".into(), ty: IrType::Unknown, init: Some(call) };
-        module.decls.push(IrDecl::Class(make_class("LdNow", vec![stmt])));
+        let stmt = IrStmt::LocalVar {
+            name: "d".into(),
+            ty: IrType::Unknown,
+            init: Some(call),
+        };
+        module
+            .decls
+            .push(IrDecl::Class(make_class("LdNow", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("JLocalDate::now"), "should emit JLocalDate::now()");
+        assert!(
+            code.contains("JLocalDate::now"),
+            "should emit JLocalDate::now()"
+        );
     }
 
     // ── field_default_val for Atomic types ────────────────────────────────
@@ -4465,9 +4892,18 @@ mod tests {
         };
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
-        assert!(code.contains("AtomicI32::new(0)"), "should default AtomicI32 to 0");
-        assert!(code.contains("AtomicI64::new(0)"), "should default AtomicI64 to 0");
-        assert!(code.contains("AtomicBool::new(false)"), "should default AtomicBool to false");
+        assert!(
+            code.contains("AtomicI32::new(0)"),
+            "should default AtomicI32 to 0"
+        );
+        assert!(
+            code.contains("AtomicI64::new(0)"),
+            "should default AtomicI64 to 0"
+        );
+        assert!(
+            code.contains("AtomicBool::new(false)"),
+            "should default AtomicBool to false"
+        );
     }
 
     // ── Delegation stubs for inherited methods ────────────────────────────
@@ -4519,7 +4955,10 @@ mod tests {
         module.decls.push(IrDecl::Class(parent));
         module.decls.push(IrDecl::Class(child));
         let code = gen(&module);
-        assert!(code.contains("self._super.greet"), "should delegate to _super");
+        assert!(
+            code.contains("self._super.greet"),
+            "should delegate to _super"
+        );
     }
 
     // ── Nullable type emission ────────────────────────────────────────────
@@ -4532,9 +4971,14 @@ mod tests {
             ty: IrType::Nullable(Box::new(IrType::String)),
             init: None,
         };
-        module.decls.push(IrDecl::Class(make_class("NullableType", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("NullableType", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("Option"), "should emit Option<T> for Nullable");
+        assert!(
+            code.contains("Option"),
+            "should emit Option<T> for Nullable"
+        );
     }
 
     // ── TypeVar emission ──────────────────────────────────────────────────
@@ -4547,7 +4991,9 @@ mod tests {
             ty: IrType::TypeVar("T".into()),
             init: None,
         };
-        module.decls.push(IrDecl::Class(make_class("TypeVarEmit", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("TypeVarEmit", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("T"), "should emit type variable T");
     }
@@ -4560,17 +5006,25 @@ mod tests {
         let stmt = IrStmt::DoWhile {
             body: vec![IrStmt::Expr(IrExpr::UnOp {
                 op: IrUnOp::PostInc,
-                operand: Box::new(IrExpr::Var { name: "i".into(), ty: IrType::Int }),
+                operand: Box::new(IrExpr::Var {
+                    name: "i".into(),
+                    ty: IrType::Int,
+                }),
                 ty: IrType::Int,
             })],
             cond: IrExpr::BinOp {
                 op: IrBinOp::Lt,
-                lhs: Box::new(IrExpr::Var { name: "i".into(), ty: IrType::Int }),
+                lhs: Box::new(IrExpr::Var {
+                    name: "i".into(),
+                    ty: IrType::Int,
+                }),
                 rhs: Box::new(IrExpr::LitInt(10)),
                 ty: IrType::Bool,
             },
         };
-        module.decls.push(IrDecl::Class(make_class("DoWhile", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("DoWhile", vec![stmt])));
         let code = gen(&module);
         assert!(code.contains("loop"), "should emit loop for do-while");
     }
@@ -4581,21 +5035,36 @@ mod tests {
     fn generate_collect_to_list() {
         let mut module = IrModule::new("");
         let collectors_call = IrExpr::MethodCall {
-            receiver: Some(Box::new(IrExpr::Var { name: "Collectors".into(), ty: IrType::Class("Collectors".into()) })),
+            receiver: Some(Box::new(IrExpr::Var {
+                name: "Collectors".into(),
+                ty: IrType::Class("Collectors".into()),
+            })),
             method_name: "toList".into(),
             args: vec![],
             ty: IrType::Unknown,
         };
         let collect = IrExpr::MethodCall {
-            receiver: Some(Box::new(IrExpr::Var { name: "stream".into(), ty: IrType::Class("JStream".into()) })),
+            receiver: Some(Box::new(IrExpr::Var {
+                name: "stream".into(),
+                ty: IrType::Class("JStream".into()),
+            })),
             method_name: "collect".into(),
             args: vec![collectors_call],
             ty: IrType::Unknown,
         };
-        let stmt = IrStmt::LocalVar { name: "result".into(), ty: IrType::Unknown, init: Some(collect) };
-        module.decls.push(IrDecl::Class(make_class("CollectList", vec![stmt])));
+        let stmt = IrStmt::LocalVar {
+            name: "result".into(),
+            ty: IrType::Unknown,
+            init: Some(collect),
+        };
+        module
+            .decls
+            .push(IrDecl::Class(make_class("CollectList", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("collect_to_list"), "should map collect(Collectors.toList()) to collect_to_list()");
+        assert!(
+            code.contains("collect_to_list"),
+            "should map collect(Collectors.toList()) to collect_to_list()"
+        );
     }
 
     // ── String.valueOf ────────────────────────────────────────────────────
@@ -4604,15 +5073,23 @@ mod tests {
     fn generate_string_valueof_int() {
         let mut module = IrModule::new("");
         let call = IrExpr::MethodCall {
-            receiver: Some(Box::new(IrExpr::Var { name: "String".into(), ty: IrType::Class("String".into()) })),
+            receiver: Some(Box::new(IrExpr::Var {
+                name: "String".into(),
+                ty: IrType::Class("String".into()),
+            })),
             method_name: "valueOf".into(),
             args: vec![IrExpr::LitInt(42)],
             ty: IrType::String,
         };
         let stmt = sysout_println(call);
-        module.decls.push(IrDecl::Class(make_class("StrValueOf", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("StrValueOf", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("JString::from") || code.contains("format!"), "should convert to JString");
+        assert!(
+            code.contains("JString::from") || code.contains("format!"),
+            "should convert to JString"
+        );
     }
 
     // ── Integer.toString ──────────────────────────────────────────────────
@@ -4621,15 +5098,23 @@ mod tests {
     fn generate_integer_tostring_static() {
         let mut module = IrModule::new("");
         let call = IrExpr::MethodCall {
-            receiver: Some(Box::new(IrExpr::Var { name: "Integer".into(), ty: IrType::Class("Integer".into()) })),
+            receiver: Some(Box::new(IrExpr::Var {
+                name: "Integer".into(),
+                ty: IrType::Class("Integer".into()),
+            })),
             method_name: "toString".into(),
             args: vec![IrExpr::LitInt(42)],
             ty: IrType::String,
         };
         let stmt = sysout_println(call);
-        module.decls.push(IrDecl::Class(make_class("IntToStr", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("IntToStr", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("JString::from"), "should emit JString::from for Integer.toString");
+        assert!(
+            code.contains("JString::from"),
+            "should emit JString::from for Integer.toString"
+        );
     }
 
     // ── FieldAccess with volatile read ────────────────────────────────────
@@ -4665,7 +5150,10 @@ mod tests {
                 params: vec![],
                 return_ty: IrType::Int,
                 body: Some(vec![IrStmt::Return(Some(IrExpr::FieldAccess {
-                    receiver: Box::new(IrExpr::Var { name: "self".into(), ty: IrType::Class("VolRead".into()) }),
+                    receiver: Box::new(IrExpr::Var {
+                        name: "self".into(),
+                        ty: IrType::Class("VolRead".into()),
+                    }),
                     field_name: "count".into(),
                     ty: IrType::Atomic(Box::new(IrType::Int)),
                 }))]),
@@ -4675,7 +5163,10 @@ mod tests {
         };
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
-        assert!(code.contains("load") && code.contains("SeqCst"), "should emit atomic load for volatile read");
+        assert!(
+            code.contains("load") && code.contains("SeqCst"),
+            "should emit atomic load for volatile read"
+        );
     }
 
     // ── Interface with non-void return ────────────────────────────────────
@@ -4719,8 +5210,14 @@ mod tests {
         };
         module.decls.push(IrDecl::Interface(iface));
         let code = gen(&module);
-        assert!(code.contains("fn count") && code.contains("-> i32"), "should emit non-void interface method");
-        assert!(code.contains("fn reset"), "should emit void interface method");
+        assert!(
+            code.contains("fn count") && code.contains("-> i32"),
+            "should emit non-void interface method"
+        );
+        assert!(
+            code.contains("fn reset"),
+            "should emit void interface method"
+        );
     }
 
     // ── Abstract method (no body) ─────────────────────────────────────────
@@ -4763,17 +5260,28 @@ mod tests {
         let mut module = IrModule::new("");
         let stmt = IrStmt::Expr(IrExpr::MethodCall {
             receiver: Some(Box::new(IrExpr::FieldAccess {
-                receiver: Box::new(IrExpr::Var { name: "System".into(), ty: IrType::Class("System".into()) }),
+                receiver: Box::new(IrExpr::Var {
+                    name: "System".into(),
+                    ty: IrType::Class("System".into()),
+                }),
                 field_name: "out".into(),
                 ty: IrType::Class("PrintStream".into()),
             })),
             method_name: "print".into(),
-            args: vec![IrExpr::Var { name: "x".into(), ty: IrType::Float }],
+            args: vec![IrExpr::Var {
+                name: "x".into(),
+                ty: IrType::Float,
+            }],
             ty: IrType::Void,
         });
-        module.decls.push(IrDecl::Class(make_class("PrintFloat", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("PrintFloat", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("print!") && code.contains("{:?}"), "should use print! with float format");
+        assert!(
+            code.contains("print!") && code.contains("{:?}"),
+            "should use print! with float format"
+        );
     }
 
     // ── empty println (no args) ───────────────────────────────────────────
@@ -4783,7 +5291,10 @@ mod tests {
         let mut module = IrModule::new("");
         let stmt = IrStmt::Expr(IrExpr::MethodCall {
             receiver: Some(Box::new(IrExpr::FieldAccess {
-                receiver: Box::new(IrExpr::Var { name: "System".into(), ty: IrType::Class("System".into()) }),
+                receiver: Box::new(IrExpr::Var {
+                    name: "System".into(),
+                    ty: IrType::Class("System".into()),
+                }),
                 field_name: "out".into(),
                 ty: IrType::Class("PrintStream".into()),
             })),
@@ -4791,9 +5302,14 @@ mod tests {
             args: vec![],
             ty: IrType::Void,
         });
-        module.decls.push(IrDecl::Class(make_class("PrintlnEmpty", vec![stmt])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("PrintlnEmpty", vec![stmt])));
         let code = gen(&module);
-        assert!(code.contains("println!"), "should emit println!() for empty println");
+        assert!(
+            code.contains("println!"),
+            "should emit println!() for empty println"
+        );
     }
 
     // ── Const static field ────────────────────────────────────────────────
@@ -4823,7 +5339,9 @@ mod tests {
         };
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
-        assert!(code.contains("const MAX"), "should emit const for static final field");
+        assert!(
+            code.contains("const MAX"),
+            "should emit const for static final field"
+        );
     }
 }
-

@@ -50,12 +50,12 @@ fn arb_ir_type() -> impl Strategy<Value = IrType> {
             inner.clone().prop_map(|t| IrType::Nullable(Box::new(t))),
             inner.clone().prop_map(|t| IrType::Array(Box::new(t))),
             inner.clone().prop_map(|t| IrType::Atomic(Box::new(t))),
-            (inner.clone(), proptest::collection::vec(inner, 1..3)).prop_map(
-                |(base, args)| IrType::Generic {
+            (inner.clone(), proptest::collection::vec(inner, 1..3)).prop_map(|(base, args)| {
+                IrType::Generic {
                     base: Box::new(base),
                     args,
                 }
-            ),
+            }),
         ]
     })
 }
@@ -153,17 +153,15 @@ fn arb_ir_expr() -> impl Strategy<Value = IrExpr> {
             )
                 .prop_map(|(class, args, ty)| { IrExpr::New { class, args, ty } }),
             // Cast
-            (arb_ir_type(), inner.clone())
-                .prop_map(|(target, expr)| IrExpr::Cast {
-                    target,
-                    expr: Box::new(expr),
-                }),
+            (arb_ir_type(), inner.clone()).prop_map(|(target, expr)| IrExpr::Cast {
+                target,
+                expr: Box::new(expr),
+            }),
             // InstanceOf
-            (inner.clone(), arb_ir_type())
-                .prop_map(|(expr, check_type)| IrExpr::InstanceOf {
-                    expr: Box::new(expr),
-                    check_type,
-                }),
+            (inner.clone(), arb_ir_type()).prop_map(|(expr, check_type)| IrExpr::InstanceOf {
+                expr: Box::new(expr),
+                check_type,
+            }),
         ]
     })
 }

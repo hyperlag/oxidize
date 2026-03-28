@@ -981,7 +981,9 @@ mod tests {
     #[test]
     fn check_empty_class() {
         let mut module = IrModule::new("");
-        module.decls.push(IrDecl::Class(make_class("Empty", vec![])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("Empty", vec![])));
         tc(module);
     }
 
@@ -993,7 +995,9 @@ mod tests {
             ty: IrType::Int,
             init: Some(IrExpr::LitInt(42)),
         }];
-        module.decls.push(IrDecl::Class(make_class("LocalTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("LocalTest", stmts)));
         tc(module);
     }
 
@@ -1010,12 +1014,17 @@ mod tests {
                 ty: IrType::Unknown,
             }),
         };
-        module.decls.push(IrDecl::Class(make_class("ArithTyping", vec![init])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ArithTyping", vec![init])));
         let result = tc(module);
         // After type checking, the BinOp should be typed as Int
         if let IrDecl::Class(cls) = &result.decls[0] {
             if let Some(body) = &cls.methods[0].body {
-                if let IrStmt::LocalVar { init: Some(expr), .. } = &body[0] {
+                if let IrStmt::LocalVar {
+                    init: Some(expr), ..
+                } = &body[0]
+                {
                     assert_eq!(*expr.ty(), IrType::Int, "Add of ints should be Int");
                 }
             }
@@ -1035,11 +1044,16 @@ mod tests {
                 ty: IrType::Unknown,
             }),
         };
-        module.decls.push(IrDecl::Class(make_class("ConcatTyping", vec![init])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ConcatTyping", vec![init])));
         let result = tc(module);
         if let IrDecl::Class(cls) = &result.decls[0] {
             if let Some(body) = &cls.methods[0].body {
-                if let IrStmt::LocalVar { init: Some(expr), .. } = &body[0] {
+                if let IrStmt::LocalVar {
+                    init: Some(expr), ..
+                } = &body[0]
+                {
                     assert_eq!(*expr.ty(), IrType::String, "Concat should be String");
                 }
             }
@@ -1059,11 +1073,16 @@ mod tests {
                 ty: IrType::Unknown,
             }),
         };
-        module.decls.push(IrDecl::Class(make_class("CompTyping", vec![init])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("CompTyping", vec![init])));
         let result = tc(module);
         if let IrDecl::Class(cls) = &result.decls[0] {
             if let Some(body) = &cls.methods[0].body {
-                if let IrStmt::LocalVar { init: Some(expr), .. } = &body[0] {
+                if let IrStmt::LocalVar {
+                    init: Some(expr), ..
+                } = &body[0]
+                {
                     assert_eq!(*expr.ty(), IrType::Bool, "Comparison should be Bool");
                 }
             }
@@ -1078,7 +1097,9 @@ mod tests {
             then_: vec![IrStmt::Return(None)],
             else_: Some(vec![IrStmt::Return(None)]),
         }];
-        module.decls.push(IrDecl::Class(make_class("IfTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("IfTest", stmts)));
         tc(module);
     }
 
@@ -1089,7 +1110,9 @@ mod tests {
             cond: IrExpr::LitBool(false),
             body: vec![IrStmt::Break(None)],
         }];
-        module.decls.push(IrDecl::Class(make_class("WhileTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("WhileTest", stmts)));
         tc(module);
     }
 
@@ -1104,18 +1127,26 @@ mod tests {
             })),
             cond: Some(IrExpr::BinOp {
                 op: IrBinOp::Lt,
-                lhs: Box::new(IrExpr::Var { name: "i".into(), ty: IrType::Int }),
+                lhs: Box::new(IrExpr::Var {
+                    name: "i".into(),
+                    ty: IrType::Int,
+                }),
                 rhs: Box::new(IrExpr::LitInt(10)),
                 ty: IrType::Unknown,
             }),
             update: vec![IrExpr::UnOp {
                 op: IrUnOp::PostInc,
-                operand: Box::new(IrExpr::Var { name: "i".into(), ty: IrType::Int }),
+                operand: Box::new(IrExpr::Var {
+                    name: "i".into(),
+                    ty: IrType::Int,
+                }),
                 ty: IrType::Unknown,
             }],
             body: vec![],
         }];
-        module.decls.push(IrDecl::Class(make_class("ForTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ForTest", stmts)));
         tc(module);
     }
 
@@ -1126,7 +1157,9 @@ mod tests {
             body: vec![IrStmt::Continue(None)],
             cond: IrExpr::LitBool(false),
         }];
-        module.decls.push(IrDecl::Class(make_class("DoWhileTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("DoWhileTest", stmts)));
         tc(module);
     }
 
@@ -1139,14 +1172,19 @@ mod tests {
             init: Some(IrExpr::LitInt(1)),
         };
         let switch = IrStmt::Switch {
-            expr: IrExpr::Var { name: "x".into(), ty: IrType::Int },
+            expr: IrExpr::Var {
+                name: "x".into(),
+                ty: IrType::Int,
+            },
             cases: vec![SwitchCase {
                 value: IrExpr::LitInt(1),
                 body: vec![IrStmt::Break(None)],
             }],
             default: Some(vec![IrStmt::Break(None)]),
         };
-        module.decls.push(IrDecl::Class(make_class("SwitchTest", vec![init, switch])));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("SwitchTest", vec![init, switch])));
         tc(module);
     }
 
@@ -1162,7 +1200,9 @@ mod tests {
             }],
             finally: Some(vec![]),
         }];
-        module.decls.push(IrDecl::Class(make_class("TryTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("TryTest", stmts)));
         tc(module);
     }
 
@@ -1239,7 +1279,9 @@ mod tests {
             args: vec![IrExpr::LitString("hello".into())],
             ty: IrType::Unknown,
         })];
-        module.decls.push(IrDecl::Class(make_class("CallTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("CallTest", stmts)));
         tc(module);
     }
 
@@ -1256,11 +1298,16 @@ mod tests {
                 ty: IrType::Unknown,
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("TernaryTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("TernaryTest", stmts)));
         let result = tc(module);
         if let IrDecl::Class(cls) = &result.decls[0] {
             if let Some(body) = &cls.methods[0].body {
-                if let IrStmt::LocalVar { init: Some(expr), .. } = &body[0] {
+                if let IrStmt::LocalVar {
+                    init: Some(expr), ..
+                } = &body[0]
+                {
                     assert_eq!(*expr.ty(), IrType::Int, "Ternary should infer Int");
                 }
             }
@@ -1305,7 +1352,9 @@ mod tests {
                 expr: Box::new(IrExpr::LitInt(42)),
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("CastTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("CastTest", stmts)));
         tc(module);
     }
 
@@ -1332,7 +1381,9 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("UnaryTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("UnaryTest", stmts)));
         tc(module);
     }
 
@@ -1348,7 +1399,9 @@ mod tests {
                 ty: IrType::Unknown,
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("NewTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("NewTest", stmts)));
         tc(module);
     }
 
@@ -1378,21 +1431,23 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("ArrayTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ArrayTest", stmts)));
         tc(module);
     }
 
     #[test]
     fn check_block_scoping() {
         let mut module = IrModule::new("");
-        let stmts = vec![IrStmt::Block(vec![
-            IrStmt::LocalVar {
-                name: "inner".into(),
-                ty: IrType::Int,
-                init: Some(IrExpr::LitInt(1)),
-            },
-        ])];
-        module.decls.push(IrDecl::Class(make_class("BlockTest", stmts)));
+        let stmts = vec![IrStmt::Block(vec![IrStmt::LocalVar {
+            name: "inner".into(),
+            ty: IrType::Int,
+            init: Some(IrExpr::LitInt(1)),
+        }])];
+        module
+            .decls
+            .push(IrDecl::Class(make_class("BlockTest", stmts)));
         tc(module);
     }
 
@@ -1404,7 +1459,9 @@ mod tests {
             args: vec![IrExpr::LitString("err".into())],
             ty: IrType::Class("RuntimeException".into()),
         })];
-        module.decls.push(IrDecl::Class(make_class("ThrowTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ThrowTest", stmts)));
         tc(module);
     }
 
@@ -1431,7 +1488,9 @@ mod tests {
                 body: vec![],
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("ForEachTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ForEachTest", stmts)));
         tc(module);
     }
 
@@ -1445,12 +1504,17 @@ mod tests {
                 init: Some(IrExpr::LitInt(0)),
             },
             IrStmt::Expr(IrExpr::Assign {
-                lhs: Box::new(IrExpr::Var { name: "x".into(), ty: IrType::Int }),
+                lhs: Box::new(IrExpr::Var {
+                    name: "x".into(),
+                    ty: IrType::Int,
+                }),
                 rhs: Box::new(IrExpr::LitInt(42)),
                 ty: IrType::Unknown,
             }),
         ];
-        module.decls.push(IrDecl::Class(make_class("AssignTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("AssignTest", stmts)));
         tc(module);
     }
 
@@ -1465,12 +1529,17 @@ mod tests {
             },
             IrStmt::Expr(IrExpr::CompoundAssign {
                 op: IrBinOp::Add,
-                lhs: Box::new(IrExpr::Var { name: "x".into(), ty: IrType::Int }),
+                lhs: Box::new(IrExpr::Var {
+                    name: "x".into(),
+                    ty: IrType::Int,
+                }),
                 rhs: Box::new(IrExpr::LitInt(5)),
                 ty: IrType::Unknown,
             }),
         ];
-        module.decls.push(IrDecl::Class(make_class("CompoundTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("CompoundTest", stmts)));
         tc(module);
     }
 
@@ -1495,7 +1564,9 @@ mod tests {
                 else_: None,
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("InstanceOfTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("InstanceOfTest", stmts)));
         tc(module);
     }
 
@@ -1511,7 +1582,9 @@ mod tests {
                 ty: IrType::Class("Function".into()),
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("LambdaTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("LambdaTest", stmts)));
         tc(module);
     }
 
@@ -1519,7 +1592,9 @@ mod tests {
     fn check_return_with_value() {
         let mut module = IrModule::new("");
         let stmts = vec![IrStmt::Return(Some(IrExpr::LitInt(42)))];
-        module.decls.push(IrDecl::Class(make_class("ReturnTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ReturnTest", stmts)));
         tc(module);
     }
 
@@ -1607,15 +1682,21 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("MathTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("MathTest", stmts)));
         let checked = tc(module);
         // sqrt should type to Double
         if let IrDecl::Class(cls) = &checked.decls[0] {
-            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[1] {
+            if let IrStmt::LocalVar { init: Some(e), .. } =
+                &cls.methods[0].body.as_ref().unwrap()[1]
+            {
                 assert_eq!(*e.ty(), IrType::Double, "Math.sqrt should return Double");
             }
             // round should return Long
-            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[3] {
+            if let IrStmt::LocalVar { init: Some(e), .. } =
+                &cls.methods[0].body.as_ref().unwrap()[3]
+            {
                 assert_eq!(*e.ty(), IrType::Long, "Math.round should return Long");
             }
         }
@@ -1637,10 +1718,14 @@ mod tests {
                 ty: IrType::Unknown,
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("OptTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("OptTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
-            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } =
+                &cls.methods[0].body.as_ref().unwrap()[0]
+            {
                 assert_eq!(*e.ty(), IrType::Class("Optional".into()));
             }
         }
@@ -1662,10 +1747,14 @@ mod tests {
                 ty: IrType::Unknown,
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("PatternTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("PatternTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
-            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } =
+                &cls.methods[0].body.as_ref().unwrap()[0]
+            {
                 assert_eq!(*e.ty(), IrType::Class("Pattern".into()));
             }
         }
@@ -1711,7 +1800,9 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("AtomicTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("AtomicTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
             let body = cls.methods[0].body.as_ref().unwrap();
@@ -1732,7 +1823,11 @@ mod tests {
             ty: IrType::String,
         });
         let stmts = vec![
-            IrStmt::LocalVar { name: "s".into(), ty: IrType::String, init: Some(IrExpr::LitString("hello".into())) },
+            IrStmt::LocalVar {
+                name: "s".into(),
+                ty: IrType::String,
+                init: Some(IrExpr::LitString("hello".into())),
+            },
             IrStmt::LocalVar {
                 name: "len".into(),
                 ty: IrType::Unknown,
@@ -1774,7 +1869,9 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("StrMethodTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("StrMethodTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
             let body = cls.methods[0].body.as_ref().unwrap();
@@ -1831,7 +1928,9 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("CollTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("CollTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
             let body = cls.methods[0].body.as_ref().unwrap();
@@ -1860,10 +1959,14 @@ mod tests {
                 ty: IrType::Unknown,
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("GetClassTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("GetClassTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
-            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } =
+                &cls.methods[0].body.as_ref().unwrap()[0]
+            {
                 assert_eq!(*e.ty(), IrType::Class("JClass".into()));
             }
         }
@@ -1885,10 +1988,14 @@ mod tests {
                 ty: IrType::Unknown,
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("HashTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("HashTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
-            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } =
+                &cls.methods[0].body.as_ref().unwrap()[0]
+            {
                 assert_eq!(*e.ty(), IrType::Int, "hashCode should return Int");
             }
         }
@@ -1920,10 +2027,14 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("ArrLenTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ArrLenTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
-            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[1] {
+            if let IrStmt::LocalVar { init: Some(e), .. } =
+                &cls.methods[0].body.as_ref().unwrap()[1]
+            {
                 assert_eq!(*e.ty(), IrType::Int, "array.length should be Int");
             }
         }
@@ -1944,10 +2055,14 @@ mod tests {
                 ty: IrType::Unknown,
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("SysOutTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("SysOutTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
-            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } =
+                &cls.methods[0].body.as_ref().unwrap()[0]
+            {
                 assert_eq!(*e.ty(), IrType::Class("PrintStream".into()));
             }
         }
@@ -1966,11 +2081,19 @@ mod tests {
                 ty: IrType::Unknown,
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("WidenTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("WidenTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
-            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
-                assert_eq!(*e.ty(), IrType::Double, "int + double should widen to Double");
+            if let IrStmt::LocalVar { init: Some(e), .. } =
+                &cls.methods[0].body.as_ref().unwrap()[0]
+            {
+                assert_eq!(
+                    *e.ty(),
+                    IrType::Double,
+                    "int + double should widen to Double"
+                );
             }
         }
     }
@@ -1988,10 +2111,14 @@ mod tests {
                 ty: IrType::Unknown,
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("LongWidenTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("LongWidenTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
-            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } =
+                &cls.methods[0].body.as_ref().unwrap()[0]
+            {
                 assert_eq!(*e.ty(), IrType::Long, "int * long should widen to Long");
             }
         }
@@ -2010,10 +2137,14 @@ mod tests {
                 ty: IrType::Unknown,
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("ConcatType", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ConcatType", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
-            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } =
+                &cls.methods[0].body.as_ref().unwrap()[0]
+            {
                 assert_eq!(*e.ty(), IrType::String, "concat should be String");
             }
         }
@@ -2042,7 +2173,9 @@ mod tests {
                 ty: IrType::Unknown,
             }),
         ];
-        module.decls.push(IrDecl::Class(make_class("ThreadTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ThreadTest", stmts)));
         tc(module);
     }
 
@@ -2073,10 +2206,14 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("LatchTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("LatchTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
-            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[1] {
+            if let IrStmt::LocalVar { init: Some(e), .. } =
+                &cls.methods[0].body.as_ref().unwrap()[1]
+            {
                 assert_eq!(*e.ty(), IrType::Long, "getCount should return Long");
             }
         }
@@ -2120,7 +2257,9 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("SBTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("SBTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
             let body = cls.methods[0].body.as_ref().unwrap();
@@ -2178,12 +2317,18 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("BigIntTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("BigIntTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
             let body = cls.methods[0].body.as_ref().unwrap();
             if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
-                assert_eq!(*e.ty(), IrType::Class("BigInteger".into()), "add should return BigInteger");
+                assert_eq!(
+                    *e.ty(),
+                    IrType::Class("BigInteger".into()),
+                    "add should return BigInteger"
+                );
             }
             if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
                 assert_eq!(*e.ty(), IrType::String, "toString should return String");
@@ -2194,34 +2339,34 @@ mod tests {
     #[test]
     fn check_exception_methods() {
         let mut module = IrModule::new("");
-        let stmts = vec![
-            IrStmt::TryCatch {
-                body: vec![IrStmt::Throw(IrExpr::New {
-                    class: "Exception".into(),
-                    args: vec![IrExpr::LitString("err".into())],
-                    ty: IrType::Class("Exception".into()),
-                })],
-                catches: vec![ir::stmt::CatchClause {
-                    exception_types: vec!["Exception".into()],
-                    var: "e".into(),
-                    body: vec![IrStmt::LocalVar {
-                        name: "msg".into(),
+        let stmts = vec![IrStmt::TryCatch {
+            body: vec![IrStmt::Throw(IrExpr::New {
+                class: "Exception".into(),
+                args: vec![IrExpr::LitString("err".into())],
+                ty: IrType::Class("Exception".into()),
+            })],
+            catches: vec![ir::stmt::CatchClause {
+                exception_types: vec!["Exception".into()],
+                var: "e".into(),
+                body: vec![IrStmt::LocalVar {
+                    name: "msg".into(),
+                    ty: IrType::Unknown,
+                    init: Some(IrExpr::MethodCall {
+                        receiver: Some(Box::new(IrExpr::Var {
+                            name: "e".into(),
+                            ty: IrType::Class("Exception".into()),
+                        })),
+                        method_name: "getMessage".into(),
+                        args: vec![],
                         ty: IrType::Unknown,
-                        init: Some(IrExpr::MethodCall {
-                            receiver: Some(Box::new(IrExpr::Var {
-                                name: "e".into(),
-                                ty: IrType::Class("Exception".into()),
-                            })),
-                            method_name: "getMessage".into(),
-                            args: vec![],
-                            ty: IrType::Unknown,
-                        }),
-                    }],
+                    }),
                 }],
-                finally: None,
-            },
-        ];
-        module.decls.push(IrDecl::Class(make_class("ExcTest", stmts)));
+            }],
+            finally: None,
+        }];
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ExcTest", stmts)));
         tc(module);
     }
 
@@ -2231,7 +2376,9 @@ mod tests {
         let stmts = vec![IrStmt::SuperConstructorCall {
             args: vec![IrExpr::LitInt(1)],
         }];
-        module.decls.push(IrDecl::Class(make_class("SuperCallTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("SuperCallTest", stmts)));
         tc(module);
     }
 
@@ -2245,7 +2392,9 @@ mod tests {
             },
             body: vec![IrStmt::Expr(IrExpr::LitInt(1))],
         }];
-        module.decls.push(IrDecl::Class(make_class("SyncTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("SyncTest", stmts)));
         tc(module);
     }
 
@@ -2277,7 +2426,9 @@ mod tests {
         module.decls.push(IrDecl::Class(cls));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
-            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } =
+                &cls.methods[0].body.as_ref().unwrap()[0]
+            {
                 assert_eq!(*e.ty(), IrType::Int, "field x should resolve to Int");
             }
         }
@@ -2299,10 +2450,14 @@ mod tests {
                 ty: IrType::Unknown,
             }),
         }];
-        module.decls.push(IrDecl::Class(make_class("DateTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("DateTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
-            if let IrStmt::LocalVar { init: Some(e), .. } = &cls.methods[0].body.as_ref().unwrap()[0] {
+            if let IrStmt::LocalVar { init: Some(e), .. } =
+                &cls.methods[0].body.as_ref().unwrap()[0]
+            {
                 assert_eq!(*e.ty(), IrType::Class("LocalDate".into()));
             }
         }
@@ -2333,7 +2488,9 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("ParseTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("ParseTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
             let body = cls.methods[0].body.as_ref().unwrap();
@@ -2384,7 +2541,9 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("AtomLong", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("AtomLong", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
             let body = cls.methods[0].body.as_ref().unwrap();
@@ -2392,7 +2551,11 @@ mod tests {
                 assert_eq!(*e.ty(), IrType::Long, "AtomicLong.get should return Long");
             }
             if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
-                assert_eq!(*e.ty(), IrType::Long, "AtomicLong.incrementAndGet should return Long");
+                assert_eq!(
+                    *e.ty(),
+                    IrType::Long,
+                    "AtomicLong.incrementAndGet should return Long"
+                );
             }
         }
     }
@@ -2435,15 +2598,25 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("AtomBool", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("AtomBool", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
             let body = cls.methods[0].body.as_ref().unwrap();
             if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
-                assert_eq!(*e.ty(), IrType::Bool, "AtomicBoolean.get should return Bool");
+                assert_eq!(
+                    *e.ty(),
+                    IrType::Bool,
+                    "AtomicBoolean.get should return Bool"
+                );
             }
             if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
-                assert_eq!(*e.ty(), IrType::Bool, "AtomicBoolean.compareAndSet should return Bool");
+                assert_eq!(
+                    *e.ty(),
+                    IrType::Bool,
+                    "AtomicBoolean.compareAndSet should return Bool"
+                );
             }
         }
     }
@@ -2473,12 +2646,18 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("SemTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("SemTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
             let body = cls.methods[0].body.as_ref().unwrap();
             if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
-                assert_eq!(*e.ty(), IrType::Int, "Semaphore.availablePermits should return Int");
+                assert_eq!(
+                    *e.ty(),
+                    IrType::Int,
+                    "Semaphore.availablePermits should return Int"
+                );
             }
         }
     }
@@ -2521,15 +2700,25 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("JClassTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("JClassTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
             let body = cls.methods[0].body.as_ref().unwrap();
             if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
-                assert_eq!(*e.ty(), IrType::String, "JClass.getName should return String");
+                assert_eq!(
+                    *e.ty(),
+                    IrType::String,
+                    "JClass.getName should return String"
+                );
             }
             if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
-                assert_eq!(*e.ty(), IrType::String, "JClass.getSimpleName should return String");
+                assert_eq!(
+                    *e.ty(),
+                    IrType::String,
+                    "JClass.getSimpleName should return String"
+                );
             }
         }
     }
@@ -2572,15 +2761,25 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("OptInst", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("OptInst", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
             let body = cls.methods[0].body.as_ref().unwrap();
             if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
-                assert_eq!(*e.ty(), IrType::Bool, "Optional.isPresent should return Bool");
+                assert_eq!(
+                    *e.ty(),
+                    IrType::Bool,
+                    "Optional.isPresent should return Bool"
+                );
             }
             if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
-                assert_eq!(*e.ty(), IrType::Bool, "JOptional.isEmpty should return Bool");
+                assert_eq!(
+                    *e.ty(),
+                    IrType::Bool,
+                    "JOptional.isEmpty should return Bool"
+                );
             }
         }
     }
@@ -2641,18 +2840,28 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("MatcherTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("MatcherTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
             let body = cls.methods[0].body.as_ref().unwrap();
             if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
-                assert_eq!(*e.ty(), IrType::Class("Matcher".into()), "Pattern.matcher should return Matcher");
+                assert_eq!(
+                    *e.ty(),
+                    IrType::Class("Matcher".into()),
+                    "Pattern.matcher should return Matcher"
+                );
             }
             if let IrStmt::LocalVar { init: Some(e), .. } = &body[3] {
                 assert_eq!(*e.ty(), IrType::Bool, "Matcher.find should return Bool");
             }
             if let IrStmt::LocalVar { init: Some(e), .. } = &body[4] {
-                assert_eq!(*e.ty(), IrType::String, "Matcher.group should return String");
+                assert_eq!(
+                    *e.ty(),
+                    IrType::String,
+                    "Matcher.group should return String"
+                );
             }
         }
     }
@@ -2708,7 +2917,9 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("FileTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("FileTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
             let body = cls.methods[0].body.as_ref().unwrap();
@@ -2762,7 +2973,9 @@ mod tests {
                 }),
             },
         ];
-        module.decls.push(IrDecl::Class(make_class("StreamTest", stmts)));
+        module
+            .decls
+            .push(IrDecl::Class(make_class("StreamTest", stmts)));
         let checked = tc(module);
         if let IrDecl::Class(cls) = &checked.decls[0] {
             let body = cls.methods[0].body.as_ref().unwrap();
@@ -2770,7 +2983,11 @@ mod tests {
                 assert_eq!(*e.ty(), IrType::Long, "JStream.count should return Long");
             }
             if let IrStmt::LocalVar { init: Some(e), .. } = &body[2] {
-                assert_eq!(*e.ty(), IrType::Class("JStream".into()), "JStream.filter should return JStream");
+                assert_eq!(
+                    *e.ty(),
+                    IrType::Class("JStream".into()),
+                    "JStream.filter should return JStream"
+                );
             }
         }
     }
@@ -2903,7 +3120,11 @@ mod tests {
         if let IrDecl::Class(cls) = &checked.decls[1] {
             let body = cls.methods[0].body.as_ref().unwrap();
             if let IrStmt::Return(Some(e)) = &body[0] {
-                assert_eq!(*e.ty(), IrType::String, "inherited method call should resolve return type");
+                assert_eq!(
+                    *e.ty(),
+                    IrType::String,
+                    "inherited method call should resolve return type"
+                );
             }
         }
     }
@@ -2963,7 +3184,11 @@ mod tests {
             let body = cls.methods[0].body.as_ref().unwrap();
             if let IrStmt::LocalVar { init: Some(e), .. } = &body[0] {
                 // _super should be rewritten to self._super with parent class type
-                assert_eq!(*e.ty(), IrType::Class("Parent".into()), "_super should resolve to parent type");
+                assert_eq!(
+                    *e.ty(),
+                    IrType::Class("Parent".into()),
+                    "_super should resolve to parent type"
+                );
             }
         }
     }
@@ -3036,7 +3261,11 @@ mod tests {
         if let IrDecl::Class(cls) = &checked.decls[0] {
             let body = cls.methods[1].body.as_ref().unwrap();
             if let IrStmt::LocalVar { init: Some(e), .. } = &body[1] {
-                assert_eq!(*e.ty(), IrType::Int, "qualified method call should resolve return type");
+                assert_eq!(
+                    *e.ty(),
+                    IrType::Int,
+                    "qualified method call should resolve return type"
+                );
             }
         }
     }
@@ -3099,7 +3328,11 @@ mod tests {
         if let IrDecl::Class(cls) = &checked.decls[1] {
             let body = cls.methods[0].body.as_ref().unwrap();
             if let IrStmt::LocalVar { init: Some(e), .. } = &body[0] {
-                assert_eq!(*e.ty(), IrType::Class("Base2".into()), "_super field access should have parent type");
+                assert_eq!(
+                    *e.ty(),
+                    IrType::Class("Base2".into()),
+                    "_super field access should have parent type"
+                );
             }
         }
     }
