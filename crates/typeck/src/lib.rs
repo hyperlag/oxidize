@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use ir::{
-    decl::{IrClass, IrMethod},
+    decl::{IrClass, IrEnum, IrMethod},
     expr::BinOp,
     IrDecl, IrExpr, IrModule, IrStmt, IrType,
 };
@@ -39,24 +39,40 @@ pub fn type_check(mut module: IrModule) -> Result<IrModule, TypeckError> {
         })
         .collect();
 
+    // Build an enum map for name resolution
+    let enum_map: HashMap<String, IrEnum> = module
+        .decls
+        .iter()
+        .filter_map(|d| {
+            if let IrDecl::Enum(e) = d {
+                Some((e.name.clone(), e.clone()))
+            } else {
+                None
+            }
+        })
+        .collect();
+
     for decl in &mut module.decls {
         match decl {
-            IrDecl::Class(cls) => check_class(cls, &class_map)?,
-            IrDecl::Interface(_) => {} // interface methods are abstract — no bodies to check
+            IrDecl::Class(cls) => check_class(cls, &class_map, &enum_map)?,
+            IrDecl::Interface(_) => {} // interface methods are abstract
+            IrDecl::Enum(enm) => check_enum(enm, &class_map, &enum_map)?,
         }
     }
     Ok(module)
 }
 
-fn check_class(cls: &mut IrClass, class_map: &HashMap<String, IrClass>) -> Result<(), TypeckError> {
+fn check_class(
+    cls: &mut IrClass,
+    class_map: &HashMap<String, IrClass>,
+    enum_map: &HashMap<String, IrEnum>,
+) -> Result<(), TypeckError> {
     let cls_snapshot = cls.clone();
 
     for method in &mut cls.methods {
-        check_method(method, &cls_snapshot, class_map)?;
+        check_method(method, &cls_snapshot, class_map, enum_map)?;
     }
     for ctor in &mut cls.constructors {
-        // Constructors use "__self__" as the self-reference name so codegen
-        // can distinguish them from regular methods (which use "self").
         let mut local_env: HashMap<String, IrType> = HashMap::new();
         local_env.insert(
             "__self__".to_owned(),
@@ -66,15 +82,55 @@ fn check_class(cls: &mut IrClass, class_map: &HashMap<String, IrClass>) -> Resul
             local_env.insert(p.name.clone(), p.ty.clone());
         }
         for stmt in &mut ctor.body {
-            check_stmt(stmt, &cls_snapshot, class_map, &mut local_env)?;
+            check_stmt(stmt, &cls_snapshot, class_map, enum_map, &mut local_env)?;
         }
     }
 
-    // annotate field initialisers (static context — no self)
     let static_env: HashMap<String, IrType> = HashMap::new();
     for field in &mut cls.fields {
         if let Some(init) = &mut field.init {
-            *init = check_expr(init.clone(), &cls_snapshot, class_map, &static_env)?;
+            *init = check_expr(
+                init.clone(),
+                &cls_snapshot,
+                class_map,
+                enum_map,
+                &static_env,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn check_enum(
+    enm: &mut IrEnum,
+    class_map: &HashMap<String, IrClass>,
+    enum_map: &HashMap<String, IrEnum>,
+) -> Result<(), TypeckError> {
+    // Build a synthetic IrClass so we can reuse check_method/check_stmt
+    let synthetic_cls = IrClass {
+        name: enm.name.clone(),
+        visibility: enm.visibility,
+        is_abstract: false,
+        is_final: true,
+        type_params: vec![],
+        superclass: None,
+        interfaces: enm.interfaces.clone(),
+        fields: enm.fields.clone(),
+        methods: enm.methods.clone(),
+        constructors: enm.constructor.iter().cloned().collect(),
+    };
+
+    for method in &mut enm.methods {
+        check_method(method, &synthetic_cls, class_map, enum_map)?;
+    }
+    if let Some(ctor) = &mut enm.constructor {
+        let mut local_env: HashMap<String, IrType> = HashMap::new();
+        local_env.insert("__self__".to_owned(), IrType::Class(enm.name.clone()));
+        for p in &ctor.params {
+            local_env.insert(p.name.clone(), p.ty.clone());
+        }
+        for stmt in &mut ctor.body {
+            check_stmt(stmt, &synthetic_cls, class_map, enum_map, &mut local_env)?;
         }
     }
     Ok(())
@@ -84,21 +140,20 @@ fn check_method(
     method: &mut IrMethod,
     cls: &IrClass,
     class_map: &HashMap<String, IrClass>,
+    enum_map: &HashMap<String, IrEnum>,
 ) -> Result<(), TypeckError> {
     let Some(body) = &mut method.body else {
         return Ok(());
     };
     let mut env: HashMap<String, IrType> = HashMap::new();
     if !method.is_static {
-        // Add "self" so that bare field references inside instance methods get
-        // rewritten to explicit field-access expressions.
         env.insert("self".to_owned(), IrType::Class(cls.name.clone()));
     }
     for p in &method.params {
         env.insert(p.name.clone(), p.ty.clone());
     }
     for stmt in body {
-        check_stmt(stmt, cls, class_map, &mut env)?;
+        check_stmt(stmt, cls, class_map, enum_map, &mut env)?;
     }
     Ok(())
 }
@@ -179,12 +234,13 @@ fn check_stmt(
     stmt: &mut IrStmt,
     cls: &IrClass,
     class_map: &HashMap<String, IrClass>,
+    enum_map: &HashMap<String, IrEnum>,
     env: &mut HashMap<String, IrType>,
 ) -> Result<(), TypeckError> {
     match stmt {
         IrStmt::LocalVar { name, ty, init } => {
             if let Some(init_expr) = init {
-                *init_expr = check_expr(init_expr.clone(), cls, class_map, env)?;
+                *init_expr = check_expr(init_expr.clone(), cls, class_map, enum_map, env)?;
                 // if type is Unknown, infer from init
                 if *ty == IrType::Unknown {
                     *ty = init_expr.ty().clone();
@@ -193,28 +249,28 @@ fn check_stmt(
             env.insert(name.clone(), ty.clone());
         }
         IrStmt::Expr(e) => {
-            *e = check_expr(e.clone(), cls, class_map, env)?;
+            *e = check_expr(e.clone(), cls, class_map, enum_map, env)?;
         }
         IrStmt::Return(Some(e)) => {
-            *e = check_expr(e.clone(), cls, class_map, env)?;
+            *e = check_expr(e.clone(), cls, class_map, enum_map, env)?;
         }
         IrStmt::Return(None) => {}
         IrStmt::If { cond, then_, else_ } => {
-            *cond = check_expr(cond.clone(), cls, class_map, env)?;
+            *cond = check_expr(cond.clone(), cls, class_map, enum_map, env)?;
             for s in then_.iter_mut() {
-                check_stmt(s, cls, class_map, &mut env.clone())?;
+                check_stmt(s, cls, class_map, enum_map, &mut env.clone())?;
             }
             if let Some(else_stmts) = else_ {
                 for s in else_stmts.iter_mut() {
-                    check_stmt(s, cls, class_map, &mut env.clone())?;
+                    check_stmt(s, cls, class_map, enum_map, &mut env.clone())?;
                 }
             }
         }
         IrStmt::While { cond, body } | IrStmt::DoWhile { body, cond } => {
-            *cond = check_expr(cond.clone(), cls, class_map, env)?;
+            *cond = check_expr(cond.clone(), cls, class_map, enum_map, env)?;
             let mut loop_env = env.clone();
             for s in body.iter_mut() {
-                check_stmt(s, cls, class_map, &mut loop_env)?;
+                check_stmt(s, cls, class_map, enum_map, &mut loop_env)?;
             }
         }
         IrStmt::For {
@@ -225,16 +281,16 @@ fn check_stmt(
         } => {
             let mut loop_env = env.clone();
             if let Some(init_stmt) = init {
-                check_stmt(init_stmt, cls, class_map, &mut loop_env)?;
+                check_stmt(init_stmt, cls, class_map, enum_map, &mut loop_env)?;
             }
             if let Some(c) = cond {
-                *c = check_expr(c.clone(), cls, class_map, &loop_env)?;
+                *c = check_expr(c.clone(), cls, class_map, enum_map, &loop_env)?;
             }
             for u in update.iter_mut() {
-                *u = check_expr(u.clone(), cls, class_map, &loop_env)?;
+                *u = check_expr(u.clone(), cls, class_map, enum_map, &loop_env)?;
             }
             for s in body.iter_mut() {
-                check_stmt(s, cls, class_map, &mut loop_env)?;
+                check_stmt(s, cls, class_map, enum_map, &mut loop_env)?;
             }
         }
         IrStmt::ForEach {
@@ -243,11 +299,11 @@ fn check_stmt(
             iterable,
             body,
         } => {
-            *iterable = check_expr(iterable.clone(), cls, class_map, env)?;
+            *iterable = check_expr(iterable.clone(), cls, class_map, enum_map, env)?;
             let mut loop_env = env.clone();
             loop_env.insert(var.clone(), var_ty.clone());
             for s in body.iter_mut() {
-                check_stmt(s, cls, class_map, &mut loop_env)?;
+                check_stmt(s, cls, class_map, enum_map, &mut loop_env)?;
             }
         }
         IrStmt::Switch {
@@ -255,29 +311,29 @@ fn check_stmt(
             cases,
             default,
         } => {
-            *expr = check_expr(expr.clone(), cls, class_map, env)?;
+            *expr = check_expr(expr.clone(), cls, class_map, enum_map, env)?;
             for case in cases.iter_mut() {
-                case.value = check_expr(case.value.clone(), cls, class_map, env)?;
+                case.value = check_expr(case.value.clone(), cls, class_map, enum_map, env)?;
                 let mut case_env = env.clone();
                 for s in case.body.iter_mut() {
-                    check_stmt(s, cls, class_map, &mut case_env)?;
+                    check_stmt(s, cls, class_map, enum_map, &mut case_env)?;
                 }
             }
             if let Some(def_stmts) = default {
                 let mut def_env = env.clone();
                 for s in def_stmts.iter_mut() {
-                    check_stmt(s, cls, class_map, &mut def_env)?;
+                    check_stmt(s, cls, class_map, enum_map, &mut def_env)?;
                 }
             }
         }
         IrStmt::Block(stmts) => {
             let mut block_env = env.clone();
             for s in stmts.iter_mut() {
-                check_stmt(s, cls, class_map, &mut block_env)?;
+                check_stmt(s, cls, class_map, enum_map, &mut block_env)?;
             }
         }
         IrStmt::Throw(e) => {
-            *e = check_expr(e.clone(), cls, class_map, env)?;
+            *e = check_expr(e.clone(), cls, class_map, enum_map, env)?;
         }
         IrStmt::TryCatch {
             body,
@@ -286,7 +342,7 @@ fn check_stmt(
         } => {
             let mut try_env = env.clone();
             for s in body.iter_mut() {
-                check_stmt(s, cls, class_map, &mut try_env)?;
+                check_stmt(s, cls, class_map, enum_map, &mut try_env)?;
             }
             for catch in catches.iter_mut() {
                 let mut catch_env = env.clone();
@@ -295,37 +351,39 @@ fn check_stmt(
                     IrType::Class(catch.exception_types.first().cloned().unwrap_or_default()),
                 );
                 for s in catch.body.iter_mut() {
-                    check_stmt(s, cls, class_map, &mut catch_env)?;
+                    check_stmt(s, cls, class_map, enum_map, &mut catch_env)?;
                 }
             }
             if let Some(fin) = finally {
                 let mut fin_env = env.clone();
                 for s in fin.iter_mut() {
-                    check_stmt(s, cls, class_map, &mut fin_env)?;
+                    check_stmt(s, cls, class_map, enum_map, &mut fin_env)?;
                 }
             }
         }
         IrStmt::SuperConstructorCall { args } => {
             for a in args.iter_mut() {
-                *a = check_expr(a.clone(), cls, class_map, env)?;
+                *a = check_expr(a.clone(), cls, class_map, enum_map, env)?;
             }
         }
         IrStmt::Break(_) | IrStmt::Continue(_) => {}
         IrStmt::Synchronized { monitor, body } => {
-            *monitor = check_expr(monitor.clone(), cls, class_map, env)?;
+            *monitor = check_expr(monitor.clone(), cls, class_map, enum_map, env)?;
             let mut sync_env = env.clone();
             for s in body.iter_mut() {
-                check_stmt(s, cls, class_map, &mut sync_env)?;
+                check_stmt(s, cls, class_map, enum_map, &mut sync_env)?;
             }
         }
     }
     Ok(())
 }
 
+#[allow(clippy::only_used_in_recursion)]
 fn check_expr(
     expr: IrExpr,
     cls: &IrClass,
     class_map: &HashMap<String, IrClass>,
+    enum_map: &HashMap<String, IrEnum>,
     env: &HashMap<String, IrType>,
 ) -> Result<IrExpr, TypeckError> {
     match expr {
@@ -407,7 +465,7 @@ fn check_expr(
             field_name,
             ..
         } => {
-            let receiver = check_expr(*receiver, cls, class_map, env)?;
+            let receiver = check_expr(*receiver, cls, class_map, enum_map, env)?;
 
             // The synthetic `_super` field is not in IrClass.fields; handle it
             // specially so we always get the parent class type.
@@ -428,6 +486,35 @@ fn check_expr(
             // field through the inheritance chain and insert `_super` hops as
             // needed.
             let recv_ty = receiver.ty().clone();
+
+            // If the receiver is a bare name that matches a known enum, resolve
+            // its constants: `Color.RED` → type `Class("Color")`.
+            if let IrExpr::Var { ref name, .. } = receiver {
+                if let Some(enm) = enum_map.get(name.as_str()) {
+                    if enm.constants.iter().any(|c| c.name == field_name) {
+                        return Ok(IrExpr::FieldAccess {
+                            receiver: Box::new(receiver),
+                            field_name,
+                            ty: IrType::Class(enm.name.clone()),
+                        });
+                    }
+                }
+            }
+
+            // If the receiver's type is a known enum type, resolve enum-typed
+            // fields (e.g. instance fields declared inside the enum body).
+            if let IrType::Class(ref class_name) = recv_ty {
+                if let Some(enm) = enum_map.get(class_name.as_str()) {
+                    if let Some(f) = enm.fields.iter().find(|f| f.name == field_name) {
+                        return Ok(IrExpr::FieldAccess {
+                            receiver: Box::new(receiver),
+                            field_name,
+                            ty: f.ty.clone(),
+                        });
+                    }
+                }
+            }
+
             if let IrType::Class(class_name) = &recv_ty {
                 // Use the live `cls` for the current class (not the snapshot in
                 // class_map, though they have the same fields).
@@ -482,11 +569,11 @@ fn check_expr(
             ..
         } => {
             let receiver = receiver
-                .map(|r| check_expr(*r, cls, class_map, env).map(Box::new))
+                .map(|r| check_expr(*r, cls, class_map, enum_map, env).map(Box::new))
                 .transpose()?;
             let args = args
                 .into_iter()
-                .map(|a| check_expr(a, cls, class_map, env))
+                .map(|a| check_expr(a, cls, class_map, enum_map, env))
                 .collect::<Result<Vec<_>, _>>()?;
             let ty = resolve_method_return_type(
                 receiver.as_deref(),
@@ -495,6 +582,14 @@ fn check_expr(
                 cls,
                 class_map,
             );
+
+            // Enum built-in methods: resolve types that `resolve_method_return_type`
+            // cannot infer because it has no access to enum_map.
+            let ty = if ty == IrType::Unknown {
+                resolve_enum_method_type(receiver.as_deref(), &method_name, enum_map).unwrap_or(ty)
+            } else {
+                ty
+            };
             Ok(IrExpr::MethodCall {
                 receiver,
                 method_name,
@@ -504,8 +599,8 @@ fn check_expr(
         }
 
         IrExpr::BinOp { op, lhs, rhs, .. } => {
-            let lhs = check_expr(*lhs, cls, class_map, env)?;
-            let rhs = check_expr(*rhs, cls, class_map, env)?;
+            let lhs = check_expr(*lhs, cls, class_map, enum_map, env)?;
+            let rhs = check_expr(*rhs, cls, class_map, enum_map, env)?;
             let ty = binop_type(&op, lhs.ty(), rhs.ty());
             Ok(IrExpr::BinOp {
                 op,
@@ -516,7 +611,7 @@ fn check_expr(
         }
 
         IrExpr::UnOp { op, operand, .. } => {
-            let operand = check_expr(*operand, cls, class_map, env)?;
+            let operand = check_expr(*operand, cls, class_map, enum_map, env)?;
             let ty = operand.ty().clone();
             Ok(IrExpr::UnOp {
                 op,
@@ -528,9 +623,9 @@ fn check_expr(
         IrExpr::Ternary {
             cond, then_, else_, ..
         } => {
-            let cond = check_expr(*cond, cls, class_map, env)?;
-            let then_ = check_expr(*then_, cls, class_map, env)?;
-            let else_ = check_expr(*else_, cls, class_map, env)?;
+            let cond = check_expr(*cond, cls, class_map, enum_map, env)?;
+            let then_ = check_expr(*then_, cls, class_map, enum_map, env)?;
+            let else_ = check_expr(*else_, cls, class_map, enum_map, env)?;
             let ty = then_.ty().clone();
             Ok(IrExpr::Ternary {
                 cond: Box::new(cond),
@@ -541,8 +636,8 @@ fn check_expr(
         }
 
         IrExpr::Assign { lhs, rhs, .. } => {
-            let lhs = check_expr(*lhs, cls, class_map, env)?;
-            let rhs = check_expr(*rhs, cls, class_map, env)?;
+            let lhs = check_expr(*lhs, cls, class_map, enum_map, env)?;
+            let rhs = check_expr(*rhs, cls, class_map, enum_map, env)?;
             let ty = lhs.ty().clone();
             Ok(IrExpr::Assign {
                 lhs: Box::new(lhs),
@@ -552,8 +647,8 @@ fn check_expr(
         }
 
         IrExpr::CompoundAssign { op, lhs, rhs, .. } => {
-            let lhs = check_expr(*lhs, cls, class_map, env)?;
-            let rhs = check_expr(*rhs, cls, class_map, env)?;
+            let lhs = check_expr(*lhs, cls, class_map, enum_map, env)?;
+            let rhs = check_expr(*rhs, cls, class_map, enum_map, env)?;
             let ty = lhs.ty().clone();
             Ok(IrExpr::CompoundAssign {
                 op,
@@ -566,14 +661,14 @@ fn check_expr(
         IrExpr::New { class, args, .. } => {
             let args = args
                 .into_iter()
-                .map(|a| check_expr(a, cls, class_map, env))
+                .map(|a| check_expr(a, cls, class_map, enum_map, env))
                 .collect::<Result<Vec<_>, _>>()?;
             let ty = IrType::Class(class.clone());
             Ok(IrExpr::New { class, args, ty })
         }
 
         IrExpr::NewArray { elem_ty, len, .. } => {
-            let len = check_expr(*len, cls, class_map, env)?;
+            let len = check_expr(*len, cls, class_map, enum_map, env)?;
             let ty = IrType::Array(Box::new(elem_ty.clone()));
             Ok(IrExpr::NewArray {
                 elem_ty,
@@ -583,8 +678,8 @@ fn check_expr(
         }
 
         IrExpr::ArrayAccess { array, index, .. } => {
-            let array = check_expr(*array, cls, class_map, env)?;
-            let index = check_expr(*index, cls, class_map, env)?;
+            let array = check_expr(*array, cls, class_map, enum_map, env)?;
+            let index = check_expr(*index, cls, class_map, enum_map, env)?;
             let ty = if let IrType::Array(elem) = array.ty() {
                 *elem.clone()
             } else {
@@ -598,7 +693,7 @@ fn check_expr(
         }
 
         IrExpr::Cast { target, expr } => {
-            let expr = check_expr(*expr, cls, class_map, env)?;
+            let expr = check_expr(*expr, cls, class_map, enum_map, env)?;
             Ok(IrExpr::Cast {
                 target,
                 expr: Box::new(expr),
@@ -606,7 +701,7 @@ fn check_expr(
         }
 
         IrExpr::InstanceOf { expr, check_type } => {
-            let expr = check_expr(*expr, cls, class_map, env)?;
+            let expr = check_expr(*expr, cls, class_map, enum_map, env)?;
             Ok(IrExpr::InstanceOf {
                 expr: Box::new(expr),
                 check_type,
@@ -619,7 +714,7 @@ fn check_expr(
             for p in &params {
                 lambda_env.insert(p.clone(), IrType::Unknown);
             }
-            let body = check_expr(*body, cls, class_map, &lambda_env)?;
+            let body = check_expr(*body, cls, class_map, enum_map, &lambda_env)?;
             Ok(IrExpr::Lambda {
                 params,
                 body: Box::new(body),
@@ -692,6 +787,45 @@ fn receiver_name(expr: &IrExpr) -> Option<String> {
         Some(name.clone())
     } else {
         None
+    }
+}
+
+/// Resolve the return type of built-in enum methods and static enum factory
+/// methods that `resolve_method_return_type` cannot infer on its own.
+///
+/// Returns `Some(ty)` when a type can be determined, `None` otherwise.
+fn resolve_enum_method_type(
+    receiver: Option<&IrExpr>,
+    method_name: &str,
+    enum_map: &HashMap<String, IrEnum>,
+) -> Option<IrType> {
+    let recv = receiver?;
+    match recv.ty() {
+        // Instance method on an enum value (e.g. `color.name()`)
+        IrType::Class(class_name) if enum_map.contains_key(class_name.as_str()) => {
+            Some(match method_name {
+                "name" => IrType::String,
+                "ordinal" => IrType::Int,
+                "equals" => IrType::Bool,
+                "compareTo" => IrType::Int, // compareTo returns int (-1, 0, or 1)
+                _ => return None,
+            })
+        }
+        // Static method called as `EnumName.values()` / `EnumName.valueOf(…)`
+        // The receiver is a bare Var whose name matches an enum declaration.
+        IrType::Unknown => {
+            if let IrExpr::Var { name, .. } = recv {
+                if let Some(enm) = enum_map.get(name.as_str()) {
+                    return Some(match method_name {
+                        "values" => IrType::Array(Box::new(IrType::Class(enm.name.clone()))),
+                        "valueOf" => IrType::Class(enm.name.clone()),
+                        _ => return None,
+                    });
+                }
+            }
+            None
+        }
+        _ => None,
     }
 }
 

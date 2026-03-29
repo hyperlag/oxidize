@@ -8,7 +8,7 @@ pub mod expr;
 pub mod stmt;
 pub mod types;
 
-pub use decl::IrDecl;
+pub use decl::{IrDecl, IrEnum, IrEnumConstant};
 pub use expr::IrExpr;
 pub use stmt::IrStmt;
 pub use types::IrType;

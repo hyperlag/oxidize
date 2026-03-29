@@ -845,4 +845,26 @@ Expression calculator tests complete",
     fn test_collections_sort() {
         check("CollectionsSort.java", "5\n10\n20\n30\n30\n20\n10\n5");
     }
+
+    // ── Enum tests ────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_enum_basic() {
+        check("EnumBasic.java", "GREEN\n1\nGREEN\n3");
+    }
+
+    #[test]
+    fn test_enum_switch() {
+        check("EnumSwitch.java", "Weekday\nWeekday\nWeekend\nWeekend");
+    }
+
+    #[test]
+    fn test_enum_fields() {
+        check("EnumFields.java", "1\n25\nDIME\n4");
+    }
+
+    #[test]
+    fn test_enum_compare() {
+        check("EnumCompare.java", "true\nfalse\ntrue\nFALL");
+    }
 }
