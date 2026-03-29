@@ -40,6 +40,8 @@ or emit a `TODO` stub.
 | `List<T>` / `ArrayList<T>`   | `JList<T>`                   |
 | `Map<K,V>` / `HashMap<K,V>`  | `JMap<K,V>`                  |
 | `Set<T>` / `HashSet<T>`      | `JSet<T>`                    |
+| `EnumMap<K,V>`                | `JEnumMap<K,V>`              |
+| `EnumSet<T>`                  | `JEnumSet<T>`                |
 | `Optional<T>`                 | `JOptional<T>`               |
 | `Stream<T>`                   | `JStream<T>`                 |
 | `StringBuilder`               | `JStringBuilder`             |
@@ -533,8 +535,6 @@ Trailing `break` statements are stripped (Rust match arms do not fall through).
 | `map.containsKey(k)`         | `map.containsKey(k)`         |
 | `map.remove(k)`              | `map.remove(k)`              |
 | `map.size()`                 | `map.size()`                 |
-| `map.keySet()`               | `map.keySet()`               |
-| `map.values()`               | `map.values()`               |
 | `map.isEmpty()`              | `map.isEmpty()`              |
 
 ### Set
@@ -547,6 +547,30 @@ Trailing `break` statements are stripped (Rust match arms do not fall through).
 | `set.remove(x)`             | `set.remove(x)`              |
 | `set.size()`                | `set.size()`                 |
 | `set.isEmpty()`             | `set.isEmpty()`              |
+
+### EnumMap
+
+| Java                                  | Rust                          |
+|---------------------------------------|-------------------------------|
+| `new EnumMap<>(Key.class)`            | `JEnumMap::new()`             |
+| `map.put(k, v)`                      | `map.put(k, v)`              |
+| `map.get(k)`                         | `map.get(k)`                 |
+| `map.containsKey(k)`                 | `map.containsKey(k)`         |
+| `map.remove(k)`                      | `map.remove(k)`              |
+| `map.size()`                         | `map.size()`                 |
+| `map.isEmpty()`                      | `map.isEmpty()`              |
+
+### EnumSet
+
+| Java                                  | Rust                          |
+|---------------------------------------|-------------------------------|
+| `EnumSet.noneOf(Color.class)`        | `JEnumSet::new()`             |
+| `EnumSet.of(Color.RED, Color.BLUE)`  | `JEnumSet::of(vec![...])`     |
+| `set.add(x)`                         | `set.add(x)`                 |
+| `set.contains(x)`                    | `set.contains(x)`            |
+| `set.remove(x)`                      | `set.remove(x)`              |
+| `set.size()`                         | `set.size()`                 |
+| `set.isEmpty()`                      | `set.isEmpty()`              |
 
 ## Arrays
 

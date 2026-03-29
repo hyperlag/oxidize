@@ -36,7 +36,7 @@ Rust source (.rs)
 | `codegen` | Lowers annotated IR to Rust token streams via `proc-macro2` / `quote` |
 | `runtime` | `java-compat` crate: runtime types (`JString`, `JArray`, `JList`, `JMap`, `JOptional`, `JStream`, `JThread`, etc.) |
 | `cli` | `jtrans` binary: CLI driver with `translate`, `init-maven`, `init-gradle` subcommands, watch mode, incremental cache, and source map generation |
-| `tests` | Differential test suite (76 tests: translated Rust output vs. expected output) |
+| `tests` | Differential test suite (89 tests: translated Rust output vs. expected output) |
 
 ## Requirements
 
@@ -210,106 +210,72 @@ cargo test
 
 The differential integration tests in `crates/tests` compile and run each translated Rust
 program, then assert that stdout matches the expected output. No JDK is required to run
-the tests. The suite currently contains **76 differential tests** covering Stages 1-9:
+the tests. The suite currently contains **89 differential tests**:
 
 ```bash
 cargo test -p tests -- --test-threads=4
 ```
 
-## Project Status
+## Supported Features
 
-The project follows a staged delivery plan:
-
-| Stage | Description | Status |
-|---|---|---|
-| 0 | Foundation and tooling: workspace, CI, tree-sitter smoke test | Complete |
-| 1 | Core language: primitives, control flow, static methods, arrays | Complete (32/32 tests) |
-| 2 | Object-oriented core: classes, inheritance, interfaces, `instanceof` | Complete (43/43 tests) |
-| 3 | Generics and collections: `List`, `Map`, `Set`, generic classes | Complete (43/43 tests) |
-| 4 | Exception handling: `try`/`catch`/`finally`/`throw`, multi-catch, try-with-resources, `throws` | Complete (49/49 tests) |
-| 5 | Concurrency: `synchronized`, `Thread`, `java.util.concurrent` | Complete (54/54 tests) |
-| 6 | Reflection and dynamic dispatch | Complete (59/59 tests) |
-| 7 | Standard library coverage: `Math`, `Optional`, `Stream`, `regex`, `BigInteger`, `LocalDate`, `StringBuilder`, `File` | Complete (66/66 tests) |
-| 8 | Build integration and tooling: `translate` subcommand, `--watch`, incremental cache, source maps, Cargo.toml generation, Maven/Gradle plugins | Complete (73/73 tests) |
-| 9 | Validation, fuzzing, and hardening: cargo-fuzz, cargo miri, proptest, real-world Java ports, 80%+ coverage | Complete (76/76 tests) |
-| 10 | Documentation and release | Complete |
-
-### Stage 1: Supported Java features
+### Core Language
 
 - Primitive types: `int`, `long`, `double`, `float`, `boolean`, `char`, `byte`, `short`
 - `String` literals and concatenation (including mixed primitive + String)
 - All arithmetic, bitwise, comparison, and logical operators
-- Compound assignment (`+=`, `-=`, `*=`, `/=`, `%=`, etc.)
-- Pre- and post-increment/decrement (`++`, `--`)
-- `if / else if / else`, `while`, `do-while`, `for` (including `break` and `continue`)
+- Compound assignment, pre/post-increment/decrement
+- Control flow: `if/else`, `while`, `do-while`, `for`, `break`, `continue`, ternary
 - Static methods with recursion
-- Single-dimensional arrays (`int[]`, etc.)
-- Single-class programs with `public static void main(String[] args)`
+- Single-dimensional arrays
 - `System.out.println` / `System.out.print` / `System.err.println`
-- Ternary expressions
 
-### Stage 2: Supported Java features
+### Object-Oriented
 
-- Instance fields and instance methods
-- Constructors (default and parameterized)
-- Single inheritance (`extends`) with `super(args)` constructor delegation
-- Inherited field and method access through the superclass chain
-- Interface declarations (`interface`) and `implements`
-- Method overriding
-- `this` reference in instance methods and constructors
-- `super` reference for delegating to parent class methods and constructors
-- `instanceof` operator
-- Classes are translated to Rust `struct`s with a `pub _super: ParentClass` composition field
-- Interface methods are translated to Rust `trait` methods
-- Delegation methods are auto-generated for inherited non-overridden methods
+- Classes with fields, methods, and constructors
+- Single inheritance (`extends`) with `super` delegation
+- Interfaces (`implements`) with trait mapping
+- Method overriding, `this`/`super` references, `instanceof`
+- `toString()` → `Display`, `equals()`, `hashCode()`, `getClass()`
+- `@Override` and `@Deprecated` annotations (silently tolerated)
+- Generic classes with `Clone + Default + Debug` bounds
 
-### Stage 3: Supported Java features
+### Enums
 
-- Generic classes: `class Wrapper<T>` → `struct Wrapper<T>` with `impl<T: Clone + Default + Debug>`
-- Boxed type mapping: `Integer` → `i32`, `Long` → `i64`, `Double` → `f64`, `Boolean` → `bool`, etc.
-- `List<T>` / `ArrayList<T>` → `java_compat::JList<T>` (wraps `Vec<T>`)
-- `Map<K,V>` / `HashMap<K,V>` → `java_compat::JMap<K,V>` (wraps `HashMap<K,V>`)
-- `Set<T>` / `HashSet<T>` → `java_compat::JSet<T>` (wraps `HashSet<T>`)
-- Collection constructors: `new ArrayList<>()` → `JList::new()`, etc.
-- Enhanced `for` loop over collections: `for (T x : list)` → `for x in list.iter()`
-- Collection methods: `size()`, `add()`, `get()`, `put()`, `contains()`, `isEmpty()`, `remove()`, `clear()`
+- Simple enums and enums with fields/constructors/methods
+- Built-in methods: `name()`, `ordinal()`, `values()`, `valueOf()`, `equals()`
+- Enum switch statements, equality via `==` and `.equals()`
+- `EnumMap<K,V>` and `EnumSet<T>` collections
 
-### Stage 4: Supported Java features
+### Collections
 
-- `throw new SomeException("message")` → `panic!("JException:SomeException:message")`
-- `try { ... } catch (E e) { ... }` → `catch_unwind` + decoded `JException` match
-- `finally { ... }` → always-executed block (before rethrow if exception is not caught)
-- Multi-catch `catch (A | B e)` → OR-chained `is_instance_of` conditions
-- Nested `try/catch/finally` blocks
-- Try-with-resources `try (R r = new R()) { ... }` → desugared to `LocalVar` + `TryCatch` with `r.close()` in `finally`
-- `throws` declarations parsed and stored in IR; exceptions propagate through method boundaries via panics (semantically equivalent to Java runtime behaviour)
-- Exception hierarchy: `ArithmeticException`, `RuntimeException`, `IllegalArgumentException`, `IllegalStateException`, `NullPointerException`, `IndexOutOfBoundsException`, and others all recognised
-- Unhandled exceptions (not matched by any catch) are rethrown via `resume_unwind`
-- `e.getMessage()` on a caught exception returns the message string
+- `ArrayList` / `LinkedList` / `ArrayDeque` / `PriorityQueue` → `JList<T>` and friends
+- `HashMap` / `TreeMap` / `LinkedHashMap` / `EnumMap` → `JMap<K,V>` / `JEnumMap<K,V>`
+- `HashSet` / `TreeSet` / `LinkedHashSet` / `EnumSet` → `JSet<T>` / `JEnumSet<T>`
+- `Collections.sort()`, `Collections.reverse()`, `Collections.unmodifiableList/Map/Set()`, `Collections.emptyList/Map/Set()`, `Collections.singletonList()`, `Arrays.asList()`
+- `Iterator` with `hasNext()`/`next()`/`remove()`
 
-### Stage 6: Supported Java features
+### Exception Handling
 
-- `obj.getClass()` returns a `JClass` descriptor injected into every generated class
-- `JClass` supports `.getName()`, `.getSimpleName()`, `.getCanonicalName()` (all return the simple class name; no package prefix)
-- `toString()` overrides automatically generate `impl std::fmt::Display` for the class, enabling `println!("{}", obj)` and string concatenation with `+`
-- `equals(SameType)` type-checked with return type `bool`; `hashCode()` type-checked with return type `i32`
-- `@Override` and `@Deprecated` annotations parsed and silently tolerated on any method
-- Limitations: `Method.invoke`, `Field.get/set`, `Class.forName`, `getDeclaredMethods/Fields`, and `Proxy` are out of scope (runtime-only dynamic dispatch cannot be represented in a static Rust translation)
+- `throw` / `try` / `catch` / `finally` / multi-catch / nested try blocks
+- Try-with-resources (desugared to `finally` + `close()`)
+- `throws` declarations; exceptions propagate via panics
 
-### Stage 5: Supported Java features
+### Concurrency
 
-- `Thread` + `Runnable`: `new Thread(runnable)` → `JThread::new(move || { r.run(); })`, with `.start()` and `.join()`
-- `Thread.sleep(ms)` → `JThread::sleep(ms)`
-- `synchronized` methods → per-class `static OnceLock<(Mutex<()>, Condvar)>` monitor; body prefixed with lock acquisition
-- `synchronized(expr) { ... }` blocks → global process-wide monitor via `java_compat::__sync_block_monitor()`
-- `wait()` inside synchronized → `Condvar::wait` on the held guard (rebind pattern)
-- `notify()` / `notifyAll()` inside synchronized → `Condvar::notify_one` / `notify_all`
-- `volatile` primitive fields → `Arc<AtomicI32>` / `Arc<AtomicI64>` / `Arc<AtomicBool>`; reads emit `.load(SeqCst)`, writes emit `.store(SeqCst)`
-- `AtomicInteger` / `AtomicLong` / `AtomicBoolean` → `JAtomicInteger` / `JAtomicLong` / `JAtomicBoolean` with full method support: `get`, `set`, `incrementAndGet`, `getAndIncrement`, `decrementAndGet`, `addAndGet`, `getAndAdd`, `compareAndSet`
-- `CountDownLatch` → `JCountDownLatch` with `countDown()`, `await()`, `getCount()`
-- `Semaphore` → `JSemaphore` with `acquire()`, `release()`, `availablePermits()`
+- `Thread` creation, `.start()`, `.join()`, `Thread.sleep()`
+- `synchronized` methods and blocks
+- `wait()` / `notify()` / `notifyAll()`
+- `volatile` fields → atomic types with `SeqCst` ordering
+- `AtomicInteger` / `AtomicLong` / `AtomicBoolean`
+- `CountDownLatch`, `Semaphore`
 
-### Java to Rust type mapping
+### Standard Library
+
+- `Math` static methods, `StringBuilder`, `Optional<T>`, `Stream<T>` API
+- `Pattern` / `Matcher` regex, `BigInteger`, `LocalDate`, `File`
+- Lambda expressions → Rust closures
+
+### Java to Rust Type Mapping
 
 | Java | Rust |
 |---|---|
@@ -332,6 +298,8 @@ The project follows a staged delivery plan:
 | `List<T>` / `ArrayList<T>` | `java_compat::JList<T>` |
 | `Map<K,V>` / `HashMap<K,V>` | `java_compat::JMap<K,V>` |
 | `Set<T>` / `HashSet<T>` | `java_compat::JSet<T>` |
+| `EnumMap<K,V>` | `java_compat::JEnumMap<K,V>` |
+| `EnumSet<T>` | `java_compat::JEnumSet<T>` |
 | `Optional<T>` | `java_compat::JOptional<T>` |
 | `Stream<T>` | `java_compat::JStream<T>` |
 | `StringBuilder` | `java_compat::JStringBuilder` |
@@ -346,47 +314,11 @@ The project follows a staged delivery plan:
 | `ClassName` | `ClassName` (generated struct) |
 | `enum EnumName` | `enum EnumName` (generated Rust enum) |
 
-### Stage 7: Standard library coverage
-
-- `Math` static methods: `abs`, `max`, `min`, `pow`, `sqrt`, `floor`, `ceil`, `round`, `log`, `sin`, `cos`, `tan`, `exp`, `random`
-- `StringBuilder`: `append`, `toString`, `length`, `charAt`, `reverse`, `insert`, `delete`
-- `Optional<T>`: `of`, `empty`, `ofNullable`, `isPresent`, `get`, `orElse`, `ifPresent`, `filter`, `map`
-- `Stream<T>` API: `filter`, `map`, `sorted`, `distinct`, `collect(Collectors.toList())`, lambda expression support
-- `Pattern` / `Matcher`: `compile`, `matcher`, `find`, `group`, `matches`, `lookingAt`
-- `LocalDate`: `of`, `now`, `getYear`, `getMonthValue`, `getDayOfMonth`, `plusDays`, `plusMonths`, `plusYears`
-- `BigInteger`: `valueOf`, construction from string, `add`, `subtract`, `multiply`, `divide`, `mod`, `pow`, `abs`, `gcd`, `compareTo`
-- `File`: `exists`, `isFile`, `isDirectory`, `length`, `delete`, `mkdir`, `mkdirs`
-- Lambda expressions: `(params) -> { body }` → `|params| { body }` closures
-
-### Stage 8: Build integration and tooling
-
-- `jtrans translate` subcommand with `--input`, `--output`, `--classpath`, `--watch`, `--print`, `--dump-ir`
-- Incremental translation cache: SHA-256 hashing with `.jtrans-cache` file, skip unchanged files
-- `--watch` mode: filesystem monitoring via `notify` crate, auto re-translate on `.java` file changes
-- Source map generation: `.jtrans-map` files mapping Rust output lines back to Java source lines
-- Cargo.toml auto-generation in the output directory with `java-compat` dependency
-- Maven integration: `jtrans init-maven` generates an `exec-maven-plugin` fragment
-- Gradle integration: `jtrans init-gradle` generates a Kotlin DSL build script with `translateToRust` task
-- Recursive directory input: `--input src/` discovers all `.java` files
-- Legacy positional CLI mode preserved for backwards compatibility
-
-### Stage 9: Enum support
-
-- Simple enums: `enum Color { RED, GREEN, BLUE }` with unit variants
-- Enums with fields and constructors: data stored via `__data()` match with tuple accessors
-- Built-in enum methods: `name()`, `ordinal()`, `values()`, `valueOf()`, `equals()`
-- User-defined enum methods (static and instance)
-- Enum switch statements with bare constant labels (`case RED:`)
-- Enum equality via `==` and `.equals()` (derives `PartialEq`, `Eq`)
-- Inner enums promoted to top-level Rust enums
-- `Display` impl for enums (calls `name()`)
-
 ## Documentation
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) -- IR design, pass ordering, codegen strategy, and testing approach
 - [TRANSLATION_REFERENCE.md](TRANSLATION_REFERENCE.md) -- every supported Java construct and its Rust equivalent
 - [LIMITATIONS.md](LIMITATIONS.md) -- unsupported Java features and known gaps
-- [PROJECT_PLAN.md](PROJECT_PLAN.md) -- staged delivery plan with task checklists
 
 ### Rustdoc
 

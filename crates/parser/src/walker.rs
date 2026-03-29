@@ -1550,6 +1550,9 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
             }
         }
 
+        // ── class literal (e.g. Day.class) ────────────────────────────────
+        "class_literal" => Ok(IrExpr::LitInt(0)),
+
         // ── fallback ──────────────────────────────────────────────────────
         other => Err(ParseError::Unsupported(format!(
             "unsupported expression kind: {other}"

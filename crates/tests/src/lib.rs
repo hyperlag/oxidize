@@ -867,4 +867,17 @@ Expression calculator tests complete",
     fn test_enum_compare() {
         check("EnumCompare.java", "true\nfalse\ntrue\nFALL");
     }
+
+    #[test]
+    fn test_enum_map_basic() {
+        check("EnumMapBasic.java", "3\nMonday\ntrue\nfalse\n2\nfalse");
+    }
+
+    #[test]
+    fn test_enum_set_basic() {
+        check(
+            "EnumSetBasic.java",
+            "2\ntrue\nfalse\n1\nfalse\n2\ntrue\nfalse",
+        );
+    }
 }
