@@ -1906,8 +1906,11 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                         // Check if arg is a FileWriter/File type or a String path
                         let arg_ty = args.first().map(|e| e.ty());
                         match arg_ty {
-                            Some(IrType::Class(ref c)) if c == "FileWriter" || c == "File" => {
+                            Some(IrType::Class(ref c)) if c == "FileWriter" => {
                                 Ok(quote! { JPrintWriter::from_writer(#a) })
+                            }
+                            Some(IrType::Class(ref c)) if c == "File" => {
+                                Ok(quote! { JPrintWriter::from_file(&#a) })
                             }
                             _ => Ok(quote! { JPrintWriter::new_from_path(#a) }),
                         }

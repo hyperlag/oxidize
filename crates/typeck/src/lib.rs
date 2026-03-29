@@ -837,7 +837,7 @@ fn resolve_method_return_type(
     class_map: &HashMap<String, IrClass>,
 ) -> IrType {
     // System.out.println / System.err.println → void
-    if method_name == "println" || method_name == "print" || method_name == "printf" {
+    if method_name == "println" || method_name == "print" {
         return IrType::Void;
     }
 
@@ -1027,8 +1027,11 @@ fn resolve_method_return_type(
                 },
                 // PrintWriter methods
                 "PrintWriter" | "JPrintWriter" => match method_name {
-                    "println" | "print" | "printf" | "write" | "flush" | "close" => {
+                    "println" | "print" | "write" | "flush" | "close" => {
                         return IrType::Void
+                    }
+                    "printf" => {
+                        return IrType::Class(class_name.to_owned())
                     }
                     _ => {}
                 },

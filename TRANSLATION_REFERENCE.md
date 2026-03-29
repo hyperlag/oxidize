@@ -885,7 +885,7 @@ pub counter: Arc<AtomicI32>,
 |-------------------------------|--------------------------------------|
 | `new FileReader(path)`       | `JFileReader::new(path)`             |
 | `new FileWriter(path)`       | `JFileWriter::new(path)`             |
-| `new FileWriter(path, true)` | `JFileWriter::new_append(path)`      |
+| `new FileWriter(path, true)` | `JFileWriter::new_append(path, true)` |
 
 ### FileInputStream / FileOutputStream
 
@@ -893,7 +893,7 @@ pub counter: Arc<AtomicI32>,
 |---------------------------------------|----------------------------------------------|
 | `new FileInputStream(path)`          | `JFileInputStream::new(path)`                |
 | `new FileOutputStream(path)`         | `JFileOutputStream::new(path)`               |
-| `new FileOutputStream(path, true)`   | `JFileOutputStream::new_append(path)`        |
+| `new FileOutputStream(path, true)`   | `JFileOutputStream::new_append(path, true)`  |
 | `fis.read()`                          | `fis.read()`                                 |
 | `fos.write(b)`                        | `fos.write_byte(b)`                          |
 | `fos.flush()`                         | `fos.flush()`                                |
@@ -902,7 +902,7 @@ pub counter: Arc<AtomicI32>,
 
 | Java                              | Rust                                     |
 |-----------------------------------|------------------------------------------|
-| `new Scanner(new File(path))`    | `JScanner::from_file(path)`              |
+| `new Scanner(new File(path))`    | `JScanner::from_file(&JFile::new(path))`         |
 | `new Scanner(string)`            | `JScanner::from_string(string)`          |
 | `sc.hasNextLine()`               | `sc.hasNextLine()`                       |
 | `sc.nextLine()`                  | `sc.nextLine()`                          |

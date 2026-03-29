@@ -252,7 +252,7 @@ impl JBufferedReader {
         }
     }
 
-    /// Java `br.readLine()` — returns null (empty JString) at EOF.
+    /// Java `br.readLine()` — returns an empty `JString` at EOF.
     pub fn readLine(&mut self) -> JString {
         let mut line = String::new();
         match self.inner.read_line(&mut line) {
@@ -442,8 +442,9 @@ impl std::fmt::Debug for JFileReader {
 
 impl Default for JFileReader {
     fn default() -> Self {
+        let null_path = if cfg!(windows) { "NUL" } else { "/dev/null" };
         Self {
-            file: std::fs::File::open("/dev/null")
+            file: std::fs::File::open(null_path)
                 .unwrap_or_else(|e| panic!("JException:IOException:{}", e)),
         }
     }
@@ -492,8 +493,9 @@ impl std::fmt::Debug for JFileWriter {
 
 impl Default for JFileWriter {
     fn default() -> Self {
+        let null_path = if cfg!(windows) { "NUL" } else { "/dev/null" };
         Self {
-            file: std::fs::File::create("/dev/null")
+            file: std::fs::File::create(null_path)
                 .unwrap_or_else(|e| panic!("JException:IOException:{}", e)),
         }
     }
@@ -550,8 +552,9 @@ impl std::fmt::Debug for JFileInputStream {
 
 impl Default for JFileInputStream {
     fn default() -> Self {
+        let null_path = if cfg!(windows) { "NUL" } else { "/dev/null" };
         Self {
-            file: std::fs::File::open("/dev/null")
+            file: std::fs::File::open(null_path)
                 .unwrap_or_else(|e| panic!("JException:IOException:{}", e)),
         }
     }
@@ -616,8 +619,9 @@ impl std::fmt::Debug for JFileOutputStream {
 
 impl Default for JFileOutputStream {
     fn default() -> Self {
+        let null_path = if cfg!(windows) { "NUL" } else { "/dev/null" };
         Self {
-            file: std::fs::File::create("/dev/null")
+            file: std::fs::File::create(null_path)
                 .unwrap_or_else(|e| panic!("JException:IOException:{}", e)),
         }
     }
@@ -782,15 +786,21 @@ impl JScanner {
     /// Get the next whitespace-delimited token from the current line position.
     fn next_token(&mut self) -> Option<String> {
         while self.pos < self.lines.len() {
-            let line = &self.lines[self.pos];
-            // Find first non-consumed token in this line
-            let tokens: Vec<&str> = line.split_whitespace().collect();
-            if !tokens.is_empty() {
-                // For simplicity, consume the whole line and return first token.
-                // Remaining tokens on this line are lost (acceptable for most test cases).
-                self.pos += 1;
-                return Some(tokens[0].to_string());
+            let line = self.lines[self.pos].clone();
+            let mut iter = line.split_whitespace();
+            if let Some(first) = iter.next() {
+                let token = first.to_string();
+                let remaining_tokens: Vec<&str> = iter.collect();
+                if remaining_tokens.is_empty() {
+                    // No more tokens on this line; advance to the next line.
+                    self.pos += 1;
+                } else {
+                    // Preserve remaining tokens for subsequent calls.
+                    self.lines[self.pos] = remaining_tokens.join(" ");
+                }
+                return Some(token);
             }
+            // Line contained no tokens; move to the next line.
             self.pos += 1;
         }
         None
