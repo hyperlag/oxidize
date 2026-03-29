@@ -31,6 +31,9 @@ out/
 # Temp test scripts
 run_tests*.sh
 
+# Internal planning docs
+*_PLAN.md
+
 # OS
 Thumbs.db
 

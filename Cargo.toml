@@ -11,11 +11,11 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["oxidize Contributors"]
 license = "GPL-3.0-only"
-repository = "https://github.com/YOUR_USERNAME/oxidize"
+repository = "https://github.com/hyperlag/oxidize"
 
 [workspace.dependencies]
 # IR crate

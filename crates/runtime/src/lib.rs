@@ -9,6 +9,8 @@ pub mod atomic;
 pub mod bigint;
 pub mod collections_util;
 pub mod concurrent;
+pub mod enum_map;
+pub mod enum_set;
 pub mod exception;
 pub mod io;
 pub mod iterator;
@@ -35,6 +37,8 @@ pub use array::JArray;
 pub use atomic::{JAtomicBoolean, JAtomicInteger, JAtomicLong};
 pub use bigint::JBigInteger;
 pub use concurrent::{JCountDownLatch, JSemaphore, __sync_block_monitor};
+pub use enum_map::JEnumMap;
+pub use enum_set::JEnumSet;
 pub use exception::JException;
 pub use io::JFile;
 pub use iterator::JIterator;
@@ -61,8 +65,9 @@ pub use tree_set::JTreeSet;
 pub mod prelude {
     pub use super::{
         JArray, JAtomicBoolean, JAtomicInteger, JAtomicLong, JBigInteger, JClass, JCountDownLatch,
-        JException, JFile, JIterator, JLinkedHashMap, JLinkedHashSet, JLinkedList, JList,
-        JLocalDate, JMap, JMatcher, JNull, JObject, JOptional, JPattern, JPriorityQueue,
-        JSemaphore, JSet, JStream, JString, JStringBuilder, JThread, JTreeMap, JTreeSet,
+        JEnumMap, JEnumSet, JException, JFile, JIterator, JLinkedHashMap, JLinkedHashSet,
+        JLinkedList, JList, JLocalDate, JMap, JMatcher, JNull, JObject, JOptional, JPattern,
+        JPriorityQueue, JSemaphore, JSet, JStream, JString, JStringBuilder, JThread, JTreeMap,
+        JTreeSet,
     };
 }

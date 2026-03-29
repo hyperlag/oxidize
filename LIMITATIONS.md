@@ -81,14 +81,14 @@ Basic threading (`Thread`, `synchronized`, `volatile`, `AtomicInteger`,
 
 The core collections (`ArrayList`, `HashMap`, `HashSet`) are supported, along
 with `LinkedList`, `ArrayDeque`, `PriorityQueue`, `TreeMap`, `TreeSet`,
-`LinkedHashMap`, `LinkedHashSet`, `Collections.sort()`, `Collections.reverse()`,
+`LinkedHashMap`, `LinkedHashSet`, `EnumMap`, `EnumSet`,
+`Collections.sort()`, `Collections.reverse()`,
 `Collections.unmodifiableList/Map/Set()`, `Collections.emptyList/Map/Set()`,
 `Collections.singletonList()`, `Arrays.asList()`, and `Iterator` with
 `hasNext()`/`next()`/`remove()`.
 
 The following are **not** supported:
 
-- `EnumMap`, `EnumSet`
 - `Spliterator`
 - Map `keySet()`/`values()`/`entrySet()` iteration
 
@@ -154,7 +154,6 @@ The following advanced enum features are **not** supported:
 - Constant-specific class bodies (methods that differ per variant)
 - Abstract methods declared on the enum and implemented per constant
 - Enums implementing interfaces
-- `EnumMap` and `EnumSet`
 
 ### Records (Java 16+)
 

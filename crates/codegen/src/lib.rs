@@ -53,6 +53,7 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             JLocalDate, JFile, JStream,
             JLinkedList, JPriorityQueue, JTreeMap, JTreeSet,
             JLinkedHashMap, JLinkedHashSet, JIterator,
+            JEnumMap, JEnumSet,
         };
     });
 
@@ -206,7 +207,7 @@ fn emit_enum(
 
     // Enum definition with derives
     let enum_def = quote! {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub enum #name {
             #(#variant_idents),*
         }
@@ -1653,6 +1654,34 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             __list
                         } });
                     }
+                    // EnumSet.noneOf(...) / EnumSet.of(...) / EnumSet.allOf(...)
+                    // Class-literal args (e.g. Color.class) are filtered out by the
+                    // walker, so args_ts is empty for noneOf/allOf.
+                    if name == "EnumSet" {
+                        return match method_name.as_str() {
+                            "noneOf" => Ok(quote! { JEnumSet::new() }),
+                            "of" => Ok(quote! { JEnumSet::of(vec![#(#args_ts),*]) }),
+                            "allOf" => {
+                                // allOf requires all enum variants, which this code generator
+                                // cannot construct statically — panic at runtime rather than
+                                // silently returning an incorrect empty set.
+                                Ok(quote! {{
+                                    panic!(
+                                        "EnumSet::allOf(...) is not supported by this code generator; \
+                                         use EnumSet::of(...) or EnumSet::noneOf(...) instead"
+                                    )
+                                }})
+                            }
+                            "copyOf" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a).clone() })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JEnumSet::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
                     // Enum static method calls: Color.values(), Color.valueOf(...)
                     // Resolve through alias map for mangled inner enum names.
                     let canonical_enum =
@@ -1736,6 +1765,8 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 "HashSet" => Ok(quote! { JSet::new() }),
                 "LinkedHashSet" => Ok(quote! { JLinkedHashSet::new() }),
                 "TreeSet" => Ok(quote! { JTreeSet::new() }),
+                "EnumMap" => Ok(quote! { JEnumMap::new() }),
+                "EnumSet" => Ok(quote! { JEnumSet::new() }),
                 "PriorityQueue" => Ok(quote! { JPriorityQueue::new() }),
                 "AtomicInteger" => Ok(quote! { JAtomicInteger::new(#(#args_ts),*) }),
                 "AtomicLong" => Ok(quote! { JAtomicLong::new(#(#args_ts),*) }),
@@ -2104,6 +2135,11 @@ fn emit_type(ty: &IrType) -> TokenStream {
                         let v = emit_type(args.get(1).unwrap_or(&IrType::Unknown));
                         return quote! { JTreeMap<#k, #v> };
                     }
+                    "EnumMap" => {
+                        let k = emit_type(args.first().unwrap_or(&IrType::Unknown));
+                        let v = emit_type(args.get(1).unwrap_or(&IrType::Unknown));
+                        return quote! { JEnumMap<#k, #v> };
+                    }
                     "Set" | "HashSet" => {
                         let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
                         return quote! { JSet<#a> };
@@ -2115,6 +2151,10 @@ fn emit_type(ty: &IrType) -> TokenStream {
                     "TreeSet" => {
                         let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
                         return quote! { JTreeSet<#a> };
+                    }
+                    "EnumSet" => {
+                        let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
+                        return quote! { JEnumSet<#a> };
                     }
                     "Optional" => {
                         let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
