@@ -54,6 +54,9 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             JLinkedList, JPriorityQueue, JTreeMap, JTreeSet,
             JLinkedHashMap, JLinkedHashSet, JIterator,
             JEnumMap, JEnumSet,
+            JBufferedReader, JBufferedWriter, JPrintWriter,
+            JFileReader, JFileWriter, JFileInputStream, JFileOutputStream,
+            JScanner, JPath, JPaths, JFiles,
         };
     });
 
@@ -1682,6 +1685,88 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             }
                         };
                     }
+                    // Files.readString / Files.writeString / etc.
+                    if name == "Files" {
+                        return match method_name.as_str() {
+                            "readString" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JFiles::readString(&#a) })
+                            }
+                            "writeString" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { JFiles::writeString(&#a, #b) })
+                            }
+                            "readAllLines" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JFiles::readAllLines(&#a) })
+                            }
+                            "write" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { JFiles::write_lines(&#a, &#b) })
+                            }
+                            "exists" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JFiles::exists(&#a) })
+                            }
+                            "isDirectory" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JFiles::isDirectory(&#a) })
+                            }
+                            "isRegularFile" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JFiles::isRegularFile(&#a) })
+                            }
+                            "size" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JFiles::size(&#a) })
+                            }
+                            "delete" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JFiles::delete(&#a) })
+                            }
+                            "deleteIfExists" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JFiles::deleteIfExists(&#a) })
+                            }
+                            "createDirectory" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JFiles::createDirectory(&#a) })
+                            }
+                            "createDirectories" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JFiles::createDirectories(&#a) })
+                            }
+                            "copy" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { JFiles::copy(&#a, &#b) })
+                            }
+                            "move" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { JFiles::move_path(&#a, &#b) })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JFiles::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // Paths.get(...)
+                    if name == "Paths" {
+                        return match method_name.as_str() {
+                            "get" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JPath::get(#a) })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JPaths::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
                     // Enum static method calls: Color.values(), Color.valueOf(...)
                     // Resolve through alias map for mangled inner enum names.
                     let canonical_enum =
@@ -1788,6 +1873,85 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                         Ok(quote! { JFile::new_child(#a, #b) })
                     } else {
                         Ok(quote! { JFile::new(#(#args_ts),*) })
+                    }
+                }
+                "BufferedReader" => {
+                    // new BufferedReader(new FileReader(...)) or (new InputStreamReader(System.in))
+                    if args_ts.is_empty() {
+                        Ok(quote! { JBufferedReader::new_stdin() })
+                    } else {
+                        let a = &args_ts[0];
+                        let arg_ty = args.first().map(|e| e.ty());
+                        match arg_ty {
+                            Some(IrType::Class(ref c)) if c == "InputStreamReader" => {
+                                Ok(quote! { JBufferedReader::new_stdin() })
+                            }
+                            _ => Ok(quote! { JBufferedReader::from_reader(#a) }),
+                        }
+                    }
+                }
+                "BufferedWriter" => {
+                    if args_ts.is_empty() {
+                        Ok(quote! { JBufferedWriter::default() })
+                    } else {
+                        let a = &args_ts[0];
+                        Ok(quote! { JBufferedWriter::from_writer(#a) })
+                    }
+                }
+                "PrintWriter" => {
+                    if args_ts.is_empty() {
+                        Ok(quote! { JPrintWriter::default() })
+                    } else {
+                        let a = &args_ts[0];
+                        // Check if arg is a FileWriter/File type or a String path
+                        let arg_ty = args.first().map(|e| e.ty());
+                        match arg_ty {
+                            Some(IrType::Class(ref c)) if c == "FileWriter" => {
+                                Ok(quote! { JPrintWriter::from_writer(#a) })
+                            }
+                            Some(IrType::Class(ref c)) if c == "File" => {
+                                Ok(quote! { JPrintWriter::from_file(&#a) })
+                            }
+                            _ => Ok(quote! { JPrintWriter::new_from_path(#a) }),
+                        }
+                    }
+                }
+                "FileReader" => Ok(quote! { JFileReader::new(#(#args_ts),*) }),
+                "FileWriter" => {
+                    if args_ts.len() == 2 {
+                        let a = &args_ts[0];
+                        let b = &args_ts[1];
+                        Ok(quote! { JFileWriter::new_append(#a, #b) })
+                    } else {
+                        Ok(quote! { JFileWriter::new(#(#args_ts),*) })
+                    }
+                }
+                "FileInputStream" => Ok(quote! { JFileInputStream::new(#(#args_ts),*) }),
+                "FileOutputStream" => {
+                    if args_ts.len() == 2 {
+                        let a = &args_ts[0];
+                        let b = &args_ts[1];
+                        Ok(quote! { JFileOutputStream::new_append(#a, #b) })
+                    } else {
+                        Ok(quote! { JFileOutputStream::new(#(#args_ts),*) })
+                    }
+                }
+                "InputStreamReader" => {
+                    // new InputStreamReader(System.in) → placeholder, typically wrapped in BufferedReader
+                    Ok(quote! { JFileReader::default() })
+                }
+                "Scanner" => {
+                    if args_ts.is_empty() {
+                        Ok(quote! { JScanner::new_stdin() })
+                    } else {
+                        let a = &args_ts[0];
+                        let arg_ty = args.first().map(|e| e.ty());
+                        match arg_ty {
+                            Some(IrType::Class(ref c)) if c == "File" => {
+                                Ok(quote! { JScanner::from_file(&#a) })
+                            }
+                            _ => Ok(quote! { JScanner::from_string(#a) }),
+                        }
                     }
                 }
                 "Thread" => {
@@ -2087,6 +2251,17 @@ fn emit_type(ty: &IrType) -> TokenStream {
                 "Matcher" => quote! { JMatcher },
                 "LocalDate" => quote! { JLocalDate },
                 "File" => quote! { JFile },
+                "BufferedReader" => quote! { JBufferedReader },
+                "BufferedWriter" => quote! { JBufferedWriter },
+                "PrintWriter" => quote! { JPrintWriter },
+                "FileReader" => quote! { JFileReader },
+                "FileWriter" => quote! { JFileWriter },
+                "FileInputStream" => quote! { JFileInputStream },
+                "FileOutputStream" => quote! { JFileOutputStream },
+                "InputStreamReader" => quote! { JFileReader },
+                "Scanner" => quote! { JScanner },
+                "Path" => quote! { JPath },
+                "Files" => quote! { JFiles },
                 "JStream" => quote! { JStream },
                 _ => {
                     // Resolve through the enum alias map so that a type

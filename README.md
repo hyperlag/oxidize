@@ -210,7 +210,7 @@ cargo test
 
 The differential integration tests in `crates/tests` compile and run each translated Rust
 program, then assert that stdout matches the expected output. No JDK is required to run
-the tests. The suite currently contains **89 differential tests**:
+the tests. The suite currently contains **93 differential tests**:
 
 ```bash
 cargo test -p tests -- --test-threads=4
@@ -275,6 +275,13 @@ cargo test -p tests -- --test-threads=4
 - `Pattern` / `Matcher` regex, `BigInteger`, `LocalDate`, `File`
 - Lambda expressions → Rust closures
 
+### I/O and NIO
+
+- `FileReader`, `FileWriter`, `BufferedReader`, `BufferedWriter`, `PrintWriter`
+- `FileInputStream`, `FileOutputStream`
+- `Scanner` (from `File` or `String`: `nextLine`, `next`, `nextInt`, `nextDouble`, `nextLong`, `hasNextLine`, `hasNext`, `hasNextInt`)
+- `java.nio.file.Path`, `Paths.get()`, `Files` (`readString`, `writeString`, `readAllLines`, `write`, `exists`, `isDirectory`, `isRegularFile`, `size`, `delete`, `deleteIfExists`, `createDirectory`, `createDirectories`, `copy`, `move`)
+
 ### Java to Rust Type Mapping
 
 | Java | Rust |
@@ -307,6 +314,16 @@ cargo test -p tests -- --test-threads=4
 | `Pattern` / `Matcher` | `java_compat::JPattern` / `JMatcher` |
 | `LocalDate` | `java_compat::JLocalDate` |
 | `File` | `java_compat::JFile` |
+| `FileReader` | `java_compat::JFileReader` |
+| `FileWriter` | `java_compat::JFileWriter` |
+| `BufferedReader` | `java_compat::JBufferedReader` |
+| `BufferedWriter` | `java_compat::JBufferedWriter` |
+| `PrintWriter` | `java_compat::JPrintWriter` |
+| `FileInputStream` | `java_compat::JFileInputStream` |
+| `FileOutputStream` | `java_compat::JFileOutputStream` |
+| `Scanner` | `java_compat::JScanner` |
+| `Path` | `java_compat::JPath` |
+| `Files` | `java_compat::JFiles` |
 | `AtomicInteger` | `java_compat::JAtomicInteger` |
 | `CountDownLatch` | `java_compat::JCountDownLatch` |
 | `Semaphore` | `java_compat::JSemaphore` |

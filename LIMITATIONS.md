@@ -104,11 +104,18 @@ The following are **not** supported:
 
 ### java.io / java.nio
 
-- `InputStream` / `OutputStream` (byte stream I/O)
-- `Reader` / `Writer` (character stream I/O)
-- `BufferedReader` / `PrintWriter`
+The following java.io classes are supported: `File`, `FileReader`, `FileWriter`,
+`BufferedReader`, `BufferedWriter`, `PrintWriter`, `FileInputStream`,
+`FileOutputStream`, and `Scanner`. The following java.nio.file classes are
+supported: `Path`, `Paths`, and `Files` (with `readString`, `writeString`,
+`readAllLines`, `write`, `exists`, `isDirectory`, `isRegularFile`, `size`,
+`delete`, `deleteIfExists`, `createDirectory`, `createDirectories`, `copy`,
+`move`).
+
+The following are **not** supported:
+
+- Abstract `InputStream` / `OutputStream` / `Reader` / `Writer` base classes
 - `java.nio.channels` (NIO channels and selectors)
-- `java.nio.file.Files` utility methods (beyond `File` basics)
 - Serialization (`Serializable`, `ObjectInputStream`, `ObjectOutputStream`)
 
 ### java.net
@@ -119,7 +126,6 @@ The following are **not** supported:
 
 ### java.util
 
-- `Scanner`
 - `Formatter`
 - `Properties`
 - `ResourceBundle`

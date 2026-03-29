@@ -40,7 +40,10 @@ pub use concurrent::{JCountDownLatch, JSemaphore, __sync_block_monitor};
 pub use enum_map::JEnumMap;
 pub use enum_set::JEnumSet;
 pub use exception::JException;
-pub use io::JFile;
+pub use io::{
+    JBufferedReader, JBufferedWriter, JFile, JFileInputStream, JFileOutputStream, JFileReader,
+    JFileWriter, JFiles, JPath, JPaths, JPrintWriter, JScanner,
+};
 pub use iterator::JIterator;
 pub use linked_hash_map::JLinkedHashMap;
 pub use linked_hash_set::JLinkedHashSet;
@@ -64,10 +67,11 @@ pub use tree_set::JTreeSet;
 /// Convenience re-export of all runtime types.
 pub mod prelude {
     pub use super::{
-        JArray, JAtomicBoolean, JAtomicInteger, JAtomicLong, JBigInteger, JClass, JCountDownLatch,
-        JEnumMap, JEnumSet, JException, JFile, JIterator, JLinkedHashMap, JLinkedHashSet,
-        JLinkedList, JList, JLocalDate, JMap, JMatcher, JNull, JObject, JOptional, JPattern,
-        JPriorityQueue, JSemaphore, JSet, JStream, JString, JStringBuilder, JThread, JTreeMap,
-        JTreeSet,
+        JArray, JAtomicBoolean, JAtomicInteger, JAtomicLong, JBigInteger, JBufferedReader,
+        JBufferedWriter, JClass, JCountDownLatch, JEnumMap, JEnumSet, JException, JFile,
+        JFileInputStream, JFileOutputStream, JFileReader, JFileWriter, JFiles, JIterator,
+        JLinkedHashMap, JLinkedHashSet, JLinkedList, JList, JLocalDate, JMap, JMatcher, JNull,
+        JObject, JOptional, JPath, JPaths, JPattern, JPrintWriter, JPriorityQueue, JScanner,
+        JSemaphore, JSet, JStream, JString, JStringBuilder, JThread, JTreeMap, JTreeSet,
     };
 }

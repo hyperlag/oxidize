@@ -880,4 +880,33 @@ Expression calculator tests complete",
             "2\ntrue\nfalse\n1\nfalse\n2\ntrue\nfalse",
         );
     }
+
+    #[test]
+    fn test_buffered_reader_writer() {
+        check(
+            "BufferedReaderWriter.java",
+            "Hello from BufferedWriter\nSecond line\nThird line\nExists: true\nDeleted: true",
+        );
+    }
+
+    #[test]
+    fn test_print_writer() {
+        check(
+            "PrintWriterTest.java",
+            "Line one\nLine two\nLine three\nFrom FileWriter\nDone",
+        );
+    }
+
+    #[test]
+    fn test_nio_files() {
+        check(
+            "NioFilesTest.java",
+            "File exists: true\nIs regular file: true\nContent: Hello NIO\nSize: 9\nalpha\nbeta\ngamma\nAbsolute path ends with test_nio.txt: true\nFile name: test_nio.txt\nDeleted: true",
+        );
+    }
+
+    #[test]
+    fn test_scanner() {
+        check("ScannerTest.java", "Hello World\n42\n3.14\nLast line\nDone");
+    }
 }
