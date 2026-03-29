@@ -1358,10 +1358,7 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
             // (e.g. Color.class) used only as a type token — skip it.
             let skip_class_literals = receiver.as_ref().is_some_and(|r| {
                 matches!(r.as_ref(), IrExpr::Var { name, .. } if name == "EnumSet")
-                    && matches!(
-                        method_name.as_str(),
-                        "noneOf" | "allOf"
-                    )
+                    && matches!(method_name.as_str(), "noneOf" | "allOf")
             });
             let args = child_by_field(node, "arguments")
                 .map(|args_node| {
