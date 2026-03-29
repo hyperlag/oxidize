@@ -15,9 +15,16 @@ use thiserror::Error;
 thread_local! {
     /// Whether the currently-emitted method is static (no `self` receiver).
     static IN_STATIC_METHOD: Cell<bool> = const { Cell::new(false) };
-    /// Set of enum type names known in the current module.
-    static ENUM_NAMES: std::cell::RefCell<std::collections::HashSet<String>> =
-        std::cell::RefCell::new(std::collections::HashSet::new());
+    /// Maps every known enum name to its canonical (potentially mangled) Rust
+    /// identifier.  For a top-level enum `Color` the entry is `"Color" →
+    /// "Color"`.  For an inner enum that was promoted and mangled (e.g.
+    /// `"Outer$Day"`) there are *two* entries:
+    ///   `"Outer$Day"  → "Outer$Day"`   (full mangled key)
+    ///   `"Day"        → "Outer$Day"`   (simple-name alias)
+    /// This lets the codegen resolve `Season` → `EnumCompare$Season` even
+    /// though the IR still carries the pre-mangling simple name.
+    static ENUM_NAMES: std::cell::RefCell<std::collections::HashMap<String, String>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
     /// Field names of the enum currently being emitted (empty when not in an enum method).
     static ENUM_FIELD_NAMES: std::cell::RefCell<std::collections::HashSet<String>> =
         std::cell::RefCell::new(std::collections::HashSet::new());
@@ -86,12 +93,20 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
         })
         .collect();
 
-    // Populate thread-local enum names for expression emission
+    // Populate thread-local enum names for expression emission.
+    // For mangled names like "Outer$Day" we also register the simple name
+    // "Day" as an alias so that IR references using the short form still
+    // resolve to the correct Rust identifier.
     ENUM_NAMES.with(|names| {
         let mut names = names.borrow_mut();
         names.clear();
         for name in enum_map.keys() {
-            names.insert(name.clone());
+            // canonical entry: full name → full name
+            names.insert(name.clone(), name.clone());
+            // alias entry: simple name → full name (for mangled names like "A$B")
+            if let Some(simple) = name.rfind('$').map(|i| &name[i + 1..]) {
+                names.entry(simple.to_owned()).or_insert_with(|| name.clone());
+            }
         }
     });
 
@@ -206,14 +221,14 @@ fn emit_enum(
             .iter()
             .map(|c| {
                 let cname = ident(&c.name);
-                let arg_exprs: Vec<TokenStream> = c
+                let arg_exprs = c
                     .args
                     .iter()
-                    .map(|a| emit_expr(a).unwrap_or_else(|_| quote! { Default::default() }))
-                    .collect();
-                quote! { Self::#cname => (#(#arg_exprs),*,) }
+                    .map(|a| emit_expr(a))
+                    .collect::<Result<Vec<_>, CodegenError>>()?;
+                Ok(quote! { Self::#cname => (#(#arg_exprs),*,) })
             })
-            .collect();
+            .collect::<Result<Vec<_>, CodegenError>>()?;
         impl_methods.push(quote! {
             fn __data(&self) -> (#(#field_types),*,) {
                 match self {
@@ -1067,14 +1082,11 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
         } => {
             let expr_ts = emit_expr(expr)?;
 
-            // Check if we're switching on an enum type
+            // Check if we're switching on an enum type; resolve through alias
+            // map so that mangled names like `EnumCompare$Season` are found
+            // even when the IR carries the simple name `Season`.
             let enum_type_name = if let IrType::Class(ref name) = expr.ty() {
-                let is_enum = ENUM_NAMES.with(|names| names.borrow().contains(name.as_str()));
-                if is_enum {
-                    Some(name.clone())
-                } else {
-                    None
-                }
+                ENUM_NAMES.with(|names| names.borrow().get(name.as_str()).cloned())
             } else {
                 None
             };
@@ -1324,10 +1336,12 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             ty,
         } => {
             // Enum constant access: Color.RED → Color::RED
+            // Resolve through the alias map so mangled names work too.
             if let IrExpr::Var { name, .. } = receiver.as_ref() {
-                let is_enum = ENUM_NAMES.with(|names| names.borrow().contains(name.as_str()));
-                if is_enum {
-                    let enum_ident = ident(name);
+                let canonical =
+                    ENUM_NAMES.with(|names| names.borrow().get(name.as_str()).cloned());
+                if let Some(canonical_name) = canonical {
+                    let enum_ident = ident(&canonical_name);
                     let const_ident = ident(field_name);
                     return Ok(quote! { #enum_ident::#const_ident });
                 }
@@ -1635,9 +1649,11 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                         } });
                     }
                     // Enum static method calls: Color.values(), Color.valueOf(...)
-                    let is_enum = ENUM_NAMES.with(|names| names.borrow().contains(name.as_str()));
-                    if is_enum {
-                        let enum_ident = ident(name);
+                    // Resolve through alias map for mangled inner enum names.
+                    let canonical_enum =
+                        ENUM_NAMES.with(|names| names.borrow().get(name.as_str()).cloned());
+                    if let Some(canonical_name) = canonical_enum {
+                        let enum_ident = ident(&canonical_name);
                         let m = ident(method_name);
                         return Ok(quote! { #enum_ident::#m(#(#args_ts),*) });
                     }
@@ -2037,7 +2053,13 @@ fn emit_type(ty: &IrType) -> TokenStream {
                 "File" => quote! { JFile },
                 "JStream" => quote! { JStream },
                 _ => {
-                    let id = ident(name);
+                    // Resolve through the enum alias map so that a type
+                    // annotation like `Season` emits `EnumCompare_Season`
+                    // when `Season` is an inner-enum promoted with mangling.
+                    let canonical = ENUM_NAMES
+                        .with(|names| names.borrow().get(name.as_str()).cloned());
+                    let emit_name = canonical.as_deref().unwrap_or(name.as_str());
+                    let id = ident(emit_name);
                     quote! { #id }
                 }
             }

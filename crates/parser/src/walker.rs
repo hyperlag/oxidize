@@ -106,8 +106,16 @@ fn lower_program(node: Node<'_>, src: &[u8]) -> Result<IrModule, ParseError> {
             }
             "class_declaration" => {
                 let (cls, inner_enums) = lower_class(child, src)?;
+                let cls_name = cls.name.clone();
                 module.decls.push(IrDecl::Class(cls));
-                for enm in inner_enums {
+                for mut enm in inner_enums {
+                    // Mangle nested enum names with the enclosing class name
+                    // (e.g. `Outer$Day`) to avoid collisions when multiple
+                    // classes define nested enums with the same simple name.
+                    let prefix = format!("{}$", cls_name);
+                    if !enm.name.starts_with(&prefix) {
+                        enm.name = format!("{}{}", prefix, enm.name);
+                    }
                     module.decls.push(IrDecl::Enum(enm));
                 }
             }
@@ -353,6 +361,12 @@ fn lower_enum(node: Node<'_>, src: &[u8]) -> Result<IrEnum, ParseError> {
                                 methods.push(lower_method(decl, src)?);
                             }
                             "constructor_declaration" => {
+                                if constructor.is_some() {
+                                    return Err(ParseError::Unsupported(
+                                        "multiple enum constructors are not supported"
+                                            .to_string(),
+                                    ));
+                                }
                                 constructor = Some(lower_constructor(decl, src)?);
                             }
                             _ => {}
@@ -793,18 +807,20 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
             for (kind, _id, child) in &flat_children {
                 match kind.as_str() {
                     "switch_label" => {
-                        // flush previous case if any
-                        if !current_values.is_empty() && !current_stmts.is_empty() {
+                        // Flush the previous case group when we have accumulated
+                        // statements.  Crucially we capture the default body
+                        // *before* draining/clearing the group so that patterns
+                        // like `case A: default: <stmts>` are handled correctly.
+                        if !current_stmts.is_empty() {
+                            if is_default {
+                                default = Some(current_stmts.clone());
+                            }
                             for val in current_values.drain(..) {
                                 cases.push(SwitchCase {
                                     value: val,
                                     body: current_stmts.clone(),
                                 });
                             }
-                            current_stmts.clear();
-                        }
-                        if is_default && !current_stmts.is_empty() {
-                            default = Some(current_stmts.clone());
                             current_stmts.clear();
                             is_default = false;
                         }
@@ -827,17 +843,21 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                 }
             }
             // flush last group
-            if is_default && !current_stmts.is_empty() {
-                default = Some(current_stmts);
-            } else if !current_values.is_empty() {
-                for val in current_values {
-                    cases.push(SwitchCase {
-                        value: val,
-                        body: current_stmts.clone(),
-                    });
+            if !current_stmts.is_empty() {
+                if is_default {
+                    default = Some(current_stmts.clone());
                 }
-            } else if !current_stmts.is_empty() {
-                default = Some(current_stmts);
+                if !current_values.is_empty() {
+                    for val in current_values {
+                        cases.push(SwitchCase {
+                            value: val,
+                            body: current_stmts.clone(),
+                        });
+                    }
+                } else if !is_default {
+                    // statements with no case label or default: treat as default
+                    default = Some(current_stmts);
+                }
             }
 
             Ok(vec![IrStmt::Switch {

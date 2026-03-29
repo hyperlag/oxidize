@@ -486,6 +486,35 @@ fn check_expr(
             // field through the inheritance chain and insert `_super` hops as
             // needed.
             let recv_ty = receiver.ty().clone();
+
+            // If the receiver is a bare name that matches a known enum, resolve
+            // its constants: `Color.RED` → type `Class("Color")`.
+            if let IrExpr::Var { ref name, .. } = receiver {
+                if let Some(enm) = enum_map.get(name.as_str()) {
+                    if enm.constants.iter().any(|c| c.name == field_name) {
+                        return Ok(IrExpr::FieldAccess {
+                            receiver: Box::new(receiver),
+                            field_name,
+                            ty: IrType::Class(enm.name.clone()),
+                        });
+                    }
+                }
+            }
+
+            // If the receiver's type is a known enum type, resolve enum-typed
+            // fields (e.g. instance fields declared inside the enum body).
+            if let IrType::Class(ref class_name) = recv_ty {
+                if let Some(enm) = enum_map.get(class_name.as_str()) {
+                    if let Some(f) = enm.fields.iter().find(|f| f.name == field_name) {
+                        return Ok(IrExpr::FieldAccess {
+                            receiver: Box::new(receiver),
+                            field_name,
+                            ty: f.ty.clone(),
+                        });
+                    }
+                }
+            }
+
             if let IrType::Class(class_name) = &recv_ty {
                 // Use the live `cls` for the current class (not the snapshot in
                 // class_map, though they have the same fields).
@@ -553,6 +582,15 @@ fn check_expr(
                 cls,
                 class_map,
             );
+
+            // Enum built-in methods: resolve types that `resolve_method_return_type`
+            // cannot infer because it has no access to enum_map.
+            let ty = if ty == IrType::Unknown {
+                resolve_enum_method_type(receiver.as_deref(), &method_name, enum_map)
+                    .unwrap_or(ty)
+            } else {
+                ty
+            };
             Ok(IrExpr::MethodCall {
                 receiver,
                 method_name,
@@ -750,6 +788,44 @@ fn receiver_name(expr: &IrExpr) -> Option<String> {
         Some(name.clone())
     } else {
         None
+    }
+}
+
+/// Resolve the return type of built-in enum methods and static enum factory
+/// methods that `resolve_method_return_type` cannot infer on its own.
+///
+/// Returns `Some(ty)` when a type can be determined, `None` otherwise.
+fn resolve_enum_method_type(
+    receiver: Option<&IrExpr>,
+    method_name: &str,
+    enum_map: &HashMap<String, IrEnum>,
+) -> Option<IrType> {
+    let recv = receiver?;
+    match recv.ty() {
+        // Instance method on an enum value (e.g. `color.name()`)
+        IrType::Class(class_name) if enum_map.contains_key(class_name.as_str()) => {
+            Some(match method_name {
+                "name" => IrType::String,
+                "ordinal" => IrType::Int,
+                "equals" | "compareTo" => IrType::Bool,
+                _ => return None,
+            })
+        }
+        // Static method called as `EnumName.values()` / `EnumName.valueOf(…)`
+        // The receiver is a bare Var whose name matches an enum declaration.
+        IrType::Unknown => {
+            if let IrExpr::Var { name, .. } = recv {
+                if let Some(enm) = enum_map.get(name.as_str()) {
+                    return Some(match method_name {
+                        "values" => IrType::Array(Box::new(IrType::Class(enm.name.clone()))),
+                        "valueOf" => IrType::Class(enm.name.clone()),
+                        _ => return None,
+                    });
+                }
+            }
+            None
+        }
+        _ => None,
     }
 }
 
