@@ -855,7 +855,9 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                         });
                     }
                 } else if !is_default {
-                    // statements with no case label or default: treat as default
+                    // Statements with no case label and no default keyword —
+                    // this should not normally occur in valid Java, but we
+                    // treat them as the default body as a best-effort fallback.
                     default = Some(current_stmts);
                 }
             }

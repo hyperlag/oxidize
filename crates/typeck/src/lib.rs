@@ -807,7 +807,8 @@ fn resolve_enum_method_type(
             Some(match method_name {
                 "name" => IrType::String,
                 "ordinal" => IrType::Int,
-                "equals" | "compareTo" => IrType::Bool,
+                "equals" => IrType::Bool,
+                "compareTo" => IrType::Int, // compareTo returns int (-1, 0, or 1)
                 _ => return None,
             })
         }

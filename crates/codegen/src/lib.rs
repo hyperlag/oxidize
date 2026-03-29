@@ -97,6 +97,10 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
     // For mangled names like "Outer$Day" we also register the simple name
     // "Day" as an alias so that IR references using the short form still
     // resolve to the correct Rust identifier.
+    // Note: if two outer classes each define a nested enum with the same
+    // simple name (e.g. A$Day and B$Day), the alias maps to whichever is
+    // encountered first.  This is a best-effort fallback; the mangled
+    // names themselves are always unambiguous and can be used directly.
     ENUM_NAMES.with(|names| {
         let mut names = names.borrow_mut();
         names.clear();
