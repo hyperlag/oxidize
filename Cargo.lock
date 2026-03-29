@@ -167,7 +167,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "codegen"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "ir",
@@ -386,7 +386,7 @@ dependencies = [
 
 [[package]]
 name = "ir"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "proptest",
  "serde",
@@ -408,7 +408,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "java-compat"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "indexmap",
  "regex",
@@ -418,7 +418,7 @@ dependencies = [
 
 [[package]]
 name = "jtrans"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -586,7 +586,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "parser"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "ir",
@@ -906,7 +906,7 @@ dependencies = [
 
 [[package]]
 name = "tests"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "codegen",
@@ -1029,7 +1029,7 @@ dependencies = [
 
 [[package]]
 name = "typeck"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "ir",

@@ -1354,11 +1354,21 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                 .map(|n| lower_expr(n, src))
                 .transpose()?
                 .map(Box::new);
+            // For EnumSet factory methods, the first arg is a class literal
+            // (e.g. Color.class) used only as a type token — skip it.
+            let skip_class_literals = receiver.as_ref().is_some_and(|r| {
+                matches!(r.as_ref(), IrExpr::Var { name, .. } if name == "EnumSet")
+                    && matches!(
+                        method_name.as_str(),
+                        "noneOf" | "allOf"
+                    )
+            });
             let args = child_by_field(node, "arguments")
                 .map(|args_node| {
                     let mut c = args_node.walk();
                     args_node
                         .named_children(&mut c)
+                        .filter(|n| !(skip_class_literals && n.kind() == "class_literal"))
                         .map(|n| lower_expr(n, src))
                         .collect::<Result<Vec<_>, _>>()
                 })
@@ -1390,11 +1400,15 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                     .to_owned()
                 })
                 .unwrap_or_default();
+            // EnumMap and EnumSet constructors take a class literal (e.g. Day.class)
+            // as their sole argument — it is a type token and must be skipped.
+            let skip_class_literals = matches!(class.as_str(), "EnumMap" | "EnumSet");
             let args = child_by_field(node, "arguments")
                 .map(|args_node| {
                     let mut c = args_node.walk();
                     args_node
                         .named_children(&mut c)
+                        .filter(|n| !(skip_class_literals && n.kind() == "class_literal"))
                         .map(|n| lower_expr(n, src))
                         .collect::<Result<Vec<_>, _>>()
                 })
@@ -1551,7 +1565,7 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
         }
 
         // ── class literal (e.g. Day.class) ────────────────────────────────
-        "class_literal" => Ok(IrExpr::LitInt(0)),
+        "class_literal" => Err(ParseError::Unsupported("class literal expression".into())),
 
         // ── fallback ──────────────────────────────────────────────────────
         other => Err(ParseError::Unsupported(format!(

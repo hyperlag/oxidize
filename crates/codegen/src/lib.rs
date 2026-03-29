@@ -207,7 +207,7 @@ fn emit_enum(
 
     // Enum definition with derives
     let enum_def = quote! {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub enum #name {
             #(#variant_idents),*
         }
@@ -1655,13 +1655,22 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                         } });
                     }
                     // EnumSet.noneOf(...) / EnumSet.of(...) / EnumSet.allOf(...)
+                    // Class-literal args (e.g. Color.class) are filtered out by the
+                    // walker, so args_ts is empty for noneOf/allOf.
                     if name == "EnumSet" {
                         return match method_name.as_str() {
                             "noneOf" => Ok(quote! { JEnumSet::new() }),
                             "of" => Ok(quote! { JEnumSet::of(vec![#(#args_ts),*]) }),
                             "allOf" => {
-                                // allOf requires knowing all variants; approximate as new()
-                                Ok(quote! { JEnumSet::new() })
+                                // allOf requires all enum variants, which this code generator
+                                // cannot construct statically — panic at runtime rather than
+                                // silently returning an incorrect empty set.
+                                Ok(quote! {{
+                                    panic!(
+                                        "EnumSet::allOf(...) is not supported by this code generator; \
+                                         use EnumSet::of(...) or EnumSet::noneOf(...) instead"
+                                    )
+                                }})
                             }
                             "copyOf" => {
                                 let a = &args_ts[0];

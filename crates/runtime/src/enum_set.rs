@@ -1,34 +1,34 @@
 //! [`JEnumSet<T>`] -- Rust representation of `java.util.EnumSet`.
 //!
-//! Backed by `HashSet<T>` since Rust enums with `Eq + Hash` work as elements.
+//! Backed by `BTreeSet<T>` to preserve Java's natural enum constant ordering.
 //! Method names use Java's camelCase convention.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
-/// A Java-compatible enum set backed by `HashSet<T>`.
+/// A Java-compatible enum set backed by `BTreeSet<T>`.
 ///
 /// Mapping: `EnumSet<T>` -> `JEnumSet<T>`.
 #[derive(Debug, Clone)]
 pub struct JEnumSet<T> {
-    inner: HashSet<T>,
+    inner: BTreeSet<T>,
 }
 
-impl<T> Default for JEnumSet<T> {
+impl<T: Ord> Default for JEnumSet<T> {
     fn default() -> Self {
         JEnumSet {
-            inner: HashSet::new(),
+            inner: BTreeSet::new(),
         }
     }
 }
 
 impl<T> JEnumSet<T>
 where
-    T: Eq + std::hash::Hash + Clone,
+    T: Ord + Clone,
 {
     /// Create an empty enum set.  Mirrors `EnumSet.noneOf(...)`.
     pub fn new() -> Self {
         JEnumSet {
-            inner: HashSet::new(),
+            inner: BTreeSet::new(),
         }
     }
 
@@ -72,14 +72,14 @@ where
     }
 
     /// Iterator over elements.
-    pub fn iter(&self) -> std::collections::hash_set::Iter<'_, T> {
+    pub fn iter(&self) -> std::collections::btree_set::Iter<'_, T> {
         self.inner.iter()
     }
 }
 
 impl<T> std::fmt::Display for JEnumSet<T>
 where
-    T: std::fmt::Display + Eq + std::hash::Hash,
+    T: std::fmt::Display + Ord,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[")?;

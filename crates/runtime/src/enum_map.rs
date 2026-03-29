@@ -1,35 +1,35 @@
 //! [`JEnumMap<K, V>`] -- Rust representation of `java.util.EnumMap`.
 //!
-//! Backed by `HashMap<K, V>` since Rust enums with `Eq + Hash` work as keys.
+//! Backed by `BTreeMap<K, V>` to preserve Java's natural enum key ordering.
 //! Method names use Java's camelCase convention.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
-/// A Java-compatible enum map backed by `HashMap<K, V>`.
+/// A Java-compatible enum map backed by `BTreeMap<K, V>`.
 ///
 /// Mapping: `EnumMap<K,V>` -> `JEnumMap<K,V>`.
 #[derive(Debug, Clone)]
 pub struct JEnumMap<K, V> {
-    inner: HashMap<K, V>,
+    inner: BTreeMap<K, V>,
 }
 
-impl<K, V> Default for JEnumMap<K, V> {
+impl<K: Ord, V> Default for JEnumMap<K, V> {
     fn default() -> Self {
         JEnumMap {
-            inner: HashMap::new(),
+            inner: BTreeMap::new(),
         }
     }
 }
 
 impl<K, V> JEnumMap<K, V>
 where
-    K: Eq + std::hash::Hash + Clone,
+    K: Ord + Clone,
     V: Clone,
 {
     /// Create an empty enum map.  Mirrors `new EnumMap<>(KeyType.class)`.
     pub fn new() -> Self {
         JEnumMap {
-            inner: HashMap::new(),
+            inner: BTreeMap::new(),
         }
     }
 
@@ -46,7 +46,7 @@ where
         self.inner
             .get(&key)
             .cloned()
-            .unwrap_or_else(|| panic!("NullPointerException: key not found in EnumMap"))
+            .unwrap_or_else(|| panic!("NullPointerException: key not found in map"))
     }
 
     /// Java `map.getOrDefault(key, defaultValue)`.
@@ -83,14 +83,14 @@ where
     }
 
     /// Iterator over `(&key, &value)` pairs.
-    pub fn iter(&self) -> std::collections::hash_map::Iter<'_, K, V> {
+    pub fn iter(&self) -> std::collections::btree_map::Iter<'_, K, V> {
         self.inner.iter()
     }
 }
 
 impl<K, V> JEnumMap<K, V>
 where
-    K: Eq + std::hash::Hash + Clone,
+    K: Ord + Clone,
     V: Clone + PartialEq,
 {
     /// Java `map.containsValue(value)`.
@@ -102,7 +102,7 @@ where
 
 impl<K, V> std::fmt::Display for JEnumMap<K, V>
 where
-    K: std::fmt::Display + Eq + std::hash::Hash,
+    K: std::fmt::Display + Ord,
     V: std::fmt::Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
