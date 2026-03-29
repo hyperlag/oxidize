@@ -586,8 +586,7 @@ fn check_expr(
             // Enum built-in methods: resolve types that `resolve_method_return_type`
             // cannot infer because it has no access to enum_map.
             let ty = if ty == IrType::Unknown {
-                resolve_enum_method_type(receiver.as_deref(), &method_name, enum_map)
-                    .unwrap_or(ty)
+                resolve_enum_method_type(receiver.as_deref(), &method_name, enum_map).unwrap_or(ty)
             } else {
                 ty
             };

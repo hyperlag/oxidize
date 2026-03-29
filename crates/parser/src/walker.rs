@@ -363,8 +363,7 @@ fn lower_enum(node: Node<'_>, src: &[u8]) -> Result<IrEnum, ParseError> {
                             "constructor_declaration" => {
                                 if constructor.is_some() {
                                     return Err(ParseError::Unsupported(
-                                        "multiple enum constructors are not supported"
-                                            .to_string(),
+                                        "multiple enum constructors are not supported".to_string(),
                                     ));
                                 }
                                 constructor = Some(lower_constructor(decl, src)?);

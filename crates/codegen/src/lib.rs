@@ -109,7 +109,9 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             names.insert(name.clone(), name.clone());
             // alias entry: simple name → full name (for mangled names like "A$B")
             if let Some(simple) = name.rfind('$').map(|i| &name[i + 1..]) {
-                names.entry(simple.to_owned()).or_insert_with(|| name.clone());
+                names
+                    .entry(simple.to_owned())
+                    .or_insert_with(|| name.clone());
             }
         }
     });
@@ -228,7 +230,7 @@ fn emit_enum(
                 let arg_exprs = c
                     .args
                     .iter()
-                    .map(|a| emit_expr(a))
+                    .map(emit_expr)
                     .collect::<Result<Vec<_>, CodegenError>>()?;
                 Ok(quote! { Self::#cname => (#(#arg_exprs),*,) })
             })
@@ -1342,8 +1344,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             // Enum constant access: Color.RED → Color::RED
             // Resolve through the alias map so mangled names work too.
             if let IrExpr::Var { name, .. } = receiver.as_ref() {
-                let canonical =
-                    ENUM_NAMES.with(|names| names.borrow().get(name.as_str()).cloned());
+                let canonical = ENUM_NAMES.with(|names| names.borrow().get(name.as_str()).cloned());
                 if let Some(canonical_name) = canonical {
                     let enum_ident = ident(&canonical_name);
                     let const_ident = ident(field_name);
@@ -2060,8 +2061,8 @@ fn emit_type(ty: &IrType) -> TokenStream {
                     // Resolve through the enum alias map so that a type
                     // annotation like `Season` emits `EnumCompare_Season`
                     // when `Season` is an inner-enum promoted with mangling.
-                    let canonical = ENUM_NAMES
-                        .with(|names| names.borrow().get(name.as_str()).cloned());
+                    let canonical =
+                        ENUM_NAMES.with(|names| names.borrow().get(name.as_str()).cloned());
                     let emit_name = canonical.as_deref().unwrap_or(name.as_str());
                     let id = ident(emit_name);
                     quote! { #id }
