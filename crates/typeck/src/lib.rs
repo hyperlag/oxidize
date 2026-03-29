@@ -1027,12 +1027,8 @@ fn resolve_method_return_type(
                 },
                 // PrintWriter methods
                 "PrintWriter" | "JPrintWriter" => match method_name {
-                    "println" | "print" | "write" | "flush" | "close" => {
-                        return IrType::Void
-                    }
-                    "printf" => {
-                        return IrType::Class(class_name.to_owned())
-                    }
+                    "println" | "print" | "write" | "flush" | "close" => return IrType::Void,
+                    "printf" => return IrType::Class(class_name.to_owned()),
                     _ => {}
                 },
                 // FileReader methods
