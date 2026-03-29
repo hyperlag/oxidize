@@ -872,6 +872,28 @@ fn resolve_method_return_type(
         if name == "BigInteger" {
             return IrType::Class("BigInteger".to_owned());
         }
+        // Files static methods
+        if name == "Files" {
+            return match method_name {
+                "readString" => IrType::String,
+                "writeString" | "createDirectory" | "createDirectories" | "copy" | "move" => {
+                    IrType::Class("Path".to_owned())
+                }
+                "readAllLines" => IrType::Unknown, // JList<JString>
+                "write" => IrType::Class("Path".to_owned()),
+                "exists" | "isDirectory" | "isRegularFile" | "deleteIfExists" => IrType::Bool,
+                "size" => IrType::Long,
+                "delete" => IrType::Void,
+                _ => IrType::Unknown,
+            };
+        }
+        // Paths.get
+        if name == "Paths" {
+            return match method_name {
+                "get" => IrType::Class("Path".to_owned()),
+                _ => IrType::Unknown,
+            };
+        }
     }
 
     // java.util.concurrent / Thread method return types
@@ -980,13 +1002,75 @@ fn resolve_method_return_type(
                 },
                 // File methods
                 "File" | "JFile" => match method_name {
-                    "getName" | "getPath" | "getAbsolutePath" | "getParent" => {
+                    "getName" | "getPath" | "getAbsolutePath" | "getParent" | "toString" => {
                         return IrType::String
                     }
                     "exists" | "isFile" | "isDirectory" | "delete" | "mkdir" | "mkdirs" => {
                         return IrType::Bool
                     }
                     "length" => return IrType::Long,
+                    "toPath" => return IrType::Class("Path".to_owned()),
+                    _ => {}
+                },
+                // BufferedReader methods
+                "BufferedReader" | "JBufferedReader" => match method_name {
+                    "readLine" => return IrType::String,
+                    "read" => return IrType::Int,
+                    "ready" => return IrType::Bool,
+                    "close" => return IrType::Void,
+                    _ => {}
+                },
+                // BufferedWriter methods
+                "BufferedWriter" | "JBufferedWriter" => match method_name {
+                    "write" | "newLine" | "flush" | "close" => return IrType::Void,
+                    _ => {}
+                },
+                // PrintWriter methods
+                "PrintWriter" | "JPrintWriter" => match method_name {
+                    "println" | "print" | "printf" | "write" | "flush" | "close" => {
+                        return IrType::Void
+                    }
+                    _ => {}
+                },
+                // FileReader methods
+                "FileReader" | "JFileReader" => {
+                    if method_name == "close" {
+                        return IrType::Void;
+                    }
+                }
+                // FileWriter methods
+                "FileWriter" | "JFileWriter" => match method_name {
+                    "write" | "flush" | "close" => return IrType::Void,
+                    _ => {}
+                },
+                // FileInputStream methods
+                "FileInputStream" | "JFileInputStream" => match method_name {
+                    "read" | "available" => return IrType::Int,
+                    "close" => return IrType::Void,
+                    _ => {}
+                },
+                // FileOutputStream methods
+                "FileOutputStream" | "JFileOutputStream" => match method_name {
+                    "flush" | "close" => return IrType::Void,
+                    _ => {}
+                },
+                // Scanner methods
+                "Scanner" | "JScanner" => match method_name {
+                    "nextLine" | "next" => return IrType::String,
+                    "nextInt" => return IrType::Int,
+                    "nextDouble" => return IrType::Double,
+                    "nextLong" => return IrType::Long,
+                    "hasNextLine" | "hasNext" | "hasNextInt" => return IrType::Bool,
+                    "close" => return IrType::Void,
+                    _ => {}
+                },
+                // Path methods
+                "Path" | "JPath" => match method_name {
+                    "toString" => return IrType::String,
+                    "toFile" => return IrType::Class("File".to_owned()),
+                    "getFileName" | "getParent" | "resolve" | "toAbsolutePath" => {
+                        return IrType::Class("Path".to_owned())
+                    }
                     _ => {}
                 },
                 _ => {}

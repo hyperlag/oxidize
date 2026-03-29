@@ -50,6 +50,16 @@ or emit a `TODO` stub.
 | `Matcher`                     | `JMatcher`                   |
 | `LocalDate`                   | `JLocalDate`                 |
 | `File`                        | `JFile`                      |
+| `FileReader`                  | `JFileReader`                |
+| `FileWriter`                  | `JFileWriter`                |
+| `BufferedReader`              | `JBufferedReader`            |
+| `BufferedWriter`              | `JBufferedWriter`            |
+| `PrintWriter`                 | `JPrintWriter`               |
+| `FileInputStream`             | `JFileInputStream`           |
+| `FileOutputStream`            | `JFileOutputStream`          |
+| `Scanner`                     | `JScanner`                   |
+| `Path`                        | `JPath`                      |
+| `Files`                       | `JFiles`                     |
 | `Thread`                      | `JThread`                    |
 | `AtomicInteger`               | `JAtomicInteger`             |
 | `AtomicLong`                  | `JAtomicLong`                |
@@ -841,6 +851,94 @@ pub counter: Arc<AtomicI32>,
 | `file.isDirectory()`           | `file.isDirectory()`                 |
 | `file.length()`                | `file.length()`                      |
 | `file.delete()`                | `file.delete()`                      |
+| `file.toString()`             | `file.toString()`                    |
+| `file.toPath()`               | `file.toPath()`                      |
+
+### BufferedReader / BufferedWriter
+
+| Java                                              | Rust                                                 |
+|---------------------------------------------------|------------------------------------------------------|
+| `new BufferedReader(new FileReader(path))`         | `JBufferedReader::from_reader(JFileReader::new(path))` |
+| `new BufferedReader(new InputStreamReader(System.in))` | `JBufferedReader::new_stdin()`                  |
+| `br.readLine()`                                   | `br.readLine()`                                      |
+| `br.close()`                                      | `br.close()`                                         |
+| `new BufferedWriter(new FileWriter(path))`         | `JBufferedWriter::from_writer(JFileWriter::new(path))` |
+| `bw.write(s)`                                     | `bw.write(s)`                                        |
+| `bw.newLine()`                                    | `bw.newLine()`                                       |
+| `bw.flush()`                                      | `bw.flush()`                                         |
+| `bw.close()`                                      | `bw.close()`                                         |
+
+### PrintWriter
+
+| Java                                   | Rust                                         |
+|----------------------------------------|----------------------------------------------|
+| `new PrintWriter(path)`               | `JPrintWriter::new_from_path(path)`          |
+| `new PrintWriter(new FileWriter(f))`  | `JPrintWriter::from_writer(JFileWriter::new(f))` |
+| `pw.println(s)`                        | `pw.println(s)`                              |
+| `pw.print(s)`                          | `pw.print(s)`                                |
+| `pw.flush()`                           | `pw.flush()`                                 |
+| `pw.close()`                           | `pw.close()`                                 |
+
+### FileReader / FileWriter
+
+| Java                          | Rust                                 |
+|-------------------------------|--------------------------------------|
+| `new FileReader(path)`       | `JFileReader::new(path)`             |
+| `new FileWriter(path)`       | `JFileWriter::new(path)`             |
+| `new FileWriter(path, true)` | `JFileWriter::new_append(path)`      |
+
+### FileInputStream / FileOutputStream
+
+| Java                                  | Rust                                         |
+|---------------------------------------|----------------------------------------------|
+| `new FileInputStream(path)`          | `JFileInputStream::new(path)`                |
+| `new FileOutputStream(path)`         | `JFileOutputStream::new(path)`               |
+| `new FileOutputStream(path, true)`   | `JFileOutputStream::new_append(path)`        |
+| `fis.read()`                          | `fis.read()`                                 |
+| `fos.write(b)`                        | `fos.write_byte(b)`                          |
+| `fos.flush()`                         | `fos.flush()`                                |
+
+### Scanner
+
+| Java                              | Rust                                     |
+|-----------------------------------|------------------------------------------|
+| `new Scanner(new File(path))`    | `JScanner::from_file(path)`              |
+| `new Scanner(string)`            | `JScanner::from_string(string)`          |
+| `sc.hasNextLine()`               | `sc.hasNextLine()`                       |
+| `sc.nextLine()`                  | `sc.nextLine()`                          |
+| `sc.hasNext()`                   | `sc.hasNext()`                           |
+| `sc.next()`                      | `sc.next()`                              |
+| `sc.hasNextInt()`                | `sc.hasNextInt()`                        |
+| `sc.nextInt()`                   | `sc.nextInt()`                           |
+| `sc.nextDouble()`               | `sc.nextDouble()`                        |
+| `sc.nextLong()`                  | `sc.nextLong()`                          |
+| `sc.close()`                     | `sc.close()`                             |
+
+### Path / Paths / Files (java.nio.file)
+
+| Java                                  | Rust                                         |
+|---------------------------------------|----------------------------------------------|
+| `Paths.get(s)`                       | `JPath::get(s)`                              |
+| `path.toString()`                    | `path.toString()`                            |
+| `path.getFileName()`                 | `path.getFileName()`                         |
+| `path.getParent()`                   | `path.getParent()`                           |
+| `path.resolve(other)`               | `path.resolve(other)`                        |
+| `path.toAbsolutePath()`             | `path.toAbsolutePath()`                      |
+| `path.toFile()`                      | `path.toFile()`                              |
+| `Files.readString(path)`            | `JFiles::readString(&path)`                  |
+| `Files.writeString(path, content)`  | `JFiles::writeString(&path, content)`        |
+| `Files.readAllLines(path)`          | `JFiles::readAllLines(&path)`                |
+| `Files.write(path, lines)`          | `JFiles::write_lines(&path, &lines)`         |
+| `Files.exists(path)`                | `JFiles::exists(&path)`                      |
+| `Files.isDirectory(path)`           | `JFiles::isDirectory(&path)`                 |
+| `Files.isRegularFile(path)`         | `JFiles::isRegularFile(&path)`               |
+| `Files.size(path)`                  | `JFiles::size(&path)`                        |
+| `Files.delete(path)`                | `JFiles::delete(&path)`                      |
+| `Files.deleteIfExists(path)`        | `JFiles::deleteIfExists(&path)`              |
+| `Files.createDirectory(path)`       | `JFiles::createDirectory(&path)`             |
+| `Files.createDirectories(path)`     | `JFiles::createDirectories(&path)`           |
+| `Files.copy(src, dst)`              | `JFiles::copy(&src, &dst)`                   |
+| `Files.move(src, dst)`              | `JFiles::move_path(&src, &dst)`              |
 
 ## Lambda Expressions
 

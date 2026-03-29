@@ -90,6 +90,18 @@ impl JString {
         self.0.contains(s)
     }
 
+    /// Java `String.startsWith(String prefix)`.
+    #[allow(non_snake_case)]
+    pub fn startsWith(&self, prefix: JString) -> bool {
+        self.0.starts_with(prefix.as_str())
+    }
+
+    /// Java `String.endsWith(String suffix)`.
+    #[allow(non_snake_case)]
+    pub fn endsWith(&self, suffix: JString) -> bool {
+        self.0.ends_with(suffix.as_str())
+    }
+
     /// Java `String.equals(Object o)`.
     pub fn equals(&self, other: &JString) -> bool {
         *self.0 == *other.0
