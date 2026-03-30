@@ -124,7 +124,7 @@ type checker. Expression variants include:
 |------------|----------------------------------------------------------------|
 | Primitives | `Bool`, `Byte`, `Short`, `Int`, `Long`, `Float`, `Double`, `Char`, `Void` |
 | Reference  | `String`, `Array(T)`, `Class(name)`, `Nullable(T)`, `Generic { base, args }` |
-| Special    | `Atomic(T)` (volatile), `TypeVar(name)` (generics), `Unknown`, `Null` |
+| Special    | `Atomic(T)` (volatile), `TypeVar(name)` (generics), `Wildcard { bound }`, `Unknown`, `Null` |
 
 All IR types derive `Serialize` and `Deserialize` (via serde) so the IR can be
 dumped to JSON with `--dump-ir` for debugging.
@@ -331,8 +331,22 @@ operands, it emits `format!()` macro calls instead.
 ### Generic Classes
 
 Java generic classes (`class Box<T>`) are emitted as Rust generic structs with
-trait bounds `T: Clone + Default + Debug`. Boxed types (`Integer`, `Long`, etc.)
-are unboxed to their Rust primitive equivalents during type resolution.
+trait bounds `T: Clone + Default + Debug`. Type parameter bounds from Java's
+`extends` clause are mapped to additional Rust traits:
+`Comparable<T>` → `PartialOrd + Ord`, `Iterable<T>` → `IntoIterator`.
+
+Type parameters are stored as `IrTypeParam { name, bounds }` (not bare strings),
+preserving bound information through the IR.
+
+Wildcard types (`?`, `? extends X`, `? super X`) are represented in the IR as
+`IrType::Wildcard { bound }` and erased during code generation to the bound type
+or `JavaObject` for unbounded wildcards.
+
+Raw types (e.g. bare `List` without type parameters) are mapped to their runtime
+collection type with `JavaObject` as the default type argument.
+
+Boxed types (`Integer`, `Long`, etc.) are unboxed to their Rust primitive
+equivalents during type resolution.
 
 ## Testing Strategy
 

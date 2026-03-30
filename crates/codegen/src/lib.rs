@@ -57,6 +57,7 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             JBufferedReader, JBufferedWriter, JPrintWriter,
             JFileReader, JFileWriter, JFileInputStream, JFileOutputStream,
             JScanner, JPath, JPaths, JFiles,
+            JavaObject,
         };
     });
 
@@ -432,13 +433,14 @@ fn emit_class(
     let (struct_generics, impl_generics) = if cls.type_params.is_empty() {
         (quote! {}, quote! {})
     } else {
-        let names: Vec<_> = cls.type_params.iter().map(|tp| ident(tp)).collect();
+        let names: Vec<_> = cls.type_params.iter().map(|tp| ident(&tp.name)).collect();
         let bounds: Vec<_> = cls
             .type_params
             .iter()
             .map(|tp| {
-                let id = ident(tp);
-                quote! { #id: Clone + Default + ::std::fmt::Debug }
+                let id = ident(&tp.name);
+                let extra = extra_bounds_for_type_param(tp);
+                quote! { #id: Clone + Default + ::std::fmt::Debug #extra }
             })
             .collect();
         (quote! { <#(#names),*> }, quote! { <#(#bounds),*> })
@@ -2205,6 +2207,37 @@ fn emit_binop(op: &BinOp) -> TokenStream {
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
+/// Map Java type parameter bounds to extra Rust trait bounds.
+///
+/// The base bounds `Clone + Default + Debug` are always present. This function
+/// returns additional bounds based on the Java `extends` clause:
+/// - `Comparable<T>` → `+ PartialOrd + Ord`
+/// - `Cloneable` → (already Clone)
+/// - `Serializable` → (ignored, no Rust equivalent)
+/// - `Iterable` → (not emitted; runtime collection types do not implement IntoIterator)
+/// - Other bounds → ignored (covered by the base bounds)
+fn extra_bounds_for_type_param(tp: &ir::IrTypeParam) -> TokenStream {
+    let mut extra = TokenStream::new();
+    for bound in &tp.bounds {
+        let bound_name = match bound {
+            IrType::Class(name) => name.as_str(),
+            IrType::Generic { base, .. } => {
+                if let IrType::Class(name) = base.as_ref() {
+                    name.as_str()
+                } else {
+                    continue;
+                }
+            }
+            _ => continue,
+        };
+        if bound_name == "Comparable" {
+            extra.extend(quote! { + PartialOrd + Ord });
+        }
+        // Cloneable, Serializable, Iterable, etc. — no extra Rust bound needed
+    }
+    extra
+}
+
 fn emit_type(ty: &IrType) -> TokenStream {
     match ty {
         IrType::Bool => quote! { bool },
@@ -2263,6 +2296,20 @@ fn emit_type(ty: &IrType) -> TokenStream {
                 "Path" => quote! { JPath },
                 "Files" => quote! { JFiles },
                 "JStream" => quote! { JStream },
+                // Raw types: collection classes without type parameters → default to JavaObject
+                "List" | "ArrayList" | "Collection" | "Iterable" => {
+                    quote! { JList<JavaObject> }
+                }
+                "LinkedList" | "ArrayDeque" => quote! { JLinkedList<JavaObject> },
+                "PriorityQueue" => quote! { JPriorityQueue<JavaObject> },
+                "Map" | "HashMap" | "Hashtable" => quote! { JMap<JavaObject, JavaObject> },
+                "LinkedHashMap" => quote! { JLinkedHashMap<JavaObject, JavaObject> },
+                "TreeMap" => quote! { JTreeMap<JavaObject, JavaObject> },
+                "Set" | "HashSet" => quote! { JSet<JavaObject> },
+                "LinkedHashSet" => quote! { JLinkedHashSet<JavaObject> },
+                "TreeSet" => quote! { JTreeSet<JavaObject> },
+                "Iterator" => quote! { JIterator<JavaObject> },
+                "Object" => quote! { JavaObject },
                 _ => {
                     // Resolve through the enum alias map so that a type
                     // annotation like `Season` emits `EnumCompare_Season`
@@ -2363,6 +2410,11 @@ fn emit_type(ty: &IrType) -> TokenStream {
             }
         },
         IrType::Unknown => quote! { _ },
+        IrType::Wildcard { bound: _ } => {
+            // Rust has no wildcards — erase all wildcards to JavaObject to
+            // avoid referencing unmapped JDK bound types (e.g., Number).
+            quote! { JavaObject }
+        }
     }
 }
 

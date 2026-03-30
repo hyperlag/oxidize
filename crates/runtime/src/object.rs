@@ -28,6 +28,21 @@ pub fn jref<T>(value: T) -> JRef<T> {
     Arc::new(RwLock::new(value))
 }
 
+/// Concrete stand-in for Java's `Object` type.
+///
+/// Used by the code generator when a type has been erased (raw types like bare
+/// `List` without type parameters, unbounded wildcards `<?>`, or explicit
+/// `Object` declarations).  Implements the standard Rust traits so it can be
+/// used as a generic type parameter.
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct JavaObject;
+
+impl std::fmt::Display for JavaObject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Object")
+    }
+}
+
 /// The `null` sentinel — a unit type that represents a Java `null` reference.
 ///
 /// In the type system, nullable types are represented as `Option<JRef<T>>`.

@@ -2,6 +2,43 @@
 
 use serde::{Deserialize, Serialize};
 
+/// A wildcard bound: `? extends X` (upper) or `? super X` (lower).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum WildcardBound {
+    /// `? extends X` — the type is some unknown subtype of X.
+    Upper(Box<IrType>),
+    /// `? super X` — the type is some unknown supertype of X.
+    Lower(Box<IrType>),
+}
+
+/// A type parameter declaration with optional bounds.
+///
+/// For example `<T extends Comparable<T> & Cloneable>` becomes
+/// `IrTypeParam { name: "T", bounds: [Generic(Comparable, [TypeVar(T)]), Class("Cloneable")] }`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct IrTypeParam {
+    pub name: String,
+    pub bounds: Vec<IrType>,
+}
+
+impl From<&str> for IrTypeParam {
+    fn from(name: &str) -> Self {
+        Self {
+            name: name.to_owned(),
+            bounds: vec![],
+        }
+    }
+}
+
+impl From<String> for IrTypeParam {
+    fn from(name: String) -> Self {
+        Self {
+            name,
+            bounds: vec![],
+        }
+    }
+}
+
 /// The static type of an IR expression or declaration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum IrType {
@@ -40,6 +77,12 @@ pub enum IrType {
     Generic {
         base: Box<IrType>,
         args: Vec<IrType>,
+    },
+    /// A wildcard type: `?`, `? extends X`, or `? super X`.
+    Wildcard {
+        /// `None` = unbounded `?`, `Some(Upper(X))` = `? extends X`,
+        /// `Some(Lower(X))` = `? super X`.
+        bound: Option<WildcardBound>,
     },
 
     // ── Concurrency ────────────────────────────────────────────────────────
@@ -107,6 +150,11 @@ impl std::fmt::Display for IrType {
             IrType::Unknown => write!(f, "<unknown>"),
             IrType::Null => write!(f, "null"),
             IrType::Atomic(inner) => write!(f, "atomic({inner})"),
+            IrType::Wildcard { bound } => match bound {
+                None => write!(f, "?"),
+                Some(WildcardBound::Upper(ty)) => write!(f, "? extends {ty}"),
+                Some(WildcardBound::Lower(ty)) => write!(f, "? super {ty}"),
+            },
         }
     }
 }
