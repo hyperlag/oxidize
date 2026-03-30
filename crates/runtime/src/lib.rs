@@ -6,6 +6,7 @@
 
 pub mod array;
 pub mod atomic;
+pub mod bigdecimal;
 pub mod bigint;
 pub mod collections_util;
 pub mod concurrent;
@@ -19,6 +20,7 @@ pub mod linked_hash_set;
 pub mod linked_list;
 pub mod list;
 pub mod map;
+pub mod net;
 pub mod object;
 pub mod optional;
 pub mod priority_queue;
@@ -35,6 +37,7 @@ pub mod tree_set;
 
 pub use array::JArray;
 pub use atomic::{JAtomicBoolean, JAtomicInteger, JAtomicLong};
+pub use bigdecimal::{JBigDecimal, JMathContext, JRoundingMode};
 pub use bigint::JBigInteger;
 pub use concurrent::{JCountDownLatch, JSemaphore, __sync_block_monitor};
 pub use enum_map::JEnumMap;
@@ -50,6 +53,7 @@ pub use linked_hash_set::JLinkedHashSet;
 pub use linked_list::JLinkedList;
 pub use list::JList;
 pub use map::JMap;
+pub use net::{JHttpURLConnection, JServerSocket, JSocket, JURL};
 pub use object::{JNull, JObject, JavaObject};
 pub use optional::JOptional;
 pub use priority_queue::JPriorityQueue;
@@ -67,11 +71,12 @@ pub use tree_set::JTreeSet;
 /// Convenience re-export of all runtime types.
 pub mod prelude {
     pub use super::{
-        JArray, JAtomicBoolean, JAtomicInteger, JAtomicLong, JBigInteger, JBufferedReader,
-        JBufferedWriter, JClass, JCountDownLatch, JEnumMap, JEnumSet, JException, JFile,
-        JFileInputStream, JFileOutputStream, JFileReader, JFileWriter, JFiles, JIterator,
-        JLinkedHashMap, JLinkedHashSet, JLinkedList, JList, JLocalDate, JMap, JMatcher, JNull,
-        JObject, JOptional, JPath, JPaths, JPattern, JPrintWriter, JPriorityQueue, JScanner,
-        JSemaphore, JSet, JStream, JString, JStringBuilder, JThread, JTreeMap, JTreeSet,
+        JArray, JAtomicBoolean, JAtomicInteger, JAtomicLong, JBigDecimal, JBigInteger,
+        JBufferedReader, JBufferedWriter, JClass, JCountDownLatch, JEnumMap, JEnumSet, JException,
+        JFile, JFileInputStream, JFileOutputStream, JFileReader, JFileWriter, JFiles,
+        JHttpURLConnection, JIterator, JLinkedHashMap, JLinkedHashSet, JLinkedList, JList,
+        JLocalDate, JMap, JMatcher, JMathContext, JNull, JObject, JOptional, JPath, JPaths,
+        JPattern, JPrintWriter, JPriorityQueue, JRoundingMode, JScanner, JSemaphore, JServerSocket,
+        JSet, JSocket, JStream, JString, JStringBuilder, JThread, JTreeMap, JTreeSet, JURL,
     };
 }

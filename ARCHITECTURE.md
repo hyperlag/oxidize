@@ -269,6 +269,13 @@ Core types:
 | `JStream<T>`       | `java.util.stream.Stream<T>`        | `Vec<T>` (eager)          |
 | `JStringBuilder`   | `java.lang.StringBuilder`           | `String`                  |
 | `JBigInteger`      | `java.math.BigInteger`              | `i128`                    |
+| `JBigDecimal`      | `java.math.BigDecimal`              | `(i128, i32)` unscaled+scale |
+| `JMathContext`     | `java.math.MathContext`              | `(i32, JRoundingMode)`    |
+| `JRoundingMode`    | `java.math.RoundingMode`            | Rust enum                 |
+| `JURL`             | `java.net.URL`                      | `String` (raw URL)        |
+| `JSocket`          | `java.net.Socket`                   | `Option<TcpStream>`       |
+| `JServerSocket`    | `java.net.ServerSocket`             | `Option<TcpListener>`     |
+| `JHttpURLConnection` | `java.net.HttpURLConnection`      | Raw TCP HTTP/1.1          |
 | `JAtomicInteger`   | `java.util.concurrent.AtomicInteger` | `Arc<AtomicI32>`         |
 | `JAtomicLong`      | `java.util.concurrent.AtomicLong`   | `Arc<AtomicI64>`          |
 | `JAtomicBoolean`   | `java.util.concurrent.AtomicBoolean`| `Arc<AtomicBool>`         |

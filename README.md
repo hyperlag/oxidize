@@ -36,7 +36,7 @@ Rust source (.rs)
 | `codegen` | Lowers annotated IR to Rust token streams via `proc-macro2` / `quote` |
 | `runtime` | `java-compat` crate: runtime types (`JString`, `JArray`, `JList`, `JMap`, `JOptional`, `JStream`, `JThread`, etc.) |
 | `cli` | `jtrans` binary: CLI driver with `translate`, `init-maven`, `init-gradle` subcommands, watch mode, incremental cache, and source map generation |
-| `tests` | Differential test suite (95 tests: translated Rust output vs. expected output) |
+| `tests` | Differential test suite (99 tests: translated Rust output vs. expected output) |
 
 ## Requirements
 
@@ -210,7 +210,7 @@ cargo test
 
 The differential integration tests in `crates/tests` compile and run each translated Rust
 program, then assert that stdout matches the expected output. No JDK is required to run
-the tests. The suite currently contains **95 differential tests**:
+the tests. The suite currently contains **99 differential tests**:
 
 ```bash
 cargo test -p tests -- --test-threads=4
@@ -276,8 +276,14 @@ cargo test -p tests -- --test-threads=4
 ### Standard Library
 
 - `Math` static methods, `StringBuilder`, `Optional<T>`, `Stream<T>` API
-- `Pattern` / `Matcher` regex, `BigInteger`, `LocalDate`, `File`
+- `Pattern` / `Matcher` regex, `BigInteger`, `BigDecimal`, `MathContext`, `LocalDate`, `File`
 - Lambda expressions → Rust closures
+
+### Networking
+
+- `URL` (parsing, component accessors)
+- `Socket` / `ServerSocket` (TCP client/server)
+- `HttpURLConnection` (basic HTTP/1.1 GET/POST)
 
 ### I/O and NIO
 
@@ -315,6 +321,13 @@ cargo test -p tests -- --test-threads=4
 | `Stream<T>` | `java_compat::JStream<T>` |
 | `StringBuilder` | `java_compat::JStringBuilder` |
 | `BigInteger` | `java_compat::JBigInteger` |
+| `BigDecimal` | `java_compat::JBigDecimal` |
+| `MathContext` | `java_compat::JMathContext` |
+| `RoundingMode` | `java_compat::JRoundingMode` |
+| `URL` | `java_compat::JURL` |
+| `Socket` | `java_compat::JSocket` |
+| `ServerSocket` | `java_compat::JServerSocket` |
+| `HttpURLConnection` | `java_compat::JHttpURLConnection` |
 | `Pattern` / `Matcher` | `java_compat::JPattern` / `JMatcher` |
 | `LocalDate` | `java_compat::JLocalDate` |
 | `File` | `java_compat::JFile` |

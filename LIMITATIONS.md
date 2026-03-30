@@ -131,9 +131,10 @@ The following are **not** supported:
 
 ### java.net
 
-- `Socket` / `ServerSocket`
-- `URL` / `HttpURLConnection`
-- `java.net.http.HttpClient` (Java 11+)
+- `java.net.http.HttpClient` (Java 11+ modern HTTP client)
+
+**Supported:** `URL` (parsing, component accessors), `Socket`, `ServerSocket`
+(TCP wrappers), `HttpURLConnection` (basic HTTP/1.1 GET/POST).
 
 ### java.util
 
@@ -151,8 +152,8 @@ The following are **not** supported:
 
 ### java.math
 
-- `BigDecimal` (`BigInteger` is supported)
-- `MathContext`
+**Supported:** `BigDecimal` (arithmetic, comparison, rounding, scale operations),
+`MathContext` (precision + rounding context), `RoundingMode`, and `BigInteger`.
 
 ## Language Features
 

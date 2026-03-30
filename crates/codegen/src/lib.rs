@@ -57,6 +57,8 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             JBufferedReader, JBufferedWriter, JPrintWriter,
             JFileReader, JFileWriter, JFileInputStream, JFileOutputStream,
             JScanner, JPath, JPaths, JFiles,
+            JBigDecimal, JMathContext, JRoundingMode,
+            JURL, JSocket, JServerSocket, JHttpURLConnection,
             JavaObject,
         };
     });
@@ -1365,6 +1367,56 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     return Ok(quote! { std::io::#stream });
                 }
             }
+            // BigDecimal / MathContext / RoundingMode static field constants
+            if let IrExpr::Var { name, .. } = receiver.as_ref() {
+                match name.as_str() {
+                    "BigDecimal" => {
+                        return match field_name.as_str() {
+                            "ZERO" => Ok(quote! { JBigDecimal::zero() }),
+                            "ONE" => Ok(quote! { JBigDecimal::one() }),
+                            "TEN" => Ok(quote! { JBigDecimal::ten() }),
+                            _ => {
+                                let field_lit = proc_macro2::Literal::string(field_name);
+                                Ok(quote! {
+                                    panic!(concat!(
+                                        "Unsupported BigDecimal static field: ",
+                                        #field_lit
+                                    ))
+                                })
+                            }
+                        };
+                    }
+                    "MathContext" => {
+                        return match field_name.as_str() {
+                            "DECIMAL32" => Ok(quote! { JMathContext::decimal32() }),
+                            "DECIMAL64" => Ok(quote! { JMathContext::decimal64() }),
+                            "DECIMAL128" => Ok(quote! { JMathContext::decimal128() }),
+                            "UNLIMITED" => Ok(quote! { JMathContext::unlimited() }),
+                            _ => {
+                                let f = ident(field_name);
+                                Ok(quote! { JMathContext::#f() })
+                            }
+                        };
+                    }
+                    "RoundingMode" => {
+                        return match field_name.as_str() {
+                            "UP" => Ok(quote! { JRoundingMode::Up }),
+                            "DOWN" => Ok(quote! { JRoundingMode::Down }),
+                            "CEILING" => Ok(quote! { JRoundingMode::Ceiling }),
+                            "FLOOR" => Ok(quote! { JRoundingMode::Floor }),
+                            "HALF_UP" => Ok(quote! { JRoundingMode::HalfUp }),
+                            "HALF_DOWN" => Ok(quote! { JRoundingMode::HalfDown }),
+                            "HALF_EVEN" => Ok(quote! { JRoundingMode::HalfEven }),
+                            "UNNECESSARY" => Ok(quote! { JRoundingMode::Unnecessary }),
+                            _ => {
+                                let f = ident(field_name);
+                                Ok(quote! { JRoundingMode::#f })
+                            }
+                        };
+                    }
+                    _ => {}
+                }
+            }
             // Volatile field read: emit .load(SeqCst) instead of plain field access.
             if matches!(ty, IrType::Atomic(_)) {
                 let recv = emit_expr(receiver)?;
@@ -1593,6 +1645,39 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             }
                         };
                     }
+                    // BigDecimal.valueOf / BigDecimal.ZERO / ONE / TEN
+                    if name == "BigDecimal" {
+                        return match method_name.as_str() {
+                            "valueOf" => {
+                                if args_ts.len() == 2 {
+                                    let a = &args_ts[0];
+                                    let b = &args_ts[1];
+                                    Ok(quote! { JBigDecimal::value_of_scaled(#a, #b) })
+                                } else {
+                                    let first_ty = args.first().map(|e| e.ty().clone());
+                                    let is_double = matches!(
+                                        first_ty.as_ref(),
+                                        Some(IrType::Double) | Some(IrType::Float)
+                                    );
+                                    let a = &args_ts[0];
+                                    if is_double {
+                                        Ok(quote! { JBigDecimal::value_of_double(#a as f64) })
+                                    } else {
+                                        Ok(quote! { JBigDecimal::value_of(#a as i64) })
+                                    }
+                                }
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JBigDecimal::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // MathContext named constants
+                    if name == "MathContext" {
+                        let m = ident(method_name);
+                        return Ok(quote! { JMathContext::#m(#(#args_ts),*) });
+                    }
                     // Integer.parseInt / Integer.valueOf
                     if name == "Integer" {
                         return match method_name.as_str() {
@@ -1799,6 +1884,27 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     return Ok(quote! { (#recv_ts).substring_range(#a, #b) });
                 }
 
+                // BigDecimal.divide(BigDecimal, int, RoundingMode) → divide_with_scale
+                if method_name == "divide"
+                    && args_ts.len() == 3
+                    && matches!(recv.ty(), IrType::Class(c) if c == "BigDecimal")
+                {
+                    let a = &args_ts[0];
+                    let b = &args_ts[1];
+                    let c = &args_ts[2];
+                    return Ok(quote! { (#recv_ts).divide_with_scale(#a, #b, #c) });
+                }
+
+                // BigDecimal.setScale(int, RoundingMode) → setScale
+                if method_name == "setScale"
+                    && args_ts.len() == 2
+                    && matches!(recv.ty(), IrType::Class(c) if c == "BigDecimal")
+                {
+                    let a = &args_ts[0];
+                    let b = &args_ts[1];
+                    return Ok(quote! { (#recv_ts).setScale(#a, #b) });
+                }
+
                 // String.equals(obj) — pass by reference (JString::equals takes &JString).
                 if method_name == "equals" && args_ts.len() == 1 && *recv.ty() == IrType::String {
                     let a = &args_ts[0];
@@ -1868,6 +1974,27 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     }
                 }
                 "BigInteger" => Ok(quote! { JBigInteger::from_string(#(#args_ts),*) }),
+                "BigDecimal" => {
+                    if args_ts.is_empty() {
+                        Ok(quote! { JBigDecimal::zero() })
+                    } else {
+                        let a = &args_ts[0];
+                        let arg_ty = args.first().map(|e| e.ty());
+                        match arg_ty {
+                            Some(IrType::Int) | Some(IrType::Long) => {
+                                Ok(quote! { JBigDecimal::from_long(#a as i64) })
+                            }
+                            Some(IrType::Double) | Some(IrType::Float) => {
+                                Ok(quote! { JBigDecimal::from_double(#a as f64) })
+                            }
+                            _ => Ok(quote! { JBigDecimal::from_string(#a) }),
+                        }
+                    }
+                }
+                "MathContext" => Ok(quote! { JMathContext::new(#(#args_ts),*) }),
+                "URL" => Ok(quote! { JURL::new(#(#args_ts),*) }),
+                "Socket" => Ok(quote! { JSocket::new(#(#args_ts),*) }),
+                "ServerSocket" => Ok(quote! { JServerSocket::new(#(#args_ts),*) }),
                 "File" => {
                     if args_ts.len() == 2 {
                         let a = &args_ts[0];
@@ -2280,6 +2407,13 @@ fn emit_type(ty: &IrType) -> TokenStream {
                 "Optional" => quote! { JOptional },
                 "StringBuilder" => quote! { JStringBuilder },
                 "BigInteger" => quote! { JBigInteger },
+                "BigDecimal" => quote! { JBigDecimal },
+                "MathContext" => quote! { JMathContext },
+                "RoundingMode" => quote! { JRoundingMode },
+                "URL" => quote! { JURL },
+                "Socket" => quote! { JSocket },
+                "ServerSocket" => quote! { JServerSocket },
+                "HttpURLConnection" => quote! { JHttpURLConnection },
                 "Pattern" => quote! { JPattern },
                 "Matcher" => quote! { JMatcher },
                 "LocalDate" => quote! { JLocalDate },
