@@ -473,11 +473,13 @@ void insert(List<? super Integer> dest) { ... }
 ```
 ```rust
 fn process(list: JList<JavaObject>) { ... }   // <?> → JavaObject
-fn addAll(nums: JList<Number>) { ... }         // <? extends Number> → Number
-fn insert(dest: JList<i32>) { ... }            // <? super Integer> → i32
+fn addAll(nums: JList<JavaObject>) { ... }    // <? extends Number> → JavaObject
+fn insert(dest: JList<JavaObject>) { ... }   // <? super Integer> → JavaObject
 ```
 
-Wildcards are erased: upper/lower bounds map to the bound type, unbounded `?` maps to `JavaObject`.
+Wildcards are erased: all wildcard types (`?`, `? extends X`, `? super X`) map to `JavaObject`.
+Unmapped JDK bound types (e.g. `Number`, `Serializable`) are not available in the runtime, so
+erasing to `JavaObject` avoids referencing undefined identifiers in the generated Rust code.
 
 ### Raw Types
 

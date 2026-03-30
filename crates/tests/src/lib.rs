@@ -919,4 +919,14 @@ Expression calculator tests complete",
     fn test_generic_multi_bound() {
         check("GenericMultiBound.java", "99");
     }
+
+    #[test]
+    fn test_generic_wildcard() {
+        check("GenericWildcard.java", "0\n0");
+    }
+
+    #[test]
+    fn test_generic_raw_type() {
+        check("GenericRawType.java", "0\ntrue");
+    }
 }

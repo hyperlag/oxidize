@@ -2214,6 +2214,7 @@ fn emit_binop(op: &BinOp) -> TokenStream {
 /// - `Comparable<T>` → `+ PartialOrd + Ord`
 /// - `Cloneable` → (already Clone)
 /// - `Serializable` → (ignored, no Rust equivalent)
+/// - `Iterable` → (not emitted; runtime collection types do not implement IntoIterator)
 /// - Other bounds → ignored (covered by the base bounds)
 fn extra_bounds_for_type_param(tp: &ir::IrTypeParam) -> TokenStream {
     let mut extra = TokenStream::new();
@@ -2233,10 +2234,10 @@ fn extra_bounds_for_type_param(tp: &ir::IrTypeParam) -> TokenStream {
             "Comparable" => {
                 extra.extend(quote! { + PartialOrd + Ord });
             }
-            "Iterable" => {
-                extra.extend(quote! { + IntoIterator });
-            }
-            // Cloneable, Serializable, etc. — no extra Rust bound needed
+            // Do not add `IntoIterator` here: current runtime collection types
+            // (e.g. JList<T>) do not implement `IntoIterator`, so this bound
+            // would make the generated Rust code uncompilable.
+            // Cloneable, Serializable, Iterable, etc. — no extra Rust bound needed
             _ => {}
         }
     }
@@ -2415,13 +2416,10 @@ fn emit_type(ty: &IrType) -> TokenStream {
             }
         },
         IrType::Unknown => quote! { _ },
-        IrType::Wildcard { bound } => {
-            // Rust has no wildcards — erase to the bound type or JavaObject.
-            match bound {
-                Some(ir::WildcardBound::Upper(ty)) => emit_type(ty),
-                Some(ir::WildcardBound::Lower(ty)) => emit_type(ty),
-                None => quote! { JavaObject },
-            }
+        IrType::Wildcard { bound: _ } => {
+            // Rust has no wildcards — erase all wildcards to JavaObject to
+            // avoid referencing unmapped JDK bound types (e.g., Number).
+            quote! { JavaObject }
         }
     }
 }

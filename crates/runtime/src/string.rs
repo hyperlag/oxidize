@@ -135,7 +135,8 @@ impl PartialOrd for JString {
 
 impl Ord for JString {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.as_ref().cmp(other.0.as_ref())
+        // Match Java's String.compareTo semantics: compare by UTF-16 code units.
+        self.0.encode_utf16().cmp(other.0.encode_utf16())
     }
 }
 
