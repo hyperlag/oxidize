@@ -133,20 +133,26 @@ impl JBigDecimal {
 
     fn parse(s: &str) -> Self {
         let s = s.trim();
-        if let Some(dot_pos) = s.find('.') {
+        // Handle scientific notation first so "1.23e4" is handled correctly.
+        // `mantissa_str` is s[..e_pos], which contains no 'e', so no recursion.
+        let lower = s.to_ascii_lowercase();
+        if let Some(e_pos) = lower.find('e') {
+            let mantissa_str = &s[..e_pos];
+            let exp: i32 = s[e_pos + 1..].parse().unwrap_or(0);
+            // Parse the mantissa as a plain decimal (no 'e' in mantissa_str).
+            let (unscaled, mantissa_scale) = parse_decimal(mantissa_str);
+            // Combined scale: mantissa_scale - exp
+            JBigDecimal {
+                unscaled,
+                scale: mantissa_scale - exp,
+            }
+        } else if let Some(dot_pos) = s.find('.') {
             let int_part = &s[..dot_pos];
             let frac_part = &s[dot_pos + 1..];
             let scale = frac_part.len() as i32;
             let combined = format!("{int_part}{frac_part}");
             let unscaled: i128 = combined.parse().unwrap_or(0);
             JBigDecimal { unscaled, scale }
-        } else if let Some(e_pos) = s.to_ascii_lowercase().find('e') {
-            let mantissa: i128 = s[..e_pos].parse().unwrap_or(0);
-            let exp: i32 = s[e_pos + 1..].parse().unwrap_or(0);
-            JBigDecimal {
-                unscaled: mantissa,
-                scale: -exp,
-            }
         } else {
             let unscaled: i128 = s.parse().unwrap_or(0);
             JBigDecimal { unscaled, scale: 0 }
@@ -260,6 +266,9 @@ impl JBigDecimal {
 
     /// Java `BigDecimal.pow(int)`
     pub fn pow(&self, exp: i32) -> JBigDecimal {
+        if exp < 0 {
+            panic!("BigDecimal.pow: negative exponent not allowed");
+        }
         let mut result = JBigDecimal::one();
         for _ in 0..exp {
             result = result.multiply(*self);
@@ -417,16 +426,48 @@ impl JBigDecimal {
 // ─── Conversion ──────────────────────────────────────────────────────────────
 
 impl JBigDecimal {
+    /// Compute the integer part of this `JBigDecimal` using only integer
+    /// arithmetic, truncating toward zero (Java semantics for `intValue` /
+    /// `longValue`).
+    fn integer_trunc_i128(&self) -> i128 {
+        if self.scale == 0 {
+            return self.unscaled;
+        }
+        if self.scale > 0 {
+            let scale = self.scale as u32;
+            // 10^38 bounds all representable |unscaled| values in i128
+            if scale > 38 {
+                return 0;
+            }
+            let pow = 10_i128.pow(scale);
+            return self.unscaled / pow;
+        }
+        // scale < 0: value = unscaled * 10^(-scale)
+        let neg_scale = (-self.scale) as u32;
+        let max_exp: u32 = 38;
+        let (base_exp, extra_exp) = if neg_scale > max_exp {
+            (max_exp, neg_scale - max_exp)
+        } else {
+            (neg_scale, 0)
+        };
+        let pow = 10_i128.pow(base_exp);
+        let mut result = self.unscaled.saturating_mul(pow);
+        for _ in 0..extra_exp {
+            result = result.saturating_mul(10);
+        }
+        result
+    }
+
     /// Java `BigDecimal.intValue()`
     #[allow(non_snake_case)]
     pub fn intValue(&self) -> i32 {
-        self.as_f64() as i32
+        self.integer_trunc_i128() as i32
     }
 
     /// Java `BigDecimal.longValue()`
     #[allow(non_snake_case)]
     pub fn longValue(&self) -> i64 {
-        self.as_f64() as i64
+        self.integer_trunc_i128() as i64
     }
 
     /// Java `BigDecimal.doubleValue()`
@@ -504,6 +545,22 @@ fn pow10(n: i32) -> i128 {
         result *= 10;
     }
     result
+}
+
+/// Parse a plain decimal string (no 'e'/'E') and return `(unscaled, scale)`.
+fn parse_decimal(s: &str) -> (i128, i32) {
+    let s = s.trim();
+    if let Some(dot_pos) = s.find('.') {
+        let int_part = &s[..dot_pos];
+        let frac_part = &s[dot_pos + 1..];
+        let scale = frac_part.len() as i32;
+        let combined = format!("{int_part}{frac_part}");
+        let unscaled: i128 = combined.parse().unwrap_or(0);
+        (unscaled, scale)
+    } else {
+        let unscaled: i128 = s.parse().unwrap_or(0);
+        (unscaled, 0)
+    }
 }
 
 fn round_div(quotient: i128, remainder: i128, divisor: i128, mode: JRoundingMode) -> i128 {

@@ -8,7 +8,7 @@
 
 use crate::JString;
 use std::fmt;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 
 // ─── URL ─────────────────────────────────────────────────────────────────────
@@ -247,10 +247,23 @@ impl JSocket {
     /// Read all available bytes as a string (used for input stream).
     pub fn read_string(&mut self) -> JString {
         if let Some(ref mut s) = self.stream {
-            let mut buf = String::new();
-            let mut reader = BufReader::new(s);
-            let _ = reader.read_line(&mut buf);
-            JString::from(buf.trim_end())
+            let mut bytes = Vec::new();
+            let mut buf = [0u8; 1];
+            loop {
+                match s.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(_) => {
+                        bytes.push(buf[0]);
+                        if buf[0] == b'\n' {
+                            break;
+                        }
+                    }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                    Err(_) => break,
+                }
+            }
+            let line = String::from_utf8_lossy(&bytes).to_string();
+            JString::from(line.trim_end())
         } else {
             JString::from("")
         }
@@ -438,8 +451,6 @@ impl JHttpURLConnection {
     }
 
     fn connect(&mut self) {
-        self.connected = true;
-
         let host = self.url.getHost();
         let port = self.url.getPort();
         let port = if port == -1 {
@@ -468,8 +479,16 @@ impl JHttpURLConnection {
             path.as_str()
         };
 
+        // Include port in Host header when it differs from the scheme default.
+        let default_port = self.url.getDefaultPort();
+        let host_header = if port != default_port {
+            format!("{}:{}", host.as_str(), port)
+        } else {
+            host.as_str().to_string()
+        };
+
         let mut request = format!("{} {} HTTP/1.1\r\n", self.method, path_str);
-        request.push_str(&format!("Host: {}\r\n", host.as_str()));
+        request.push_str(&format!("Host: {host_header}\r\n"));
         // Add user headers
         for (k, v) in &self.headers {
             request.push_str(&format!("{k}: {v}\r\n"));
@@ -502,6 +521,8 @@ impl JHttpURLConnection {
         if let Some(body_start) = response.find("\r\n\r\n") {
             self.response_body = response[body_start + 4..].to_string();
         }
+
+        self.connected = true;
     }
 }
 

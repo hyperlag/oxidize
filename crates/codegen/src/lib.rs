@@ -1376,8 +1376,13 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             "ONE" => Ok(quote! { JBigDecimal::one() }),
                             "TEN" => Ok(quote! { JBigDecimal::ten() }),
                             _ => {
-                                let f = ident(field_name);
-                                Ok(quote! { JBigDecimal::#f() })
+                                let field_lit = proc_macro2::Literal::string(field_name);
+                                Ok(quote! {
+                                    panic!(concat!(
+                                        "Unsupported BigDecimal static field: ",
+                                        #field_lit
+                                    ))
+                                })
                             }
                         };
                     }
@@ -1649,7 +1654,17 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                     let b = &args_ts[1];
                                     Ok(quote! { JBigDecimal::value_of_scaled(#a, #b) })
                                 } else {
-                                    Ok(quote! { JBigDecimal::value_of(#(#args_ts),*) })
+                                    let first_ty = args.first().map(|e| e.ty().clone());
+                                    let is_double = matches!(
+                                        first_ty.as_ref(),
+                                        Some(IrType::Double) | Some(IrType::Float)
+                                    );
+                                    let a = &args_ts[0];
+                                    if is_double {
+                                        Ok(quote! { JBigDecimal::value_of_double(#a as f64) })
+                                    } else {
+                                        Ok(quote! { JBigDecimal::value_of(#a as i64) })
+                                    }
                                 }
                             }
                             _ => {
@@ -1870,7 +1885,10 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 }
 
                 // BigDecimal.divide(BigDecimal, int, RoundingMode) → divide_with_scale
-                if method_name == "divide" && args_ts.len() == 3 {
+                if method_name == "divide"
+                    && args_ts.len() == 3
+                    && matches!(recv.ty(), IrType::Class(c) if c == "BigDecimal")
+                {
                     let a = &args_ts[0];
                     let b = &args_ts[1];
                     let c = &args_ts[2];
@@ -1878,7 +1896,10 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 }
 
                 // BigDecimal.setScale(int, RoundingMode) → setScale
-                if method_name == "setScale" && args_ts.len() == 2 {
+                if method_name == "setScale"
+                    && args_ts.len() == 2
+                    && matches!(recv.ty(), IrType::Class(c) if c == "BigDecimal")
+                {
                     let a = &args_ts[0];
                     let b = &args_ts[1];
                     return Ok(quote! { (#recv_ts).setScale(#a, #b) });
