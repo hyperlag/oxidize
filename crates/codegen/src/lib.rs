@@ -2230,16 +2230,10 @@ fn extra_bounds_for_type_param(tp: &ir::IrTypeParam) -> TokenStream {
             }
             _ => continue,
         };
-        match bound_name {
-            "Comparable" => {
-                extra.extend(quote! { + PartialOrd + Ord });
-            }
-            // Do not add `IntoIterator` here: current runtime collection types
-            // (e.g. JList<T>) do not implement `IntoIterator`, so this bound
-            // would make the generated Rust code uncompilable.
-            // Cloneable, Serializable, Iterable, etc. — no extra Rust bound needed
-            _ => {}
+        if bound_name == "Comparable" {
+            extra.extend(quote! { + PartialOrd + Ord });
         }
+        // Cloneable, Serializable, Iterable, etc. — no extra Rust bound needed
     }
     extra
 }
