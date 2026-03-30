@@ -929,4 +929,61 @@ Expression calculator tests complete",
     fn test_generic_raw_type() {
         check("GenericRawType.java", "0\ntrue");
     }
+
+    #[test]
+    fn test_big_decimal() {
+        check(
+            "BigDecimalTest.java",
+            "a = 3.14159\n\
+             b = 2.71828\n\
+             a + b = 5.85987\n\
+             a - b = 0.42331\n\
+             a * b = 8.5397212652\n\
+             10 / 3 (scale=4, HALF_UP) = 3.3333\n\
+             2.0 compareTo 2.00 = 0\n\
+             2.0 equals 2.00 = false\n\
+             ZERO = 0\n\
+             ONE = 1\n\
+             TEN = 10\n\
+             pi rounded to 2 = 3.14\n\
+             abs(-5.5) = 5.5\n\
+             negate(-5.5) = 5.5\n\
+             valueOf(42) = 42\n\
+             intValue = 123\n\
+             longValue = 123\n\
+             doubleValue = 123.456\n\
+             signum(3.14) = 1\n\
+             signum(-5.5) = -1\n\
+             signum(0) = 0\n\
+             2^10 = 1024\n\
+             max(a, b) = 3.14159\n\
+             min(a, b) = 2.71828",
+        );
+    }
+
+    #[test]
+    fn test_url() {
+        check(
+            "URLTest.java",
+            "URL: http://example.com:8080/path/to/resource?key=value&foo=bar#section\n\
+             Protocol: http\n\
+             Host: example.com\n\
+             Port: 8080\n\
+             Path: /path/to/resource\n\
+             Query: key=value&foo=bar\n\
+             Ref: section\n\
+             File: /path/to/resource?key=value&foo=bar\n\
+             DefaultPort: 80\n\
+             Protocol2: https\n\
+             Host2: www.example.com\n\
+             Port2: -1\n\
+             Path2: /index.html\n\
+             DefaultPort2: 443\n\
+             Host3: localhost\n\
+             Port3: -1\n\
+             Path3: /test\n\
+             toString: http://example.com:8080/path/to/resource?key=value&foo=bar#section\n\
+             toExternalForm: http://example.com:8080/path/to/resource?key=value&foo=bar#section",
+        );
+    }
 }
