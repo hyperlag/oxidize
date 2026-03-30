@@ -448,6 +448,50 @@ impl<T: Clone + Default + std::fmt::Debug> Wrapper<T> {
 
 Generic type parameters get `Clone + Default + Debug` bounds.
 
+### Bounded Type Parameters
+
+```java
+class SortedPair<T extends Comparable<T>> {
+    T first, second;
+}
+```
+```rust
+pub struct SortedPair<T> { pub first: T, pub second: T }
+impl<T: Clone + Default + std::fmt::Debug + PartialOrd + Ord> SortedPair<T> { ... }
+```
+
+Java `Comparable<T>` → Rust `PartialOrd + Ord`.  
+Java `Iterable<T>` → Rust `IntoIterator`.  
+Other bounds (e.g. `Cloneable`, `Serializable`, `Number`) are silently ignored.
+
+### Wildcard Types
+
+```java
+void process(List<?> list) { ... }
+void addAll(List<? extends Number> nums) { ... }
+void insert(List<? super Integer> dest) { ... }
+```
+```rust
+fn process(list: JList<JavaObject>) { ... }   // <?> → JavaObject
+fn addAll(nums: JList<Number>) { ... }         // <? extends Number> → Number
+fn insert(dest: JList<i32>) { ... }            // <? super Integer> → i32
+```
+
+Wildcards are erased: upper/lower bounds map to the bound type, unbounded `?` maps to `JavaObject`.
+
+### Raw Types
+
+```java
+List list = new ArrayList();    // bare List without type parameter
+Map  map  = new HashMap();
+```
+```rust
+let list: JList<JavaObject> = JList::new();
+let map:  JMap<JavaObject, JavaObject> = JMap::new();
+```
+
+Raw collection types are mapped to their runtime equivalents with `JavaObject` as the default type argument.
+
 ## Enums
 
 ### Simple Enum

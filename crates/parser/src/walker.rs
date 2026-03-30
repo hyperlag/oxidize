@@ -7,7 +7,7 @@ use ir::{
     },
     expr::{BinOp, UnOp},
     stmt::{CatchClause, SwitchCase},
-    IrDecl, IrExpr, IrModule, IrStmt, IrType,
+    IrDecl, IrExpr, IrModule, IrStmt, IrType, IrTypeParam, WildcardBound,
 };
 use tree_sitter::{Language, Node, Parser};
 
@@ -81,6 +81,47 @@ fn named_children(node: Node<'_>) -> Vec<Node<'_>> {
 fn children_by_field_name<'a>(node: Node<'a>, field: &str) -> Vec<Node<'a>> {
     let mut cursor = node.walk();
     node.children_by_field_name(field, &mut cursor).collect()
+}
+
+/// Extract generic type parameters (with bounds) from a `type_parameters` parent node.
+///
+/// Tree-sitter-java structure:
+/// ```text
+/// type_parameters: < type_parameter [ type_identifier, type_bound? ] , ... >
+/// type_bound: extends type1 & type2 & ...
+/// ```
+fn lower_type_params(node: Node<'_>, src: &[u8]) -> Vec<IrTypeParam> {
+    child_by_field(node, "type_parameters")
+        .map(|tp_node| {
+            named_children(tp_node)
+                .into_iter()
+                .filter(|n| n.kind() == "type_parameter")
+                .filter_map(|tp| {
+                    let children = named_children(tp);
+                    // First type_identifier child is the name
+                    let name = children
+                        .iter()
+                        .find(|n| n.kind() == "type_identifier")
+                        .map(|n| text(*n, src).to_owned())?;
+                    // Optional type_bound child contains the bounds
+                    let bounds: Vec<IrType> = children
+                        .iter()
+                        .find(|n| n.kind() == "type_bound")
+                        .map(|bound_node| {
+                            named_children(*bound_node)
+                                .into_iter()
+                                .filter(|n| {
+                                    n.kind() == "type_identifier" || n.kind() == "generic_type"
+                                })
+                                .map(|n| lower_type(n, src))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    Some(IrTypeParam { name, bounds })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 // ─── program ────────────────────────────────────────────────────────────────
@@ -160,22 +201,8 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<(IrClass, Vec<IrEnum>), Par
     let superclass = child_by_field(node, "superclass")
         .map(|n| text(n, src).trim_start_matches("extends").trim().to_owned());
 
-    // Generic type parameters: `class Box<T>` → type_params = ["T"]
-    let type_params: Vec<String> = child_by_field(node, "type_parameters")
-        .map(|tp_node| {
-            named_children(tp_node)
-                .into_iter()
-                .filter(|n| n.kind() == "type_parameter")
-                .filter_map(|tp| {
-                    // First named child of type_parameter is the type_identifier
-                    named_children(tp)
-                        .into_iter()
-                        .find(|n| n.kind() == "type_identifier")
-                        .map(|n| text(n, src).to_owned())
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    // Generic type parameters with bounds: `class Box<T extends Comparable<T>>`
+    let type_params = lower_type_params(node, src);
 
     let interfaces: Vec<String> = child_by_field(node, "interfaces")
         .map(|ifaces_node| {
@@ -269,21 +296,8 @@ fn lower_interface(node: Node<'_>, src: &[u8]) -> Result<IrInterface, ParseError
         }
     }
 
-    // Generic type parameters: `interface Comparable<T>` → type_params = ["T"]
-    let type_params: Vec<String> = child_by_field(node, "type_parameters")
-        .map(|tp_node| {
-            named_children(tp_node)
-                .into_iter()
-                .filter(|n| n.kind() == "type_parameter")
-                .filter_map(|tp| {
-                    named_children(tp)
-                        .into_iter()
-                        .find(|n| n.kind() == "type_identifier")
-                        .map(|n| text(n, src).to_owned())
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    // Generic type parameters with bounds
+    let type_params = lower_type_params(node, src);
 
     Ok(IrInterface {
         name,
@@ -501,21 +515,8 @@ fn lower_method(node: Node<'_>, src: &[u8]) -> Result<IrMethod, ParseError> {
         })
         .unwrap_or_default();
 
-    // Generic type parameters: `<T> T identity(T x)` → type_params = ["T"]
-    let type_params: Vec<String> = child_by_field(node, "type_parameters")
-        .map(|tp_node| {
-            named_children(tp_node)
-                .into_iter()
-                .filter(|n| n.kind() == "type_parameter")
-                .filter_map(|tp| {
-                    named_children(tp)
-                        .into_iter()
-                        .find(|n| n.kind() == "type_identifier")
-                        .map(|n| text(n, src).to_owned())
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    // Generic type parameters with bounds: `<T extends Comparable<T>> T identity(T x)`
+    let type_params = lower_type_params(node, src);
 
     Ok(IrMethod {
         name,
@@ -628,6 +629,27 @@ fn lower_type(node: Node<'_>, src: &[u8]) -> IrType {
                 base: Box::new(base),
                 args,
             }
+        }
+        "wildcard" => {
+            // `?`, `? extends X`, or `? super X`
+            let children = named_children(node);
+            // Look for extends/super keywords to determine bound kind
+            let mut cursor = node.walk();
+            let all_children: Vec<_> = node.children(&mut cursor).collect();
+            let has_extends = all_children.iter().any(|c| c.kind() == "extends");
+            let has_super = all_children.iter().any(|c| c.kind() == "super");
+            let bound_type = children
+                .iter()
+                .find(|n| n.kind() == "type_identifier" || n.kind() == "generic_type")
+                .map(|n| lower_type(*n, src));
+            let bound = if has_extends {
+                bound_type.map(|t| WildcardBound::Upper(Box::new(t)))
+            } else if has_super {
+                bound_type.map(|t| WildcardBound::Lower(Box::new(t)))
+            } else {
+                None
+            };
+            IrType::Wildcard { bound }
         }
         _ => {
             let t = text(node, src);

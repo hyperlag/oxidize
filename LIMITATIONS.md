@@ -53,14 +53,25 @@ annotation-driven features are not supported:
 
 ## Generics (Advanced)
 
-Basic generic classes and methods work. The following advanced generics features
-are not supported:
+Basic generic classes and methods work, including:
 
-- Wildcard types: `List<?>`, `List<? extends Number>`, `List<? super Integer>`
-- Recursive type bounds: `<T extends Comparable<T>>`
-- Type erasure recovery for complex scenarios
+- **Bounded type parameters**: `<T extends Comparable<T>>` – bounds are parsed
+  and mapped to Rust trait bounds (e.g. `Comparable` → `PartialOrd + Ord`,
+  `Iterable` → `IntoIterator`).
+- **Multiple bounds**: `<T extends Number & Comparable<T>>` – all applicable
+  bounds are combined.
+- **Wildcard types**: `List<?>`, `List<? extends Number>`,
+  `List<? super Integer>` – parsed and erased to their bound type (or
+  `JavaObject` for unbounded `?`), since Rust has no wildcard generics.
+- **Raw types**: Bare collection names like `List`, `Map`, `Set` without type
+  parameters are mapped to their Rust equivalents with a `JavaObject` default
+  type argument (e.g. `List` → `JList<JavaObject>`).
+
+The following advanced generics features are **not** supported:
+
 - Generic method type inference across call chains
-- Raw types (e.g., `List` without type parameters)
+- Higher-kinded types or type-constructor polymorphism
+- Translating `compareTo()` / `equals()` from generic bound methods
 
 ## Concurrency (Advanced)
 

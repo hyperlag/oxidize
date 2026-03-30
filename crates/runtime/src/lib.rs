@@ -50,7 +50,7 @@ pub use linked_hash_set::JLinkedHashSet;
 pub use linked_list::JLinkedList;
 pub use list::JList;
 pub use map::JMap;
-pub use object::{JNull, JObject};
+pub use object::{JNull, JObject, JavaObject};
 pub use optional::JOptional;
 pub use priority_queue::JPriorityQueue;
 pub use reflect::JClass;

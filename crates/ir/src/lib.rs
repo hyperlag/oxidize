@@ -11,7 +11,7 @@ pub mod types;
 pub use decl::{IrDecl, IrEnum, IrEnumConstant};
 pub use expr::IrExpr;
 pub use stmt::IrStmt;
-pub use types::IrType;
+pub use types::{IrType, IrTypeParam, WildcardBound};
 
 use serde::{Deserialize, Serialize};
 

@@ -909,4 +909,14 @@ Expression calculator tests complete",
     fn test_scanner() {
         check("ScannerTest.java", "Hello World\n42\n3.14\nLast line\nDone");
     }
+
+    #[test]
+    fn test_generic_bounded() {
+        check("GenericBounded.java", "42\nbounded");
+    }
+
+    #[test]
+    fn test_generic_multi_bound() {
+        check("GenericMultiBound.java", "99");
+    }
 }

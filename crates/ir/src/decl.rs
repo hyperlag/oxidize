@@ -1,6 +1,6 @@
 //! IR top-level declarations.
 
-use crate::{IrStmt, IrType};
+use crate::{IrStmt, IrType, IrTypeParam};
 use serde::{Deserialize, Serialize};
 
 /// A top-level declaration inside an [`crate::IrModule`].
@@ -31,8 +31,8 @@ pub struct IrClass {
     pub visibility: Visibility,
     pub is_abstract: bool,
     pub is_final: bool,
-    /// Type parameters, e.g. `["T", "U"]` for `class Pair<T, U>`.
-    pub type_params: Vec<String>,
+    /// Type parameters, e.g. `[IrTypeParam { name: "T", bounds: [] }]` for `class Box<T>`.
+    pub type_params: Vec<IrTypeParam>,
     /// Superclass, if any (fully-qualified name).
     pub superclass: Option<String>,
     /// Implemented interfaces (fully-qualified names).
@@ -63,7 +63,7 @@ pub struct IrMethod {
     pub is_abstract: bool,
     pub is_final: bool,
     pub is_synchronized: bool,
-    pub type_params: Vec<String>,
+    pub type_params: Vec<IrTypeParam>,
     pub params: Vec<IrParam>,
     pub return_ty: IrType,
     /// `None` for abstract or interface methods.
@@ -93,7 +93,7 @@ pub struct IrParam {
 pub struct IrInterface {
     pub name: String,
     pub visibility: Visibility,
-    pub type_params: Vec<String>,
+    pub type_params: Vec<IrTypeParam>,
     pub extends: Vec<String>,
     pub methods: Vec<IrMethod>,
 }
