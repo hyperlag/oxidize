@@ -62,9 +62,11 @@ pub use regex_support::{JMatcher, JPattern};
 pub use set::JSet;
 pub use stream::JStream;
 pub use string::JString;
+pub use string::jformat;
 pub use string_builder::JStringBuilder;
 pub use thread::JThread;
 pub use time::JLocalDate;
+pub use time::{JLocalTime, JLocalDateTime, JInstant, JDuration, JPeriod, JDateTimeFormatter};
 pub use tree_map::JTreeMap;
 pub use tree_set::JTreeSet;
 
@@ -75,7 +77,8 @@ pub mod prelude {
         JBufferedReader, JBufferedWriter, JClass, JCountDownLatch, JEnumMap, JEnumSet, JException,
         JFile, JFileInputStream, JFileOutputStream, JFileReader, JFileWriter, JFiles,
         JHttpURLConnection, JIterator, JLinkedHashMap, JLinkedHashSet, JLinkedList, JList,
-        JLocalDate, JMap, JMatcher, JMathContext, JNull, JObject, JOptional, JPath, JPaths,
+        JLocalDate, JLocalTime, JLocalDateTime, JInstant, JDuration, JPeriod, JDateTimeFormatter,
+        JMap, JMatcher, JMathContext, JNull, JObject, JOptional, JPath, JPaths,
         JPattern, JPrintWriter, JPriorityQueue, JRoundingMode, JScanner, JSemaphore, JServerSocket,
         JSet, JSocket, JStream, JString, JStringBuilder, JThread, JTreeMap, JTreeSet, JURL,
     };

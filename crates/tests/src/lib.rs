@@ -986,4 +986,119 @@ Expression calculator tests complete",
              toExternalForm: http://example.com:8080/path/to/resource?key=value&foo=bar#section",
         );
     }
+
+    // ── java.time tests ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_local_time() {
+        check(
+            "LocalTimeTest.java",
+            "t1 = 10:30\n\
+             t2 = 14:45:30\n\
+             hour = 14\n\
+             minute = 45\n\
+             second = 30\n\
+             t1 + 3h = 13:30\n\
+             t1 + 45m = 11:15\n\
+             t2 - 2h = 12:45:30\n\
+             t1 before t2 = true\n\
+             t2 after t1 = true\n\
+             23:00 + 3h = 02:00\n\
+             parsed = 08:15:30\n\
+             secondOfDay = 29730\n\
+             t1 withHour(20) = 20:30",
+        );
+    }
+
+    #[test]
+    fn test_local_date_time() {
+        check(
+            "LocalDateTimeTest.java",
+            "dt1 = 2025-03-15T10:30\n\
+             dt2 = 2025-12-25T18:00\n\
+             year = 2025\n\
+             month = 3\n\
+             day = 15\n\
+             hour = 10\n\
+             minute = 30\n\
+             date = 2025-03-15\n\
+             time = 10:30\n\
+             dt1 + 10d = 2025-03-25T10:30\n\
+             dt1 + 3mo = 2025-06-15T10:30\n\
+             dt1 + 5h = 2025-03-15T15:30\n\
+             dt1 before dt2 = true\n\
+             date.atTime = 2025-06-01T09:30\n\
+             parsed = 2025-07-04T12:00",
+        );
+    }
+
+    #[test]
+    fn test_duration_period() {
+        check(
+            "DurationPeriodTest.java",
+            "d1 = PT1H1M1S\n\
+             d1 seconds = 3661\n\
+             d1 toMinutes = 61\n\
+             d1 toHours = 1\n\
+             d2 toMillis = 2500\n\
+             d3 = PT2H\n\
+             d4 = PT1H30M\n\
+             zero.isZero = true\n\
+             d1.isZero = false\n\
+             d1.isNegative = false\n\
+             d3 * 3 = PT6H\n\
+             p1 = P1Y2M3D\n\
+             p1 years = 1\n\
+             p1 months = 2\n\
+             p1 days = 3\n\
+             p2 = P30D\n\
+             p3 = P6M\n\
+             p4 = P14D\n\
+             pz.isZero = true\n\
+             between = P2M14D",
+        );
+    }
+
+    #[test]
+    fn test_date_time_formatter() {
+        check(
+            "DateTimeFormatterTest.java",
+            "formatted date = 2025/03/15\n\
+             formatted time = 14:30:45\n\
+             formatted dt = 2025-12-25 18:00\n\
+             euro format = 15/03/2025",
+        );
+    }
+
+    #[test]
+    fn test_string_format() {
+        check(
+            "StringFormatTest.java",
+            "Hello, World!\n\
+             Count: 42\n\
+             Pi: 3.14\n\
+             Cart has 5 items\n\
+             Hex: ff\n\
+             Oct: 10\n\
+             100%\n\
+             [     right]\n\
+             [left      ]\n\
+             joined = a, b, c\n\
+             printf: test 99",
+        );
+    }
+
+    #[test]
+    fn test_system() {
+        // Non-deterministic values (millis, nanos) checked as >0
+        check(
+            "SystemTest.java",
+            "millis > 0: true\n\
+             nanos > 0: true\n\
+             lineSep length: 1\n\
+             fileSep = /\n\
+             osName empty: false\n\
+             missing = default_val",
+        );
+    }
 }

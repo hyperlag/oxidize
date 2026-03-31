@@ -109,9 +109,12 @@ The following are **not** supported:
 
 - `Process` / `ProcessBuilder` (subprocess execution)
 - `Runtime.getRuntime()` (JVM runtime queries)
-- `System.getenv()` / `System.getProperty()`
 - `ClassLoader`
 - `SecurityManager`
+
+**Supported:** `System.exit()`, `System.currentTimeMillis()`, `System.nanoTime()`,
+`System.getenv()`, `System.getProperty()` (1- and 2-arg forms with inline
+known-property resolution), `System.lineSeparator()`, `System.arraycopy()`.
 
 ### java.io / java.nio
 
@@ -138,17 +141,23 @@ The following are **not** supported:
 
 ### java.util
 
-- `Formatter`
 - `Properties`
 - `ResourceBundle`
 - `Timer` / `TimerTask`
 
-### java.time (Beyond LocalDate)
+**Supported:** `String.format()` (specifiers: `%s`, `%d`, `%f`, `%e`, `%x`, `%o`,
+`%c`, `%b`, `%n`, `%%` with width, precision, and flags), `String.join()`,
+`System.out.printf()`.
 
-- `LocalTime`, `LocalDateTime`, `ZonedDateTime`, `Instant`
-- `Duration`, `Period`
-- `DateTimeFormatter`
+### java.time
+
+- `ZonedDateTime`
 - `Clock`
+
+**Supported:** `LocalDate`, `LocalTime`, `LocalDateTime`, `Instant`, `Duration`,
+`Period`, `DateTimeFormatter` (pattern-based formatting with `ofPattern()`).
+Covers construction, arithmetic, comparison, parsing, and formatting for all
+supported types.
 
 ### java.math
 
