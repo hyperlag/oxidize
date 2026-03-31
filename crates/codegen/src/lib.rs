@@ -49,6 +49,9 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             JString, JArray, JObject, JNull, JList, JMap, JSet, JException,
             JAtomicInteger, JAtomicLong, JAtomicBoolean,
             JCountDownLatch, JSemaphore, JThread, JClass,
+            JReentrantLock, JCondition, JReentrantReadWriteLock, JReadLock, JWriteLock,
+            JConcurrentHashMap, JCopyOnWriteArrayList, JThreadLocal,
+            JExecutorService, JExecutors, JFuture, JCompletableFuture, JTimeUnit,
             JOptional, JStringBuilder, JBigInteger, JPattern, JMatcher,
             JLocalDate, JFile, JStream,
             JLocalTime, JLocalDateTime, JInstant, JDuration, JPeriod, JDateTimeFormatter,
@@ -1415,6 +1418,21 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             }
                         };
                     }
+                    "TimeUnit" => {
+                        return match field_name.as_str() {
+                            "NANOSECONDS" => Ok(quote! { JTimeUnit::NANOSECONDS }),
+                            "MICROSECONDS" => Ok(quote! { JTimeUnit::MICROSECONDS }),
+                            "MILLISECONDS" => Ok(quote! { JTimeUnit::MILLISECONDS }),
+                            "SECONDS" => Ok(quote! { JTimeUnit::SECONDS }),
+                            "MINUTES" => Ok(quote! { JTimeUnit::MINUTES }),
+                            "HOURS" => Ok(quote! { JTimeUnit::HOURS }),
+                            "DAYS" => Ok(quote! { JTimeUnit::DAYS }),
+                            _ => {
+                                let f = ident(field_name);
+                                Ok(quote! { JTimeUnit::#f })
+                            }
+                        };
+                    }
                     _ => {}
                 }
             }
@@ -1491,6 +1509,59 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 if let IrExpr::Var { name, .. } = recv.as_ref() {
                     if name == "Thread" && method_name == "sleep" {
                         return Ok(quote! { JThread::sleep(#(#args_ts),*) });
+                    }
+
+                    // Executors.newFixedThreadPool / newSingleThreadExecutor / newCachedThreadPool
+                    if name == "Executors" {
+                        return match method_name.as_str() {
+                            "newFixedThreadPool" => {
+                                Ok(quote! { JExecutors::newFixedThreadPool(#(#args_ts),*) })
+                            }
+                            "newSingleThreadExecutor" => {
+                                Ok(quote! { JExecutors::newSingleThreadExecutor() })
+                            }
+                            "newCachedThreadPool" => {
+                                Ok(quote! { JExecutors::newCachedThreadPool() })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JExecutors::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+
+                    // CompletableFuture.supplyAsync / runAsync / completedFuture
+                    if name == "CompletableFuture" {
+                        return match method_name.as_str() {
+                            "supplyAsync" | "runAsync" => {
+                                // The arg is a lambda / closure
+                                let f = &args_ts[0];
+                                let m = ident(method_name);
+                                Ok(quote! { JCompletableFuture::#m(#f) })
+                            }
+                            "completedFuture" => {
+                                let v = &args_ts[0];
+                                Ok(quote! { JCompletableFuture::completedFuture(#v) })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JCompletableFuture::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+
+                    // ThreadLocal.withInitial(supplier)
+                    if name == "ThreadLocal" {
+                        return match method_name.as_str() {
+                            "withInitial" => {
+                                let f = &args_ts[0];
+                                Ok(quote! { JThreadLocal::withInitial(#f) })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JThreadLocal::#m(#(#args_ts),*) })
+                            }
+                        };
                     }
                     // System.exit / currentTimeMillis / nanoTime / getenv / getProperty / arraycopy
                     if name == "System" {
@@ -2190,6 +2261,68 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     return Ok(quote! { (#recv_ts).equals(&#a) });
                 }
 
+                // ExecutorService.submit(runnable) / execute(runnable) — wrap in move-closure
+                if (method_name == "submit" || method_name == "execute")
+                    && args_ts.len() == 1
+                    && type_name_matches(recv.ty(), "ExecutorService")
+                {
+                    let task = &args_ts[0];
+                    if method_name == "submit" {
+                        return Ok(quote! { (#recv_ts).submit_runnable({
+                            let mut __r = #task;
+                            move || { (__r).run(); }
+                        }) });
+                    } else {
+                        return Ok(quote! { (#recv_ts).execute({
+                            let mut __r = #task;
+                            move || { (__r).run(); }
+                        }) });
+                    }
+                }
+
+                // executor.awaitTermination(timeout, TimeUnit.X) — convert to millis
+                if method_name == "awaitTermination"
+                    && args_ts.len() == 2
+                    && type_name_matches(recv.ty(), "ExecutorService")
+                {
+                    let timeout = &args_ts[0];
+                    let unit = &args_ts[1];
+                    return Ok(quote! { (#recv_ts).awaitTermination(#unit.toMillis(#timeout)) });
+                }
+
+                // ConcurrentHashMap.get(key) / containsKey(key) / remove(key) / getOrDefault(key, default) — pass key by ref
+                if type_name_matches(recv.ty(), "ConcurrentHashMap") {
+                    match method_name.as_str() {
+                        "get" | "containsKey" | "remove" => {
+                            let a = &args_ts[0];
+                            let m = ident(method_name);
+                            return Ok(quote! { (#recv_ts).#m(&#a) });
+                        }
+                        "getOrDefault" if args_ts.len() == 2 => {
+                            let k = &args_ts[0];
+                            let v = &args_ts[1];
+                            return Ok(quote! { (#recv_ts).getOrDefault(&#k, #v) });
+                        }
+                        _ => {}
+                    }
+                }
+
+                // CopyOnWriteArrayList.contains(e) / indexOf(e) — pass by ref
+                if type_name_matches(recv.ty(), "CopyOnWriteArrayList") {
+                    match method_name.as_str() {
+                        "contains" | "indexOf" => {
+                            let a = &args_ts[0];
+                            let m = ident(method_name);
+                            return Ok(quote! { (#recv_ts).#m(&#a) });
+                        }
+                        "remove" if args_ts.len() == 1 => {
+                            let a = &args_ts[0];
+                            return Ok(quote! { (#recv_ts).remove_at(#a) });
+                        }
+                        _ => {}
+                    }
+                }
+
                 // Rename Java method names to their Rust runtime equivalents.
                 let method = match method_name.as_str() {
                     "await" => ident("await_"),
@@ -2245,6 +2378,11 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 "AtomicBoolean" => Ok(quote! { JAtomicBoolean::new(#(#args_ts),*) }),
                 "CountDownLatch" => Ok(quote! { JCountDownLatch::new(#(#args_ts),*) }),
                 "Semaphore" => Ok(quote! { JSemaphore::new(#(#args_ts),*) }),
+                "ReentrantLock" => Ok(quote! { JReentrantLock::new() }),
+                "ReentrantReadWriteLock" => Ok(quote! { JReentrantReadWriteLock::new() }),
+                "ConcurrentHashMap" => Ok(quote! { JConcurrentHashMap::new() }),
+                "CopyOnWriteArrayList" => Ok(quote! { JCopyOnWriteArrayList::new() }),
+                "ThreadLocal" => Ok(quote! { JThreadLocal::new() }),
                 "StringBuilder" => {
                     if args_ts.is_empty() {
                         Ok(quote! { JStringBuilder::new() })
@@ -2700,6 +2838,19 @@ fn emit_type(ty: &IrType) -> TokenStream {
                 "CountDownLatch" => quote! { JCountDownLatch },
                 "Semaphore" => quote! { JSemaphore },
                 "Thread" => quote! { JThread },
+                "ReentrantLock" => quote! { JReentrantLock },
+                "Condition" => quote! { JCondition },
+                "ReentrantReadWriteLock" => quote! { JReentrantReadWriteLock },
+                "ReadWriteLock" => quote! { JReentrantReadWriteLock },
+                "Lock" => quote! { JReentrantLock },
+                "ConcurrentHashMap" => quote! { JConcurrentHashMap },
+                "CopyOnWriteArrayList" => quote! { JCopyOnWriteArrayList },
+                "ThreadLocal" => quote! { JThreadLocal },
+                "ExecutorService" => quote! { JExecutorService },
+                "Executors" => quote! { JExecutors },
+                "Future" => quote! { JFuture },
+                "CompletableFuture" => quote! { JCompletableFuture },
+                "TimeUnit" => quote! { JTimeUnit },
                 "Optional" => quote! { JOptional },
                 "StringBuilder" => quote! { JStringBuilder },
                 "BigInteger" => quote! { JBigInteger },
@@ -2855,6 +3006,15 @@ fn emit_type(ty: &IrType) -> TokenStream {
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
+
+/// Check if an IrType has the given class name (works for both Class and Generic).
+fn type_name_matches(ty: &IrType, name: &str) -> bool {
+    match ty {
+        IrType::Class(c) => c == name,
+        IrType::Generic { base, .. } => type_name_matches(base, name),
+        _ => false,
+    }
+}
 
 fn ident(name: &str) -> Ident {
     // Sanitise name: replace illegal chars with _

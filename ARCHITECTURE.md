@@ -282,6 +282,16 @@ Core types:
 | `JThread`          | `java.lang.Thread`                  | `std::thread::JoinHandle` |
 | `JCountDownLatch`  | `CountDownLatch`                    | `Arc<(Mutex<i64>, Condvar)>` |
 | `JSemaphore`       | `Semaphore`                         | `Arc<(Mutex<i32>, Condvar)>` |
+| `JReentrantLock`   | `ReentrantLock`                     | `Arc<(Mutex<()>, Condvar)>` |
+| `JCondition`       | `Condition`                         | `Arc<(Mutex<()>, Condvar)>` |
+| `JReentrantReadWriteLock` | `ReentrantReadWriteLock`     | Custom reader-count + writer-flag |
+| `JConcurrentHashMap` | `ConcurrentHashMap<K,V>`          | `Arc<RwLock<HashMap<K,V>>>` |
+| `JCopyOnWriteArrayList` | `CopyOnWriteArrayList<T>`      | `Arc<RwLock<Vec<T>>>`     |
+| `JThreadLocal`     | `ThreadLocal<T>`                    | `Arc<Mutex<HashMap<ThreadId,T>>>` |
+| `JExecutorService` | `ExecutorService`                   | mpsc channel + worker threads |
+| `JFuture`          | `Future<T>`                         | `Arc<(Mutex<Option<T>>, Condvar)>` |
+| `JCompletableFuture` | `CompletableFuture<T>`            | `Arc<(Mutex<Option<T>>, Condvar)>` |
+| `JTimeUnit`        | `TimeUnit`                          | Enum with conversion methods |
 | `JClass`           | `java.lang.Class<?>`                | Static `&str` name        |
 | `JException`       | `java.lang.Exception`               | Panic payload encoding    |
 | `JPattern/JMatcher`| `java.util.regex.Pattern/Matcher`   | `regex::Regex`            |
