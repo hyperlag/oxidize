@@ -76,15 +76,32 @@ The following advanced generics features are **not** supported:
 ## Concurrency (Advanced)
 
 Basic threading (`Thread`, `synchronized`, `volatile`, `AtomicInteger`,
-`CountDownLatch`, `Semaphore`) is supported. The following are not:
+`CountDownLatch`, `Semaphore`) is supported. The following higher-level
+concurrency utilities are also supported:
 
-- `java.util.concurrent.ExecutorService` and thread pools
-- `Future` / `CompletableFuture`
+- `ReentrantLock` / `Condition` (lock, unlock, tryLock, newCondition,
+  await, signal, signalAll)
+- `ReentrantReadWriteLock` / `ReadLock` / `WriteLock` (read/write lock
+  separation with lock, unlock, tryLock)
+- `ConcurrentHashMap` (put, get, containsKey, remove, size, isEmpty, clear,
+  putIfAbsent, getOrDefault)
+- `CopyOnWriteArrayList` (add, get, set, remove, size, isEmpty, contains,
+  clear, indexOf)
+- `ThreadLocal` (get, set, remove, withInitial)
+- `ExecutorService` / `Executors` (newFixedThreadPool,
+  newSingleThreadExecutor, newCachedThreadPool, execute, submit, shutdown,
+  awaitTermination, isShutdown)
+- `Future` (get, isDone)
+- `CompletableFuture` (supplyAsync, runAsync, completedFuture, get, join,
+  isDone, thenApply, thenAccept, thenCompose)
+- `TimeUnit` (NANOSECONDS through DAYS, conversion methods)
+
+The following are **not** supported:
+
 - `ForkJoinPool`
-- `ReentrantLock` / `ReadWriteLock` (beyond what `synchronized` provides)
-- `ConcurrentHashMap` / `CopyOnWriteArrayList`
-- `ThreadLocal`
 - `java.util.concurrent.locks.StampedLock`
+- Lambda-based closures capturing shared mutable state across multiple
+  executor tasks (use `Runnable` implementations instead)
 - `wait()` / `notify()` on arbitrary objects (only supported inside
   `synchronized` blocks on `this`)
 

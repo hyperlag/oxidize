@@ -72,6 +72,17 @@ or emit a `TODO` stub.
 | `AtomicBoolean`               | `JAtomicBoolean`             |
 | `CountDownLatch`              | `JCountDownLatch`            |
 | `Semaphore`                   | `JSemaphore`                 |
+| `ReentrantLock`               | `JReentrantLock`             |
+| `Condition`                   | `JCondition`                 |
+| `ReentrantReadWriteLock`      | `JReentrantReadWriteLock`    |
+| `ConcurrentHashMap<K,V>`      | `JConcurrentHashMap<K,V>`    |
+| `CopyOnWriteArrayList<T>`     | `JCopyOnWriteArrayList<T>`   |
+| `ThreadLocal<T>`              | `JThreadLocal<T>`            |
+| `ExecutorService`             | `JExecutorService`           |
+| `Executors`                   | `JExecutors`                 |
+| `Future<T>`                   | `JFuture<T>`                 |
+| `CompletableFuture<T>`        | `JCompletableFuture<T>`      |
+| `TimeUnit`                    | `JTimeUnit`                  |
 | User-defined class `Foo`      | `struct Foo`                 |
 
 ## Literals
@@ -804,6 +815,93 @@ pub counter: Arc<AtomicI32>,
 | `new Semaphore(n)`           | `JSemaphore::new(n)`                 |
 | `sem.acquire()`              | `sem.acquire()`                      |
 | `sem.release()`              | `sem.release()`                      |
+
+### ReentrantLock / Condition
+
+| Java                          | Rust                               |
+|-------------------------------|--------------------------------------|
+| `new ReentrantLock()`        | `JReentrantLock::new()`              |
+| `lock.lock()`               | `lock.lock()`                        |
+| `lock.unlock()`             | `lock.unlock()`                      |
+| `lock.tryLock()`            | `lock.tryLock()`                     |
+| `lock.newCondition()`       | `lock.newCondition()`                |
+| `cond.await()`              | `cond.await_()`                      |
+| `cond.signal()`             | `cond.signal()`                      |
+| `cond.signalAll()`          | `cond.signalAll()`                   |
+
+### ReentrantReadWriteLock
+
+| Java                          | Rust                               |
+|-------------------------------|--------------------------------------|
+| `new ReentrantReadWriteLock()` | `JReentrantReadWriteLock::new()`   |
+| `rwl.readLock()`            | `rwl.readLock()` → `JReadLock`       |
+| `rwl.writeLock()`           | `rwl.writeLock()` → `JWriteLock`     |
+| `rl.lock()` / `rl.unlock()` | `rl.lock()` / `rl.unlock()`         |
+| `wl.lock()` / `wl.unlock()` | `wl.lock()` / `wl.unlock()`         |
+
+### ConcurrentHashMap
+
+| Java                          | Rust                               |
+|-------------------------------|--------------------------------------|
+| `new ConcurrentHashMap<>()`  | `JConcurrentHashMap::new()`          |
+| `map.put(k, v)`             | `map.put(k, v)`                      |
+| `map.get(k)`                | `map.get(&k)`                        |
+| `map.containsKey(k)`        | `map.containsKey(&k)`               |
+| `map.remove(k)`             | `map.remove(&k)`                     |
+| `map.putIfAbsent(k, v)`     | `map.putIfAbsent(k, v)`             |
+| `map.getOrDefault(k, def)`  | `map.getOrDefault(&k, def)`          |
+
+### CopyOnWriteArrayList
+
+| Java                          | Rust                               |
+|-------------------------------|--------------------------------------|
+| `new CopyOnWriteArrayList<>()` | `JCopyOnWriteArrayList::new()`     |
+| `list.add(e)`               | `list.add(e)`                        |
+| `list.get(i)`               | `list.get(i)`                        |
+| `list.set(i, e)`            | `list.set(i, e)`                     |
+| `list.remove(i)`            | `list.remove_at(i)`                  |
+| `list.contains(e)`          | `list.contains(&e)`                  |
+| `list.indexOf(e)`           | `list.indexOf(&e)`                   |
+
+### ThreadLocal
+
+| Java                          | Rust                               |
+|-------------------------------|--------------------------------------|
+| `ThreadLocal.withInitial(() -> v)` | `JThreadLocal::withInitial(\|\| v)` |
+| `tl.get()`                  | `tl.get()`                           |
+| `tl.set(v)`                 | `tl.set(v)`                          |
+| `tl.remove()`               | `tl.remove()`                        |
+
+### ExecutorService / Executors
+
+| Java                          | Rust                               |
+|-------------------------------|--------------------------------------|
+| `Executors.newFixedThreadPool(n)` | `JExecutors::newFixedThreadPool(n)` |
+| `Executors.newSingleThreadExecutor()` | `JExecutors::newSingleThreadExecutor()` |
+| `executor.execute(task)`    | `executor.execute(move \|\| task.run())` |
+| `executor.submit(task)`     | `executor.submit_runnable(move \|\| task.run())` |
+| `executor.shutdown()`       | `executor.shutdown()`                |
+| `executor.awaitTermination(t, unit)` | `executor.awaitTermination(unit.toMillis(t))` |
+| `executor.isShutdown()`     | `executor.isShutdown()`              |
+
+### Future / CompletableFuture
+
+| Java                          | Rust                               |
+|-------------------------------|--------------------------------------|
+| `CompletableFuture.supplyAsync(() -> v)` | `JCompletableFuture::supplyAsync(\|\| v)` |
+| `CompletableFuture.completedFuture(v)` | `JCompletableFuture::completedFuture(v)` |
+| `cf.get()`                  | `cf.get()`                           |
+| `cf.join()`                 | `cf.join()`                          |
+| `cf.isDone()`               | `cf.isDone()`                        |
+| `cf.thenApply(x -> f(x))`  | `cf.thenApply(\|x\| f(x))`          |
+
+### TimeUnit
+
+| Java                          | Rust                               |
+|-------------------------------|--------------------------------------|
+| `TimeUnit.SECONDS`          | `JTimeUnit::SECONDS`                 |
+| `TimeUnit.MILLISECONDS`     | `JTimeUnit::MILLISECONDS`            |
+| `unit.toMillis(n)`          | `unit.toMillis(n)`                   |
 
 ## Standard Library
 

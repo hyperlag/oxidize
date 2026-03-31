@@ -1102,4 +1102,96 @@ Expression calculator tests complete",
         );
         check("SystemTest.java", &expected);
     }
+
+    #[test]
+    fn test_reentrant_lock() {
+        check(
+            "ReentrantLockTest.java",
+            "counter = 42\n\
+             tryLock = true\n\
+             condition created\n\
+             done",
+        );
+    }
+
+    #[test]
+    fn test_read_write_lock() {
+        check(
+            "ReadWriteLockTest.java",
+            "after write: 100\n\
+             after read: 100\n\
+             tryLock read = true\n\
+             tryLock write = true\n\
+             done",
+        );
+    }
+
+    #[test]
+    fn test_concurrent_hash_map() {
+        check(
+            "ConcurrentHashMapTest.java",
+            "size = 3\n\
+             has a = true\n\
+             has z = false\n\
+             size after putIfAbsent = 4\n\
+             getOrDefault z = -1\n\
+             size after remove = 3\n\
+             isEmpty = false\n\
+             size after clear = 0\n\
+             isEmpty after clear = true",
+        );
+    }
+
+    #[test]
+    fn test_copy_on_write_array_list() {
+        check(
+            "CopyOnWriteArrayListTest.java",
+            "size = 3\n\
+             get(1) = b\n\
+             contains b = true\n\
+             contains z = false\n\
+             indexOf c = 2\n\
+             indexOf z = -1\n\
+             replaced = b\n\
+             get(1) after set = B\n\
+             removed = a\n\
+             size after remove = 2\n\
+             isEmpty = false\n\
+             isEmpty after clear = true",
+        );
+    }
+
+    #[test]
+    fn test_thread_local() {
+        check(
+            "ThreadLocalTest.java",
+            "initial = 0\n\
+             after set = 42\n\
+             after remove = 0\n\
+             done",
+        );
+    }
+
+    #[test]
+    fn test_executor_service() {
+        check(
+            "ExecutorServiceTest.java",
+            "pool created\n\
+             task ran\n\
+             terminated = true\n\
+             isShutdown = true",
+        );
+    }
+
+    #[test]
+    fn test_completable_future() {
+        check(
+            "CompletableFutureTest.java",
+            "cf1 = hello\n\
+             cf2 = 42\n\
+             cf2 isDone = true\n\
+             cf3 = value=10\n\
+             done",
+        );
+    }
 }

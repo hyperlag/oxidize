@@ -39,7 +39,11 @@ pub use array::JArray;
 pub use atomic::{JAtomicBoolean, JAtomicInteger, JAtomicLong};
 pub use bigdecimal::{JBigDecimal, JMathContext, JRoundingMode};
 pub use bigint::JBigInteger;
-pub use concurrent::{JCountDownLatch, JSemaphore, __sync_block_monitor};
+pub use concurrent::{
+    JCompletableFuture, JConcurrentHashMap, JCondition, JCopyOnWriteArrayList, JCountDownLatch,
+    JExecutorService, JExecutors, JFuture, JReadLock, JReentrantLock, JReentrantReadWriteLock,
+    JSemaphore, JThreadLocal, JTimeUnit, JWriteLock, __sync_block_monitor,
+};
 pub use enum_map::JEnumMap;
 pub use enum_set::JEnumSet;
 pub use exception::JException;
@@ -74,12 +78,15 @@ pub use tree_set::JTreeSet;
 pub mod prelude {
     pub use super::{
         JArray, JAtomicBoolean, JAtomicInteger, JAtomicLong, JBigDecimal, JBigInteger,
-        JBufferedReader, JBufferedWriter, JClass, JCountDownLatch, JDateTimeFormatter, JDuration,
-        JEnumMap, JEnumSet, JException, JFile, JFileInputStream, JFileOutputStream, JFileReader,
-        JFileWriter, JFiles, JHttpURLConnection, JInstant, JIterator, JLinkedHashMap,
-        JLinkedHashSet, JLinkedList, JList, JLocalDate, JLocalDateTime, JLocalTime, JMap, JMatcher,
-        JMathContext, JNull, JObject, JOptional, JPath, JPaths, JPattern, JPeriod, JPrintWriter,
-        JPriorityQueue, JRoundingMode, JScanner, JSemaphore, JServerSocket, JSet, JSocket, JStream,
-        JString, JStringBuilder, JThread, JTreeMap, JTreeSet, JURL,
+        JBufferedReader, JBufferedWriter, JClass, JCompletableFuture, JConcurrentHashMap,
+        JCondition, JCopyOnWriteArrayList, JCountDownLatch, JDateTimeFormatter, JDuration,
+        JEnumMap, JEnumSet, JException, JExecutorService, JExecutors, JFile, JFileInputStream,
+        JFileOutputStream, JFileReader, JFileWriter, JFiles, JFuture, JHttpURLConnection,
+        JInstant, JIterator, JLinkedHashMap, JLinkedHashSet, JLinkedList, JList, JLocalDate,
+        JLocalDateTime, JLocalTime, JMap, JMatcher, JMathContext, JNull, JObject, JOptional,
+        JPath, JPaths, JPattern, JPeriod, JPrintWriter, JPriorityQueue, JReadLock,
+        JReentrantLock, JReentrantReadWriteLock, JRoundingMode, JScanner, JSemaphore,
+        JServerSocket, JSet, JSocket, JStream, JString, JStringBuilder, JThread, JThreadLocal,
+        JTimeUnit, JTreeMap, JTreeSet, JURL, JWriteLock,
     };
 }
