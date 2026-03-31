@@ -210,7 +210,7 @@ cargo test
 
 The differential integration tests in `crates/tests` compile and run each translated Rust
 program, then assert that stdout matches the expected output. No JDK is required to run
-the tests. The suite currently contains **99 differential tests**:
+the tests. The suite currently contains **105 differential tests**:
 
 ```bash
 cargo test -p tests -- --test-threads=4
@@ -277,6 +277,9 @@ cargo test -p tests -- --test-threads=4
 
 - `Math` static methods, `StringBuilder`, `Optional<T>`, `Stream<T>` API
 - `Pattern` / `Matcher` regex, `BigInteger`, `BigDecimal`, `MathContext`, `LocalDate`, `File`
+- `LocalTime`, `LocalDateTime`, `Instant`, `Duration`, `Period`, `DateTimeFormatter`
+- `String.format()`, `String.join()`, `System.out.printf()`
+- `System.exit()`, `System.currentTimeMillis()`, `System.nanoTime()`, `System.getenv()`, `System.getProperty()`, `System.lineSeparator()`
 - Lambda expressions → Rust closures
 
 ### Networking
@@ -330,6 +333,12 @@ cargo test -p tests -- --test-threads=4
 | `HttpURLConnection` | `java_compat::JHttpURLConnection` |
 | `Pattern` / `Matcher` | `java_compat::JPattern` / `JMatcher` |
 | `LocalDate` | `java_compat::JLocalDate` |
+| `LocalTime` | `java_compat::JLocalTime` |
+| `LocalDateTime` | `java_compat::JLocalDateTime` |
+| `Instant` | `java_compat::JInstant` |
+| `Duration` | `java_compat::JDuration` |
+| `Period` | `java_compat::JPeriod` |
+| `DateTimeFormatter` | `java_compat::JDateTimeFormatter` |
 | `File` | `java_compat::JFile` |
 | `FileReader` | `java_compat::JFileReader` |
 | `FileWriter` | `java_compat::JFileWriter` |

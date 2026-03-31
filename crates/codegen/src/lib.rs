@@ -51,6 +51,7 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             JCountDownLatch, JSemaphore, JThread, JClass,
             JOptional, JStringBuilder, JBigInteger, JPattern, JMatcher,
             JLocalDate, JFile, JStream,
+            JLocalTime, JLocalDateTime, JInstant, JDuration, JPeriod, JDateTimeFormatter,
             JLinkedList, JPriorityQueue, JTreeMap, JTreeSet,
             JLinkedHashMap, JLinkedHashSet, JIterator,
             JEnumMap, JEnumSet,
@@ -1491,6 +1492,94 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     if name == "Thread" && method_name == "sleep" {
                         return Ok(quote! { JThread::sleep(#(#args_ts),*) });
                     }
+                    // System.exit / currentTimeMillis / nanoTime / getenv / getProperty / arraycopy
+                    if name == "System" {
+                        return match method_name.as_str() {
+                            "exit" => {
+                                let code = &args_ts[0];
+                                Ok(quote! { std::process::exit(#code) })
+                            }
+                            "currentTimeMillis" => Ok(quote! { {
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_millis() as i64
+                            } }),
+                            "nanoTime" => Ok(quote! { {
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_nanos() as i64
+                            } }),
+                            "getenv" => {
+                                let key = &args_ts[0];
+                                Ok(quote! { JString::from(
+                                    std::env::var(#key.as_str()).unwrap_or_default().as_str()
+                                ) })
+                            }
+                            "getProperty" => {
+                                if args_ts.len() >= 2 {
+                                    let key = &args_ts[0];
+                                    let def = &args_ts[1];
+                                    Ok(quote! { {
+                                        let __k = #key;
+                                        match __k.as_str() {
+                                            "line.separator" => JString::from("\n"),
+                                            "file.separator" | "path.separator" => {
+                                                let mut __buf = [0u8; 4];
+                                                let __s = std::path::MAIN_SEPARATOR.encode_utf8(&mut __buf);
+                                                JString::from(&*__s)
+                                            },
+                                            "os.name" => JString::from(std::env::consts::OS),
+                                            "os.arch" => JString::from(std::env::consts::ARCH),
+                                            "user.dir" => {
+                                                let __p = std::env::current_dir()
+                                                    .map(|p| p.to_string_lossy().into_owned())
+                                                    .unwrap_or_default();
+                                                JString::from(__p.as_str())
+                                            },
+                                            "user.home" => {
+                                                let __h = std::env::var("HOME").unwrap_or_default();
+                                                JString::from(__h.as_str())
+                                            },
+                                            _ => #def,
+                                        }
+                                    } })
+                                } else {
+                                    let key = &args_ts[0];
+                                    Ok(quote! { {
+                                        let __k = #key;
+                                        match __k.as_str() {
+                                            "line.separator" => JString::from("\n"),
+                                            "file.separator" | "path.separator" => {
+                                                let mut __buf = [0u8; 4];
+                                                let __s = std::path::MAIN_SEPARATOR.encode_utf8(&mut __buf);
+                                                JString::from(&*__s)
+                                            },
+                                            "os.name" => JString::from(std::env::consts::OS),
+                                            "os.arch" => JString::from(std::env::consts::ARCH),
+                                            "user.dir" => {
+                                                let __p = std::env::current_dir()
+                                                    .map(|p| p.to_string_lossy().into_owned())
+                                                    .unwrap_or_default();
+                                                JString::from(__p.as_str())
+                                            },
+                                            "user.home" => {
+                                                let __h = std::env::var("HOME").unwrap_or_default();
+                                                JString::from(__h.as_str())
+                                            },
+                                            _ => JString::from(""),
+                                        }
+                                    } })
+                                }
+                            }
+                            "lineSeparator" => Ok(quote! { JString::from("\n") }),
+                            _ => Err(CodegenError::Unsupported(format!(
+                                "Unsupported java.lang.System static method: {}.{}",
+                                name, method_name
+                            ))),
+                        };
+                    }
                     // Math.x(...) — static Math methods → f64 method calls or std ops.
                     if name == "Math" {
                         let first_ty = args.first().map(|e| e.ty().clone());
@@ -1624,14 +1713,128 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             }
                         };
                     }
-                    // LocalDate.of(...) / LocalDate.now()
+                    // LocalDate.of(...) / LocalDate.now() / LocalDate.parse()
                     if name == "LocalDate" {
                         return match method_name.as_str() {
                             "of" => Ok(quote! { JLocalDate::of(#(#args_ts),*) }),
                             "now" => Ok(quote! { JLocalDate::now() }),
+                            "parse" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JLocalDate::parse(&#a) })
+                            }
                             _ => {
                                 let m = ident(method_name);
                                 Ok(quote! { JLocalDate::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // LocalTime.of(...) / LocalTime.now() / LocalTime.parse()
+                    if name == "LocalTime" {
+                        return match method_name.as_str() {
+                            "of" => match args_ts.len() {
+                                2 => Ok(quote! { JLocalTime::of_hm(#(#args_ts),*) }),
+                                3 => Ok(quote! { JLocalTime::of_hms(#(#args_ts),*) }),
+                                _ => Ok(quote! { JLocalTime::of_hmsn(#(#args_ts),*) }),
+                            },
+                            "now" => Ok(quote! { JLocalTime::now() }),
+                            "parse" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JLocalTime::parse(&#a) })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JLocalTime::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // LocalDateTime.of(...) / LocalDateTime.now() / LocalDateTime.parse()
+                    if name == "LocalDateTime" {
+                        return match method_name.as_str() {
+                            "of" => match args_ts.len() {
+                                5 => Ok(quote! { JLocalDateTime::of_ymd_hm(#(#args_ts),*) }),
+                                6 => Ok(quote! { JLocalDateTime::of_ymd_hms(#(#args_ts),*) }),
+                                7 => Ok(quote! { JLocalDateTime::of_ymd_hmsn(#(#args_ts),*) }),
+                                2 => {
+                                    let a = &args_ts[0];
+                                    let b = &args_ts[1];
+                                    Ok(quote! { JLocalDateTime::of_dt(#a, #b) })
+                                }
+                                _ => Ok(quote! { JLocalDateTime::of_ymd_hms(#(#args_ts),*) }),
+                            },
+                            "now" => Ok(quote! { JLocalDateTime::now() }),
+                            "parse" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JLocalDateTime::parse(&#a) })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JLocalDateTime::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // Instant.now() / Instant.ofEpochSecond() / Instant.ofEpochMilli()
+                    if name == "Instant" {
+                        return match method_name.as_str() {
+                            "now" => Ok(quote! { JInstant::now() }),
+                            "ofEpochSecond" => {
+                                Ok(quote! { JInstant::ofEpochSecond(#(#args_ts),*) })
+                            }
+                            "ofEpochMilli" => Ok(quote! { JInstant::ofEpochMilli(#(#args_ts),*) }),
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JInstant::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // Duration.ofSeconds() / Duration.ofMillis() / Duration.between() etc.
+                    if name == "Duration" {
+                        return match method_name.as_str() {
+                            "ofSeconds" => Ok(quote! { JDuration::ofSeconds(#(#args_ts),*) }),
+                            "ofMillis" => Ok(quote! { JDuration::ofMillis(#(#args_ts),*) }),
+                            "ofMinutes" => Ok(quote! { JDuration::ofMinutes(#(#args_ts),*) }),
+                            "ofHours" => Ok(quote! { JDuration::ofHours(#(#args_ts),*) }),
+                            "ofDays" => Ok(quote! { JDuration::ofDays(#(#args_ts),*) }),
+                            "ofNanos" => Ok(quote! { JDuration::ofNanos(#(#args_ts),*) }),
+                            "between" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { JDuration::between(&#a, &#b) })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JDuration::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // Period.of() / Period.between() / Period.ofDays() etc.
+                    if name == "Period" {
+                        return match method_name.as_str() {
+                            "of" => Ok(quote! { JPeriod::of(#(#args_ts),*) }),
+                            "ofDays" => Ok(quote! { JPeriod::ofDays(#(#args_ts),*) }),
+                            "ofMonths" => Ok(quote! { JPeriod::ofMonths(#(#args_ts),*) }),
+                            "ofYears" => Ok(quote! { JPeriod::ofYears(#(#args_ts),*) }),
+                            "ofWeeks" => Ok(quote! { JPeriod::ofWeeks(#(#args_ts),*) }),
+                            "between" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { JPeriod::between(&#a, &#b) })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JPeriod::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // DateTimeFormatter.ofPattern()
+                    if name == "DateTimeFormatter" {
+                        return match method_name.as_str() {
+                            "ofPattern" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JDateTimeFormatter::ofPattern(&#a) })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JDateTimeFormatter::#m(#(#args_ts),*) })
                             }
                         };
                     }
@@ -1698,6 +1901,36 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             "valueOf" => {
                                 let a = &args_ts[0];
                                 Ok(quote! { JString::from(format!("{}", #a).as_str()) })
+                            }
+                            "format" => {
+                                // String.format(fmt, args...) → jformat(fmt, &[args...])
+                                if args_ts.is_empty() {
+                                    Ok(quote! { JString::from("") })
+                                } else {
+                                    let fmt = &args_ts[0];
+                                    let rest = &args_ts[1..];
+                                    let rest_strs: Vec<TokenStream> = rest
+                                        .iter()
+                                        .map(|a| {
+                                            quote! { format!("{}", #a) }
+                                        })
+                                        .collect();
+                                    Ok(quote! { java_compat::jformat(#fmt, &[#(#rest_strs),*]) })
+                                }
+                            }
+                            "join" => {
+                                // String.join(delimiter, elements...)
+                                let delim = &args_ts[0];
+                                let rest = &args_ts[1..];
+                                let rest_strs: Vec<TokenStream> = rest
+                                    .iter()
+                                    .map(|a| {
+                                        quote! { format!("{}", #a) }
+                                    })
+                                    .collect();
+                                Ok(quote! { JString::from(
+                                    [#(#rest_strs),*].join(#delim.as_str()).as_str()
+                                ) })
                             }
                             _ => Ok(quote! { JString::from("") }),
                         };
@@ -1903,6 +2136,52 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     let a = &args_ts[0];
                     let b = &args_ts[1];
                     return Ok(quote! { (#recv_ts).setScale(#a, #b) });
+                }
+
+                // LocalDate.atTime(hour, minute) → atTime_hm(hour, minute)
+                if method_name == "atTime"
+                    && args_ts.len() == 2
+                    && matches!(recv.ty(), IrType::Class(c) if c == "LocalDate")
+                {
+                    let a = &args_ts[0];
+                    let b = &args_ts[1];
+                    return Ok(quote! { (#recv_ts).atTime_hm(#a, #b) });
+                }
+
+                // isBefore/isAfter/isEqual on time types — pass arg by reference
+                if (method_name == "isBefore"
+                    || method_name == "isAfter"
+                    || method_name == "isEqual")
+                    && args_ts.len() == 1
+                    && matches!(recv.ty(), IrType::Class(c) if
+                        c == "LocalDate" || c == "LocalTime" || c == "LocalDateTime"
+                        || c == "Instant" || c == "Duration" || c == "Period"
+                    )
+                {
+                    let a = &args_ts[0];
+                    let m = ident(method_name);
+                    return Ok(quote! { (#recv_ts).#m(&#a) });
+                }
+
+                // Duration/Period plus/minus — pass arg by reference
+                if (method_name == "plus" || method_name == "minus")
+                    && args_ts.len() == 1
+                    && matches!(recv.ty(), IrType::Class(c) if c == "Duration" || c == "Period")
+                {
+                    let a = &args_ts[0];
+                    let m = ident(method_name);
+                    return Ok(quote! { (#recv_ts).#m(&#a) });
+                }
+
+                // LocalDate/LocalDateTime/LocalTime.format(formatter) — pass formatter by reference
+                if method_name == "format"
+                    && args_ts.len() == 1
+                    && matches!(recv.ty(), IrType::Class(c) if
+                        c == "LocalDate" || c == "LocalDateTime" || c == "LocalTime"
+                    )
+                {
+                    let a = &args_ts[0];
+                    return Ok(quote! { (#recv_ts).format(&#a) });
                 }
 
                 // String.equals(obj) — pass by reference (JString::equals takes &JString).
@@ -2277,23 +2556,40 @@ fn emit_print_call(
             }
         }
         "print" => {
+            let print_macro = if macro_name == "eprintln" {
+                ident("eprint")
+            } else {
+                ident("print")
+            };
             if args.is_empty() {
-                Ok(quote! { print!("") })
+                Ok(quote! { #print_macro!("") })
             } else {
                 let first = &args[0];
                 if is_float {
-                    Ok(quote! { print!("{:?}", #first) })
+                    Ok(quote! { #print_macro!("{:?}", #first) })
                 } else {
-                    Ok(quote! { print!("{}", #first) })
+                    Ok(quote! { #print_macro!("{}", #first) })
                 }
             }
         }
         "printf" | "format" => {
-            if args.is_empty() {
-                Ok(quote! { print!("") })
+            let print_macro = if macro_name == "eprintln" {
+                ident("eprint")
             } else {
-                // Pass through args directly — best-effort
-                Ok(quote! { print!(#(#args),*) })
+                ident("print")
+            };
+            if args.is_empty() {
+                Ok(quote! { #print_macro!("") })
+            } else {
+                let fmt = &args[0];
+                let rest = &args[1..];
+                let rest_strs: Vec<TokenStream> = rest
+                    .iter()
+                    .map(|a| {
+                        quote! { format!("{}", #a) }
+                    })
+                    .collect();
+                Ok(quote! { #print_macro!("{}", java_compat::jformat(#fmt, &[#(#rest_strs),*])) })
             }
         }
         _ => Ok(quote! {}),
@@ -2417,6 +2713,12 @@ fn emit_type(ty: &IrType) -> TokenStream {
                 "Pattern" => quote! { JPattern },
                 "Matcher" => quote! { JMatcher },
                 "LocalDate" => quote! { JLocalDate },
+                "LocalTime" => quote! { JLocalTime },
+                "LocalDateTime" => quote! { JLocalDateTime },
+                "Instant" => quote! { JInstant },
+                "Duration" => quote! { JDuration },
+                "Period" => quote! { JPeriod },
+                "DateTimeFormatter" => quote! { JDateTimeFormatter },
                 "File" => quote! { JFile },
                 "BufferedReader" => quote! { JBufferedReader },
                 "BufferedWriter" => quote! { JBufferedWriter },

@@ -49,6 +49,12 @@ or emit a `TODO` stub.
 | `Pattern`                     | `JPattern`                   |
 | `Matcher`                     | `JMatcher`                   |
 | `LocalDate`                   | `JLocalDate`                 |
+| `LocalTime`                   | `JLocalTime`                 |
+| `LocalDateTime`               | `JLocalDateTime`             |
+| `Instant`                     | `JInstant`                   |
+| `Duration`                    | `JDuration`                  |
+| `Period`                      | `JPeriod`                    |
+| `DateTimeFormatter`           | `JDateTimeFormatter`         |
 | `File`                        | `JFile`                      |
 | `FileReader`                  | `JFileReader`                |
 | `FileWriter`                  | `JFileWriter`                |
@@ -887,6 +893,61 @@ pub counter: Arc<AtomicI32>,
 | `date.plusDays(n)`              | `date.plusDays(n)`                   |
 | `date.plusMonths(n)`            | `date.plusMonths(n)`                 |
 
+### LocalTime
+
+| Java                            | Rust                               |
+|---------------------------------|--------------------------------------|
+| `LocalTime.of(h, m)`           | `JLocalTime::of_hm(h, m)`           |
+| `LocalTime.of(h, m, s)`        | `JLocalTime::of_hms(h, m, s)`       |
+| `LocalTime.now()`              | `JLocalTime::now()`                  |
+| `LocalTime.parse(s)`           | `JLocalTime::parse(&s)`              |
+| `t.getHour()`                  | `t.getHour()`                        |
+| `t.plusHours(n)`               | `t.plusHours(n)`                     |
+| `t.isBefore(other)`            | `t.isBefore(&other)`                 |
+
+### LocalDateTime
+
+| Java                            | Rust                               |
+|---------------------------------|--------------------------------------|
+| `LocalDateTime.of(y,m,d,h,mn)` | `JLocalDateTime::of_ymd_hm(y,m,d,h,mn)` |
+| `LocalDateTime.now()`          | `JLocalDateTime::now()`              |
+| `LocalDateTime.parse(s)`       | `JLocalDateTime::parse(&s)`          |
+| `dt.toLocalDate()`             | `dt.toLocalDate()`                   |
+| `dt.toLocalTime()`             | `dt.toLocalTime()`                   |
+| `dt.plusDays(n)`               | `dt.plusDays(n)`                     |
+| `dt.isBefore(other)`           | `dt.isBefore(&other)`                |
+
+### Instant
+
+| Java                            | Rust                               |
+|---------------------------------|--------------------------------------|
+| `Instant.now()`                | `JInstant::now()`                    |
+| `Instant.ofEpochSecond(s)`     | `JInstant::ofEpochSecond(s)`         |
+| `Instant.ofEpochMilli(ms)`     | `JInstant::ofEpochMilli(ms)`         |
+| `i.toEpochMilli()`             | `i.toEpochMilli()`                   |
+| `i.plusSeconds(n)`             | `i.plusSeconds(n)`                   |
+
+### Duration / Period
+
+| Java                            | Rust                               |
+|---------------------------------|--------------------------------------|
+| `Duration.ofSeconds(s)`        | `JDuration::ofSeconds(s)`            |
+| `Duration.ofMillis(ms)`        | `JDuration::ofMillis(ms)`            |
+| `Duration.between(a, b)`       | `JDuration::between(&a, &b)`         |
+| `d.getSeconds()`               | `d.getSeconds()`                     |
+| `d.toMillis()`                 | `d.toMillis()`                       |
+| `d.plus(other)`                | `d.plus(&other)`                     |
+| `Period.of(y, m, d)`           | `JPeriod::of(y, m, d)`              |
+| `Period.between(d1, d2)`       | `JPeriod::between(&d1, &d2)`         |
+| `p.getYears()`                 | `p.getYears()`                       |
+
+### DateTimeFormatter
+
+| Java                            | Rust                               |
+|---------------------------------|--------------------------------------|
+| `DateTimeFormatter.ofPattern(p)`| `JDateTimeFormatter::ofPattern(&p)`  |
+| `date.format(formatter)`       | `date.format(&formatter)`            |
+
 ### File
 
 | Java                            | Rust                               |
@@ -1014,6 +1075,26 @@ generation.
 | `System.out.println(x)`        | `println!("{}", x)`         |
 | `System.out.print(x)`          | `print!("{}", x)`           |
 | `System.err.println(x)`        | `eprintln!("{}", x)`        |
+| `System.out.printf(fmt, args)` | `print!("{}", jformat(fmt, &[...]))` |
+
+## System Utilities
+
+| Java                            | Rust                                       |
+|---------------------------------|--------------------------------------------|
+| `System.exit(code)`            | `std::process::exit(code)`                  |
+| `System.currentTimeMillis()`   | `SystemTime` millis since epoch             |
+| `System.nanoTime()`            | `SystemTime` nanos since epoch              |
+| `System.getenv(key)`           | `std::env::var(key).unwrap_or_default()`    |
+| `System.getProperty(key)`      | Inline match on known properties            |
+| `System.getProperty(key, def)` | Inline match with default fallback          |
+| `System.lineSeparator()`       | `JString::from("\n")`                      |
+
+## String.format / String.join
+
+| Java                            | Rust                                       |
+|---------------------------------|--------------------------------------------|
+| `String.format(fmt, args)`     | `jformat(fmt, &[args...])`                  |
+| `String.join(delim, strs)`     | `[strs].join(delim.as_str())`               |
 
 ## Main Method
 

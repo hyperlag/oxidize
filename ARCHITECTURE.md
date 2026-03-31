@@ -286,6 +286,12 @@ Core types:
 | `JException`       | `java.lang.Exception`               | Panic payload encoding    |
 | `JPattern/JMatcher`| `java.util.regex.Pattern/Matcher`   | `regex::Regex`            |
 | `JLocalDate`       | `java.time.LocalDate`               | `(i32, u32, u32)` triple |
+| `JLocalTime`       | `java.time.LocalTime`               | `(i32, i32, i32, i32)` hour/min/sec/nano |
+| `JLocalDateTime`   | `java.time.LocalDateTime`           | `JLocalDate` + `JLocalTime` |
+| `JInstant`         | `java.time.Instant`                 | `(i64, i32)` epoch_second + nano |
+| `JDuration`        | `java.time.Duration`                | `(i64, i32)` seconds + nano |
+| `JPeriod`          | `java.time.Period`                  | `(i32, i32, i32)` years/months/days |
+| `JDateTimeFormatter`| `java.time.format.DateTimeFormatter`| Pattern `String`          |
 | `JFile`            | `java.io.File`                      | `PathBuf`                 |
 
 ## Design Decisions

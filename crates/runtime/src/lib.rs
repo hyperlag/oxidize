@@ -61,10 +61,12 @@ pub use reflect::JClass;
 pub use regex_support::{JMatcher, JPattern};
 pub use set::JSet;
 pub use stream::JStream;
+pub use string::jformat;
 pub use string::JString;
 pub use string_builder::JStringBuilder;
 pub use thread::JThread;
 pub use time::JLocalDate;
+pub use time::{JDateTimeFormatter, JDuration, JInstant, JLocalDateTime, JLocalTime, JPeriod};
 pub use tree_map::JTreeMap;
 pub use tree_set::JTreeSet;
 
@@ -72,11 +74,12 @@ pub use tree_set::JTreeSet;
 pub mod prelude {
     pub use super::{
         JArray, JAtomicBoolean, JAtomicInteger, JAtomicLong, JBigDecimal, JBigInteger,
-        JBufferedReader, JBufferedWriter, JClass, JCountDownLatch, JEnumMap, JEnumSet, JException,
-        JFile, JFileInputStream, JFileOutputStream, JFileReader, JFileWriter, JFiles,
-        JHttpURLConnection, JIterator, JLinkedHashMap, JLinkedHashSet, JLinkedList, JList,
-        JLocalDate, JMap, JMatcher, JMathContext, JNull, JObject, JOptional, JPath, JPaths,
-        JPattern, JPrintWriter, JPriorityQueue, JRoundingMode, JScanner, JSemaphore, JServerSocket,
-        JSet, JSocket, JStream, JString, JStringBuilder, JThread, JTreeMap, JTreeSet, JURL,
+        JBufferedReader, JBufferedWriter, JClass, JCountDownLatch, JDateTimeFormatter, JDuration,
+        JEnumMap, JEnumSet, JException, JFile, JFileInputStream, JFileOutputStream, JFileReader,
+        JFileWriter, JFiles, JHttpURLConnection, JInstant, JIterator, JLinkedHashMap,
+        JLinkedHashSet, JLinkedList, JList, JLocalDate, JLocalDateTime, JLocalTime, JMap, JMatcher,
+        JMathContext, JNull, JObject, JOptional, JPath, JPaths, JPattern, JPeriod, JPrintWriter,
+        JPriorityQueue, JRoundingMode, JScanner, JSemaphore, JServerSocket, JSet, JSocket, JStream,
+        JString, JStringBuilder, JThread, JTreeMap, JTreeSet, JURL,
     };
 }
