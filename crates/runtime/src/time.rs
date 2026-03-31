@@ -419,9 +419,11 @@ impl JInstant {
     }
 
     pub fn ofEpochMilli(epoch_milli: i64) -> Self {
+        let secs = epoch_milli.div_euclid(1000);
+        let millis = epoch_milli.rem_euclid(1000);
         Self {
-            epoch_second: epoch_milli / 1000,
-            nano: ((epoch_milli % 1000) * 1_000_000) as i32,
+            epoch_second: secs,
+            nano: (millis as i32) * 1_000_000,
         }
     }
 
@@ -506,8 +508,8 @@ impl JDuration {
 
     pub fn ofMillis(millis: i64) -> Self {
         Self {
-            seconds: millis / 1000,
-            nano_adjustment: ((millis % 1000) * 1_000_000) as i32,
+            seconds: millis.div_euclid(1000),
+            nano_adjustment: (millis.rem_euclid(1000) * 1_000_000) as i32,
         }
     }
 
@@ -556,8 +558,8 @@ impl JDuration {
 
     pub fn plus(&self, other: &JDuration) -> Self {
         let total_nanos = self.nano_adjustment as i64 + other.nano_adjustment as i64;
-        let extra_secs = total_nanos / 1_000_000_000;
-        let nano = (total_nanos % 1_000_000_000) as i32;
+        let extra_secs = total_nanos.div_euclid(1_000_000_000);
+        let nano = total_nanos.rem_euclid(1_000_000_000) as i32;
         Self { seconds: self.seconds + other.seconds + extra_secs, nano_adjustment: nano }
     }
 
@@ -826,7 +828,7 @@ impl std::fmt::Display for JDateTimeFormatter {
 
 impl JLocalDate {
     /// Java `date.format(formatter)`.
-    pub fn format(&self, formatter: JDateTimeFormatter) -> JString {
+    pub fn format(&self, formatter: &JDateTimeFormatter) -> JString {
         formatter.formatDate(self)
     }
 
@@ -869,13 +871,13 @@ impl JLocalDate {
 }
 
 impl JLocalDateTime {
-    pub fn format(&self, formatter: JDateTimeFormatter) -> JString {
+    pub fn format(&self, formatter: &JDateTimeFormatter) -> JString {
         formatter.formatDateTime(self)
     }
 }
 
 impl JLocalTime {
-    pub fn format(&self, formatter: JDateTimeFormatter) -> JString {
+    pub fn format(&self, formatter: &JDateTimeFormatter) -> JString {
         formatter.formatTime(self)
     }
 }

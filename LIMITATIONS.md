@@ -146,8 +146,8 @@ The following are **not** supported:
 - `Timer` / `TimerTask`
 
 **Supported:** `String.format()` (specifiers: `%s`, `%d`, `%f`, `%e`, `%x`, `%o`,
-`%c`, `%b`, `%n`, `%%` with width, precision, and flags), `String.join()`,
-`System.out.printf()`.
+`%b`, `%n`, `%%`; limited support for width, precision, and flags `-` and `0`),
+`String.join()`, `System.out.printf()`.
 
 ### java.time
 

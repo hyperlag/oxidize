@@ -215,8 +215,8 @@ mod tests {
 /// Java-style `String.format(fmt, args...)` — replaces `%s`, `%d`, `%f`, etc.
 /// with the pre-formatted string representations of the arguments.
 ///
-/// Supported: `%s`, `%d`, `%f`, `%e`, `%g`, `%x`, `%o`, `%c`, `%b`, `%n`, `%%`,
-/// and width/precision modifiers like `%-10s`, `%08d`, `%.2f`.
+/// Supported: `%s`, `%d`, `%f`, `%e`, `%x`, `%o`, `%b`, `%n`, `%%`, and a limited
+/// set of width/precision modifiers like `%-10s`, `%08d`, and `%.2f`.
 pub fn jformat(fmt: JString, args: &[String]) -> JString {
     let fmt = fmt.as_str();
     let mut result = String::with_capacity(fmt.len() + 32);
@@ -322,7 +322,7 @@ pub fn jformat(fmt: JString, args: &[String]) -> JString {
                     if flags.contains('-') {
                         result.push_str(&format!("{:<w$}", formatted, w = w));
                     } else if flags.contains('0') && matches!(spec, 'd' | 'f' | 'e' | 'x' | 'o') {
-                        result.push_str(&format!("{:>0w$}", formatted, w = w));
+                        result.push_str(&format!("{:0>w$}", formatted, w = w));
                     } else {
                         result.push_str(&format!("{:>w$}", formatted, w = w));
                     }

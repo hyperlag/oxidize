@@ -1091,14 +1091,15 @@ Expression calculator tests complete",
     #[test]
     fn test_system() {
         // Non-deterministic values (millis, nanos) checked as >0
-        check(
-            "SystemTest.java",
+        let expected = format!(
             "millis > 0: true\n\
              nanos > 0: true\n\
              lineSep length: 1\n\
-             fileSep = /\n\
+             fileSep = {file_sep}\n\
              osName empty: false\n\
              missing = default_val",
+            file_sep = std::path::MAIN_SEPARATOR,
         );
+        check("SystemTest.java", &expected);
     }
 }

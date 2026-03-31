@@ -1577,18 +1577,13 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                     } })
                                 }
                             }
-                            "arraycopy" => {
-                                let src = &args_ts[0];
-                                let src_pos = &args_ts[1];
-                                let dest = &args_ts[2];
-                                let dest_pos = &args_ts[3];
-                                let len = &args_ts[4];
-                                Ok(quote! { (#dest).arraycopy(&#src, #src_pos, #dest_pos, #len) })
-                            }
                             "lineSeparator" => {
                                 Ok(quote! { JString::from("\n") })
                             }
-                            _ => Ok(quote! { }),
+                            _ => Err(CodegenError::Unsupported(format!(
+                                "Unsupported java.lang.System static method: {}.{}",
+                                name, method_name
+                            ))),
                         };
                     }
                     // Math.x(...) — static Math methods → f64 method calls or std ops.
@@ -2142,7 +2137,9 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 }
 
                 // LocalDate.atTime(hour, minute) → atTime_hm(hour, minute)
-                if method_name == "atTime" && args_ts.len() == 2 {
+                if method_name == "atTime" && args_ts.len() == 2
+                    && matches!(recv.ty(), IrType::Class(c) if c == "LocalDate")
+                {
                     let a = &args_ts[0];
                     let b = &args_ts[1];
                     return Ok(quote! { (#recv_ts).atTime_hm(#a, #b) });
@@ -2151,6 +2148,10 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 // isBefore/isAfter/isEqual on time types — pass arg by reference
                 if (method_name == "isBefore" || method_name == "isAfter" || method_name == "isEqual")
                     && args_ts.len() == 1
+                    && matches!(recv.ty(), IrType::Class(c) if
+                        c == "LocalDate" || c == "LocalTime" || c == "LocalDateTime"
+                        || c == "Instant" || c == "Duration" || c == "Period"
+                    )
                 {
                     let a = &args_ts[0];
                     let m = ident(method_name);
@@ -2165,6 +2166,16 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     let a = &args_ts[0];
                     let m = ident(method_name);
                     return Ok(quote! { (#recv_ts).#m(&#a) });
+                }
+
+                // LocalDate/LocalDateTime/LocalTime.format(formatter) — pass formatter by reference
+                if method_name == "format" && args_ts.len() == 1
+                    && matches!(recv.ty(), IrType::Class(c) if
+                        c == "LocalDate" || c == "LocalDateTime" || c == "LocalTime"
+                    )
+                {
+                    let a = &args_ts[0];
+                    return Ok(quote! { (#recv_ts).format(&#a) });
                 }
 
                 // String.equals(obj) — pass by reference (JString::equals takes &JString).
@@ -2539,27 +2550,29 @@ fn emit_print_call(
             }
         }
         "print" => {
+            let print_macro = if macro_name == "eprintln" { ident("eprint") } else { ident("print") };
             if args.is_empty() {
-                Ok(quote! { print!("") })
+                Ok(quote! { #print_macro!("") })
             } else {
                 let first = &args[0];
                 if is_float {
-                    Ok(quote! { print!("{:?}", #first) })
+                    Ok(quote! { #print_macro!("{:?}", #first) })
                 } else {
-                    Ok(quote! { print!("{}", #first) })
+                    Ok(quote! { #print_macro!("{}", #first) })
                 }
             }
         }
         "printf" | "format" => {
+            let print_macro = if macro_name == "eprintln" { ident("eprint") } else { ident("print") };
             if args.is_empty() {
-                Ok(quote! { print!("") })
+                Ok(quote! { #print_macro!("") })
             } else {
                 let fmt = &args[0];
                 let rest = &args[1..];
                 let rest_strs: Vec<TokenStream> = rest.iter().map(|a| {
                     quote! { format!("{}", #a) }
                 }).collect();
-                Ok(quote! { print!("{}", java_compat::jformat(#fmt, &[#(#rest_strs),*])) })
+                Ok(quote! { #print_macro!("{}", java_compat::jformat(#fmt, &[#(#rest_strs),*])) })
             }
         }
         _ => Ok(quote! {}),
