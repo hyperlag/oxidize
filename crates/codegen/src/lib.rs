@@ -1514,9 +1514,15 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     // Executors.newFixedThreadPool / newSingleThreadExecutor / newCachedThreadPool
                     if name == "Executors" {
                         return match method_name.as_str() {
-                            "newFixedThreadPool" => Ok(quote! { JExecutors::newFixedThreadPool(#(#args_ts),*) }),
-                            "newSingleThreadExecutor" => Ok(quote! { JExecutors::newSingleThreadExecutor() }),
-                            "newCachedThreadPool" => Ok(quote! { JExecutors::newCachedThreadPool() }),
+                            "newFixedThreadPool" => {
+                                Ok(quote! { JExecutors::newFixedThreadPool(#(#args_ts),*) })
+                            }
+                            "newSingleThreadExecutor" => {
+                                Ok(quote! { JExecutors::newSingleThreadExecutor() })
+                            }
+                            "newCachedThreadPool" => {
+                                Ok(quote! { JExecutors::newCachedThreadPool() })
+                            }
                             _ => {
                                 let m = ident(method_name);
                                 Ok(quote! { JExecutors::#m(#(#args_ts),*) })
