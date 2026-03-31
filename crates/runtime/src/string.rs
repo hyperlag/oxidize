@@ -200,15 +200,24 @@ mod tests {
 
     #[test]
     fn jformat_basic() {
-        let r = super::jformat(JString::from("Hello %s, you are %s years old"), &["World".into(), "30".into()]);
+        let r = super::jformat(
+            JString::from("Hello %s, you are %s years old"),
+            &["World".into(), "30".into()],
+        );
         assert_eq!(r.as_str(), "Hello World, you are 30 years old");
     }
 
     #[test]
     fn jformat_specifiers() {
-        assert_eq!(super::jformat(JString::from("%d items"), &["42".into()]).as_str(), "42 items");
+        assert_eq!(
+            super::jformat(JString::from("%d items"), &["42".into()]).as_str(),
+            "42 items"
+        );
         assert_eq!(super::jformat(JString::from("100%%"), &[]).as_str(), "100%");
-        assert_eq!(super::jformat(JString::from("line1%nline2"), &[]).as_str(), "line1\nline2");
+        assert_eq!(
+            super::jformat(JString::from("line1%nline2"), &[]).as_str(),
+            "line1\nline2"
+        );
     }
 }
 
@@ -274,7 +283,11 @@ pub fn jformat(fmt: JString, args: &[String]) -> JString {
                 let formatted = match spec {
                     'f' => {
                         if let Ok(v) = val.parse::<f64>() {
-                            let prec: usize = if precision.is_empty() { 6 } else { precision.parse().unwrap_or(6) };
+                            let prec: usize = if precision.is_empty() {
+                                6
+                            } else {
+                                precision.parse().unwrap_or(6)
+                            };
                             format!("{:.prec$}", v, prec = prec)
                         } else {
                             val.to_string()
@@ -282,7 +295,11 @@ pub fn jformat(fmt: JString, args: &[String]) -> JString {
                     }
                     'e' | 'E' => {
                         if let Ok(v) = val.parse::<f64>() {
-                            let prec: usize = if precision.is_empty() { 6 } else { precision.parse().unwrap_or(6) };
+                            let prec: usize = if precision.is_empty() {
+                                6
+                            } else {
+                                precision.parse().unwrap_or(6)
+                            };
                             if spec == 'E' {
                                 format!("{:.prec$E}", v, prec = prec)
                             } else {
@@ -294,7 +311,11 @@ pub fn jformat(fmt: JString, args: &[String]) -> JString {
                     }
                     'x' | 'X' => {
                         if let Ok(v) = val.parse::<i64>() {
-                            if spec == 'X' { format!("{:X}", v) } else { format!("{:x}", v) }
+                            if spec == 'X' {
+                                format!("{:X}", v)
+                            } else {
+                                format!("{:x}", v)
+                            }
                         } else {
                             val.to_string()
                         }

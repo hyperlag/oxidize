@@ -188,7 +188,12 @@ impl JLocalTime {
         assert!((0..60).contains(&minute), "Invalid minute: {}", minute);
         assert!((0..60).contains(&second), "Invalid second: {}", second);
         assert!((0..1_000_000_000).contains(&nano), "Invalid nano: {}", nano);
-        Self { hour, minute, second, nano }
+        Self {
+            hour,
+            minute,
+            second,
+            nano,
+        }
     }
 
     pub fn now() -> Self {
@@ -198,7 +203,12 @@ impl JLocalTime {
         let m = (secs_of_day % 3600) / 60;
         let s = secs_of_day % 60;
         let n = dur.subsec_nanos() as i32;
-        Self { hour: h, minute: m, second: s, nano: n }
+        Self {
+            hour: h,
+            minute: m,
+            second: s,
+            nano: n,
+        }
     }
 
     pub fn parse(text: &JString) -> Self {
@@ -223,10 +233,18 @@ impl JLocalTime {
         Self::of_hmsn(hour, minute, second, nano)
     }
 
-    pub fn getHour(&self) -> i32 { self.hour }
-    pub fn getMinute(&self) -> i32 { self.minute }
-    pub fn getSecond(&self) -> i32 { self.second }
-    pub fn getNano(&self) -> i32 { self.nano }
+    pub fn getHour(&self) -> i32 {
+        self.hour
+    }
+    pub fn getMinute(&self) -> i32 {
+        self.minute
+    }
+    pub fn getSecond(&self) -> i32 {
+        self.second
+    }
+    pub fn getNano(&self) -> i32 {
+        self.nano
+    }
 
     fn to_second_of_day(&self) -> i64 {
         self.hour as i64 * 3600 + self.minute as i64 * 60 + self.second as i64
@@ -242,7 +260,12 @@ impl JLocalTime {
         let h = (total_secs / 3600) as i32;
         let m = ((total_secs % 3600) / 60) as i32;
         let s = (total_secs % 60) as i32;
-        Self { hour: h, minute: m, second: s, nano: self.nano }
+        Self {
+            hour: h,
+            minute: m,
+            second: s,
+            nano: self.nano,
+        }
     }
 
     pub fn plusMinutes(&self, minutes: i32) -> Self {
@@ -251,7 +274,12 @@ impl JLocalTime {
         let h = (total_secs / 3600) as i32;
         let m = ((total_secs % 3600) / 60) as i32;
         let s = (total_secs % 60) as i32;
-        Self { hour: h, minute: m, second: s, nano: self.nano }
+        Self {
+            hour: h,
+            minute: m,
+            second: s,
+            nano: self.nano,
+        }
     }
 
     pub fn plusSeconds(&self, seconds: i32) -> Self {
@@ -260,15 +288,30 @@ impl JLocalTime {
         let h = (total_secs / 3600) as i32;
         let m = ((total_secs % 3600) / 60) as i32;
         let s = (total_secs % 60) as i32;
-        Self { hour: h, minute: m, second: s, nano: self.nano }
+        Self {
+            hour: h,
+            minute: m,
+            second: s,
+            nano: self.nano,
+        }
     }
 
-    pub fn minusHours(&self, hours: i32) -> Self { self.plusHours(-hours) }
-    pub fn minusMinutes(&self, minutes: i32) -> Self { self.plusMinutes(-minutes) }
-    pub fn minusSeconds(&self, seconds: i32) -> Self { self.plusSeconds(-seconds) }
+    pub fn minusHours(&self, hours: i32) -> Self {
+        self.plusHours(-hours)
+    }
+    pub fn minusMinutes(&self, minutes: i32) -> Self {
+        self.plusMinutes(-minutes)
+    }
+    pub fn minusSeconds(&self, seconds: i32) -> Self {
+        self.plusSeconds(-seconds)
+    }
 
-    pub fn isBefore(&self, other: &JLocalTime) -> bool { self < other }
-    pub fn isAfter(&self, other: &JLocalTime) -> bool { self > other }
+    pub fn isBefore(&self, other: &JLocalTime) -> bool {
+        self < other
+    }
+    pub fn isAfter(&self, other: &JLocalTime) -> bool {
+        self > other
+    }
 
     pub fn withHour(&self, hour: i32) -> Self {
         Self::of_hmsn(hour, self.minute, self.second, self.nano)
@@ -282,10 +325,20 @@ impl JLocalTime {
 
     pub fn toString(&self) -> JString {
         if self.nano != 0 {
-            let frac = format!("{:09}", self.nano).trim_end_matches('0').to_string();
-            JString::from(format!("{:02}:{:02}:{:02}.{}", self.hour, self.minute, self.second, frac).as_str())
+            let frac = format!("{:09}", self.nano)
+                .trim_end_matches('0')
+                .to_string();
+            JString::from(
+                format!(
+                    "{:02}:{:02}:{:02}.{}",
+                    self.hour, self.minute, self.second, frac
+                )
+                .as_str(),
+            )
         } else if self.second != 0 {
-            JString::from(format!("{:02}:{:02}:{:02}", self.hour, self.minute, self.second).as_str())
+            JString::from(
+                format!("{:02}:{:02}:{:02}", self.hour, self.minute, self.second).as_str(),
+            )
         } else {
             JString::from(format!("{:02}:{:02}", self.hour, self.minute).as_str())
         }
@@ -319,14 +372,29 @@ impl JLocalDateTime {
         }
     }
 
-    pub fn of_ymd_hms(year: i32, month: i32, day: i32, hour: i32, minute: i32, second: i32) -> Self {
+    pub fn of_ymd_hms(
+        year: i32,
+        month: i32,
+        day: i32,
+        hour: i32,
+        minute: i32,
+        second: i32,
+    ) -> Self {
         Self {
             date: JLocalDate::of(year, month, day),
             time: JLocalTime::of_hms(hour, minute, second),
         }
     }
 
-    pub fn of_ymd_hmsn(year: i32, month: i32, day: i32, hour: i32, minute: i32, second: i32, nano: i32) -> Self {
+    pub fn of_ymd_hmsn(
+        year: i32,
+        month: i32,
+        day: i32,
+        hour: i32,
+        minute: i32,
+        second: i32,
+        nano: i32,
+    ) -> Self {
         Self {
             date: JLocalDate::of(year, month, day),
             time: JLocalTime::of_hmsn(hour, minute, second, nano),
@@ -352,41 +420,84 @@ impl JLocalDateTime {
         Self { date, time }
     }
 
-    pub fn getYear(&self) -> i32 { self.date.getYear() }
-    pub fn getMonthValue(&self) -> i32 { self.date.getMonthValue() }
-    pub fn getDayOfMonth(&self) -> i32 { self.date.getDayOfMonth() }
-    pub fn getHour(&self) -> i32 { self.time.getHour() }
-    pub fn getMinute(&self) -> i32 { self.time.getMinute() }
-    pub fn getSecond(&self) -> i32 { self.time.getSecond() }
-    pub fn getNano(&self) -> i32 { self.time.getNano() }
+    pub fn getYear(&self) -> i32 {
+        self.date.getYear()
+    }
+    pub fn getMonthValue(&self) -> i32 {
+        self.date.getMonthValue()
+    }
+    pub fn getDayOfMonth(&self) -> i32 {
+        self.date.getDayOfMonth()
+    }
+    pub fn getHour(&self) -> i32 {
+        self.time.getHour()
+    }
+    pub fn getMinute(&self) -> i32 {
+        self.time.getMinute()
+    }
+    pub fn getSecond(&self) -> i32 {
+        self.time.getSecond()
+    }
+    pub fn getNano(&self) -> i32 {
+        self.time.getNano()
+    }
 
-    pub fn toLocalDate(&self) -> JLocalDate { self.date.clone() }
-    pub fn toLocalTime(&self) -> JLocalTime { self.time.clone() }
+    pub fn toLocalDate(&self) -> JLocalDate {
+        self.date.clone()
+    }
+    pub fn toLocalTime(&self) -> JLocalTime {
+        self.time.clone()
+    }
 
     pub fn plusDays(&self, n: i32) -> Self {
-        Self { date: self.date.plusDays(n), time: self.time.clone() }
+        Self {
+            date: self.date.plusDays(n),
+            time: self.time.clone(),
+        }
     }
     pub fn minusDays(&self, n: i32) -> Self {
-        Self { date: self.date.minusDays(n), time: self.time.clone() }
+        Self {
+            date: self.date.minusDays(n),
+            time: self.time.clone(),
+        }
     }
     pub fn plusMonths(&self, n: i32) -> Self {
-        Self { date: self.date.plusMonths(n), time: self.time.clone() }
+        Self {
+            date: self.date.plusMonths(n),
+            time: self.time.clone(),
+        }
     }
     pub fn minusMonths(&self, n: i32) -> Self {
-        Self { date: self.date.minusMonths(n), time: self.time.clone() }
+        Self {
+            date: self.date.minusMonths(n),
+            time: self.time.clone(),
+        }
     }
     pub fn plusHours(&self, n: i32) -> Self {
-        Self { date: self.date.clone(), time: self.time.plusHours(n) }
+        Self {
+            date: self.date.clone(),
+            time: self.time.plusHours(n),
+        }
     }
     pub fn plusMinutes(&self, n: i32) -> Self {
-        Self { date: self.date.clone(), time: self.time.plusMinutes(n) }
+        Self {
+            date: self.date.clone(),
+            time: self.time.plusMinutes(n),
+        }
     }
     pub fn plusSeconds(&self, n: i32) -> Self {
-        Self { date: self.date.clone(), time: self.time.plusSeconds(n) }
+        Self {
+            date: self.date.clone(),
+            time: self.time.plusSeconds(n),
+        }
     }
 
-    pub fn isBefore(&self, other: &JLocalDateTime) -> bool { self < other }
-    pub fn isAfter(&self, other: &JLocalDateTime) -> bool { self > other }
+    pub fn isBefore(&self, other: &JLocalDateTime) -> bool {
+        self < other
+    }
+    pub fn isAfter(&self, other: &JLocalDateTime) -> bool {
+        self > other
+    }
 
     pub fn toString(&self) -> JString {
         JString::from(format!("{}T{}", self.date, self.time).as_str())
@@ -411,11 +522,17 @@ pub struct JInstant {
 impl JInstant {
     pub fn now() -> Self {
         let dur = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-        Self { epoch_second: dur.as_secs() as i64, nano: dur.subsec_nanos() as i32 }
+        Self {
+            epoch_second: dur.as_secs() as i64,
+            nano: dur.subsec_nanos() as i32,
+        }
     }
 
     pub fn ofEpochSecond(epoch_second: i64) -> Self {
-        Self { epoch_second, nano: 0 }
+        Self {
+            epoch_second,
+            nano: 0,
+        }
     }
 
     pub fn ofEpochMilli(epoch_milli: i64) -> Self {
@@ -427,15 +544,22 @@ impl JInstant {
         }
     }
 
-    pub fn getEpochSecond(&self) -> i64 { self.epoch_second }
-    pub fn getNano(&self) -> i32 { self.nano }
+    pub fn getEpochSecond(&self) -> i64 {
+        self.epoch_second
+    }
+    pub fn getNano(&self) -> i32 {
+        self.nano
+    }
 
     pub fn toEpochMilli(&self) -> i64 {
         self.epoch_second * 1000 + (self.nano / 1_000_000) as i64
     }
 
     pub fn plusSeconds(&self, seconds: i64) -> Self {
-        Self { epoch_second: self.epoch_second + seconds, nano: self.nano }
+        Self {
+            epoch_second: self.epoch_second + seconds,
+            nano: self.nano,
+        }
     }
 
     pub fn minusSeconds(&self, seconds: i64) -> Self {
@@ -446,11 +570,18 @@ impl JInstant {
         let total_nanos = self.nano as i64 + millis * 1_000_000;
         let extra_secs = total_nanos.div_euclid(1_000_000_000);
         let nano = total_nanos.rem_euclid(1_000_000_000) as i32;
-        Self { epoch_second: self.epoch_second + extra_secs, nano }
+        Self {
+            epoch_second: self.epoch_second + extra_secs,
+            nano,
+        }
     }
 
-    pub fn isBefore(&self, other: &JInstant) -> bool { self < other }
-    pub fn isAfter(&self, other: &JInstant) -> bool { self > other }
+    pub fn isBefore(&self, other: &JInstant) -> bool {
+        self < other
+    }
+    pub fn isAfter(&self, other: &JInstant) -> bool {
+        self > other
+    }
 
     pub fn toString(&self) -> JString {
         // Simplified ISO-8601: just show epoch seconds
@@ -461,15 +592,23 @@ impl JInstant {
         let mut y = 1970i64;
         let mut d = days;
         loop {
-            let days_in_year = if (y % 4 == 0 && y % 100 != 0) || y % 400 == 0 { 366 } else { 365 };
-            if d < days_in_year { break; }
+            let days_in_year = if (y % 4 == 0 && y % 100 != 0) || y % 400 == 0 {
+                366
+            } else {
+                365
+            };
+            if d < days_in_year {
+                break;
+            }
             d -= days_in_year;
             y += 1;
         }
         let mut m = 1;
         loop {
             let dim = days_in_month(y as i32, m) as i64;
-            if d < dim { break; }
+            if d < dim {
+                break;
+            }
             d -= dim;
             m += 1;
         }
@@ -478,10 +617,20 @@ impl JInstant {
         let min = (rem % 3600) / 60;
         let s = rem % 60;
         if self.nano == 0 {
-            JString::from(format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", y, m, day, h, min, s).as_str())
+            JString::from(
+                format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", y, m, day, h, min, s).as_str(),
+            )
         } else {
-            let frac = format!("{:09}", self.nano).trim_end_matches('0').to_string();
-            JString::from(format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{}Z", y, m, day, h, min, s, frac).as_str())
+            let frac = format!("{:09}", self.nano)
+                .trim_end_matches('0')
+                .to_string();
+            JString::from(
+                format!(
+                    "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{}Z",
+                    y, m, day, h, min, s, frac
+                )
+                .as_str(),
+            )
         }
     }
 }
@@ -503,7 +652,10 @@ pub struct JDuration {
 
 impl JDuration {
     pub fn ofSeconds(seconds: i64) -> Self {
-        Self { seconds, nano_adjustment: 0 }
+        Self {
+            seconds,
+            nano_adjustment: 0,
+        }
     }
 
     pub fn ofMillis(millis: i64) -> Self {
@@ -536,22 +688,38 @@ impl JDuration {
         let sec_diff = end.epoch_second - start.epoch_second;
         let nano_diff = end.nano - start.nano;
         if nano_diff < 0 {
-            Self { seconds: sec_diff - 1, nano_adjustment: nano_diff + 1_000_000_000 }
+            Self {
+                seconds: sec_diff - 1,
+                nano_adjustment: nano_diff + 1_000_000_000,
+            }
         } else {
-            Self { seconds: sec_diff, nano_adjustment: nano_diff }
+            Self {
+                seconds: sec_diff,
+                nano_adjustment: nano_diff,
+            }
         }
     }
 
-    pub fn getSeconds(&self) -> i64 { self.seconds }
-    pub fn getNano(&self) -> i32 { self.nano_adjustment }
+    pub fn getSeconds(&self) -> i64 {
+        self.seconds
+    }
+    pub fn getNano(&self) -> i32 {
+        self.nano_adjustment
+    }
 
     pub fn toMillis(&self) -> i64 {
         self.seconds * 1000 + (self.nano_adjustment / 1_000_000) as i64
     }
 
-    pub fn toMinutes(&self) -> i64 { self.seconds / 60 }
-    pub fn toHours(&self) -> i64 { self.seconds / 3600 }
-    pub fn toDays(&self) -> i64 { self.seconds / 86400 }
+    pub fn toMinutes(&self) -> i64 {
+        self.seconds / 60
+    }
+    pub fn toHours(&self) -> i64 {
+        self.seconds / 3600
+    }
+    pub fn toDays(&self) -> i64 {
+        self.seconds / 86400
+    }
     pub fn toNanos(&self) -> i64 {
         self.seconds * 1_000_000_000 + self.nano_adjustment as i64
     }
@@ -560,7 +728,10 @@ impl JDuration {
         let total_nanos = self.nano_adjustment as i64 + other.nano_adjustment as i64;
         let extra_secs = total_nanos.div_euclid(1_000_000_000);
         let nano = total_nanos.rem_euclid(1_000_000_000) as i32;
-        Self { seconds: self.seconds + other.seconds + extra_secs, nano_adjustment: nano }
+        Self {
+            seconds: self.seconds + other.seconds + extra_secs,
+            nano_adjustment: nano,
+        }
     }
 
     pub fn minus(&self, other: &JDuration) -> Self {
@@ -570,7 +741,10 @@ impl JDuration {
         } else {
             (0i64, nano_diff as i32)
         };
-        Self { seconds: self.seconds - other.seconds + extra_secs, nano_adjustment: nano }
+        Self {
+            seconds: self.seconds - other.seconds + extra_secs,
+            nano_adjustment: nano,
+        }
     }
 
     pub fn multipliedBy(&self, scalar: i64) -> Self {
@@ -580,14 +754,21 @@ impl JDuration {
 
     pub fn abs(&self) -> Self {
         if self.seconds < 0 || (self.seconds == 0 && self.nano_adjustment < 0) {
-            Self { seconds: -self.seconds, nano_adjustment: self.nano_adjustment.abs() }
+            Self {
+                seconds: -self.seconds,
+                nano_adjustment: self.nano_adjustment.abs(),
+            }
         } else {
             self.clone()
         }
     }
 
-    pub fn isZero(&self) -> bool { self.seconds == 0 && self.nano_adjustment == 0 }
-    pub fn isNegative(&self) -> bool { self.seconds < 0 }
+    pub fn isZero(&self) -> bool {
+        self.seconds == 0 && self.nano_adjustment == 0
+    }
+    pub fn isNegative(&self) -> bool {
+        self.seconds < 0
+    }
 
     pub fn toString(&self) -> JString {
         if self.isZero() {
@@ -598,12 +779,20 @@ impl JDuration {
         let hours = total_secs / 3600;
         let minutes = (total_secs % 3600) / 60;
         let secs = total_secs % 60;
-        if self.seconds < 0 { result.push('-'); }
-        if hours > 0 { result.push_str(&format!("{}H", hours)); }
-        if minutes > 0 { result.push_str(&format!("{}M", minutes)); }
+        if self.seconds < 0 {
+            result.push('-');
+        }
+        if hours > 0 {
+            result.push_str(&format!("{}H", hours));
+        }
+        if minutes > 0 {
+            result.push_str(&format!("{}M", minutes));
+        }
         if secs > 0 || self.nano_adjustment != 0 {
             if self.nano_adjustment != 0 {
-                let frac = format!("{:09}", self.nano_adjustment.abs()).trim_end_matches('0').to_string();
+                let frac = format!("{:09}", self.nano_adjustment.abs())
+                    .trim_end_matches('0')
+                    .to_string();
                 result.push_str(&format!("{}.{}S", secs, frac));
             } else {
                 result.push_str(&format!("{}S", secs));
@@ -631,23 +820,43 @@ pub struct JPeriod {
 
 impl JPeriod {
     pub fn of(years: i32, months: i32, days: i32) -> Self {
-        Self { years, months, days }
+        Self {
+            years,
+            months,
+            days,
+        }
     }
 
     pub fn ofDays(days: i32) -> Self {
-        Self { years: 0, months: 0, days }
+        Self {
+            years: 0,
+            months: 0,
+            days,
+        }
     }
 
     pub fn ofMonths(months: i32) -> Self {
-        Self { years: 0, months, days: 0 }
+        Self {
+            years: 0,
+            months,
+            days: 0,
+        }
     }
 
     pub fn ofYears(years: i32) -> Self {
-        Self { years, months: 0, days: 0 }
+        Self {
+            years,
+            months: 0,
+            days: 0,
+        }
     }
 
     pub fn ofWeeks(weeks: i32) -> Self {
-        Self { years: 0, months: 0, days: weeks * 7 }
+        Self {
+            years: 0,
+            months: 0,
+            days: weeks * 7,
+        }
     }
 
     pub fn between(start: &JLocalDate, end: &JLocalDate) -> Self {
@@ -657,7 +866,11 @@ impl JPeriod {
         if days < 0 {
             months -= 1;
             days += days_in_month(
-                if end.month > 1 { end.year } else { end.year - 1 },
+                if end.month > 1 {
+                    end.year
+                } else {
+                    end.year - 1
+                },
                 if end.month > 1 { end.month - 1 } else { 12 },
             );
         }
@@ -665,12 +878,22 @@ impl JPeriod {
             years -= 1;
             months += 12;
         }
-        Self { years, months, days }
+        Self {
+            years,
+            months,
+            days,
+        }
     }
 
-    pub fn getYears(&self) -> i32 { self.years }
-    pub fn getMonths(&self) -> i32 { self.months }
-    pub fn getDays(&self) -> i32 { self.days }
+    pub fn getYears(&self) -> i32 {
+        self.years
+    }
+    pub fn getMonths(&self) -> i32 {
+        self.months
+    }
+    pub fn getDays(&self) -> i32 {
+        self.days
+    }
 
     pub fn plus(&self, other: &JPeriod) -> Self {
         Self {
@@ -688,17 +911,27 @@ impl JPeriod {
         }
     }
 
-    pub fn isZero(&self) -> bool { self.years == 0 && self.months == 0 && self.days == 0 }
-    pub fn isNegative(&self) -> bool { self.years < 0 || self.months < 0 || self.days < 0 }
+    pub fn isZero(&self) -> bool {
+        self.years == 0 && self.months == 0 && self.days == 0
+    }
+    pub fn isNegative(&self) -> bool {
+        self.years < 0 || self.months < 0 || self.days < 0
+    }
 
     pub fn toString(&self) -> JString {
         if self.isZero() {
             return JString::from("P0D");
         }
         let mut result = String::from("P");
-        if self.years != 0 { result.push_str(&format!("{}Y", self.years)); }
-        if self.months != 0 { result.push_str(&format!("{}M", self.months)); }
-        if self.days != 0 { result.push_str(&format!("{}D", self.days)); }
+        if self.years != 0 {
+            result.push_str(&format!("{}Y", self.years));
+        }
+        if self.months != 0 {
+            result.push_str(&format!("{}M", self.months));
+        }
+        if self.days != 0 {
+            result.push_str(&format!("{}D", self.days));
+        }
         JString::from(result.as_str())
     }
 }
@@ -719,36 +952,46 @@ pub struct JDateTimeFormatter {
 
 impl JDateTimeFormatter {
     pub fn ofPattern(pattern: &JString) -> Self {
-        Self { pattern: pattern.as_str().to_string() }
+        Self {
+            pattern: pattern.as_str().to_string(),
+        }
     }
 
     /// Format a `JLocalDate` using this pattern.
     pub fn formatDate(&self, date: &JLocalDate) -> JString {
-        self.format_impl(
-            date.year, date.month, date.day,
-            0, 0, 0, 0,
-        )
+        self.format_impl(date.year, date.month, date.day, 0, 0, 0, 0)
     }
 
     /// Format a `JLocalTime` using this pattern.
     pub fn formatTime(&self, time: &JLocalTime) -> JString {
-        self.format_impl(
-            0, 0, 0,
-            time.hour, time.minute, time.second, time.nano,
-        )
+        self.format_impl(0, 0, 0, time.hour, time.minute, time.second, time.nano)
     }
 
     /// Format a `JLocalDateTime` using this pattern.
     pub fn formatDateTime(&self, dt: &JLocalDateTime) -> JString {
         self.format_impl(
-            dt.date.year, dt.date.month, dt.date.day,
-            dt.time.hour, dt.time.minute, dt.time.second, dt.time.nano,
+            dt.date.year,
+            dt.date.month,
+            dt.date.day,
+            dt.time.hour,
+            dt.time.minute,
+            dt.time.second,
+            dt.time.nano,
         )
     }
 
     /// Simple pattern-based formatting: yyyy, MM, dd, HH, mm, ss, etc.
     #[allow(clippy::too_many_arguments)]
-    fn format_impl(&self, year: i32, month: i32, day: i32, hour: i32, minute: i32, second: i32, _nano: i32) -> JString {
+    fn format_impl(
+        &self,
+        year: i32,
+        month: i32,
+        day: i32,
+        hour: i32,
+        minute: i32,
+        second: i32,
+        _nano: i32,
+    ) -> JString {
         let mut result = String::new();
         let chars: Vec<char> = self.pattern.chars().collect();
         let mut i = 0;
@@ -800,11 +1043,17 @@ impl JDateTimeFormatter {
                     'm' => result.push_str(&format!("{:02}", minute)),
                     's' => result.push_str(&format!("{:02}", second)),
                     'a' => {
-                        if hour < 12 { result.push_str("AM"); } else { result.push_str("PM"); }
+                        if hour < 12 {
+                            result.push_str("AM");
+                        } else {
+                            result.push_str("PM");
+                        }
                     }
                     _ => {
                         // Unknown pattern letters: emit as-is
-                        for _ in 0..count { result.push(ch); }
+                        for _ in 0..count {
+                            result.push(ch);
+                        }
                     }
                 }
             } else {
@@ -842,18 +1091,29 @@ impl JLocalDate {
         Self::of(year, month, day)
     }
 
-    pub fn isBefore(&self, other: &JLocalDate) -> bool { self < other }
-    pub fn isAfter(&self, other: &JLocalDate) -> bool { self > other }
-    pub fn isEqual(&self, other: &JLocalDate) -> bool { self == other }
+    pub fn isBefore(&self, other: &JLocalDate) -> bool {
+        self < other
+    }
+    pub fn isAfter(&self, other: &JLocalDate) -> bool {
+        self > other
+    }
+    pub fn isEqual(&self, other: &JLocalDate) -> bool {
+        self == other
+    }
 
     pub fn plusYears(&self, n: i32) -> Self {
         let year = self.year + n;
         let day = self.day.min(days_in_month(year, self.month));
-        JLocalDate { year, month: self.month, day }
+        JLocalDate {
+            year,
+            month: self.month,
+            day,
+        }
     }
 
-
-    pub fn minusYears(&self, n: i32) -> Self { self.plusYears(-n) }
+    pub fn minusYears(&self, n: i32) -> Self {
+        self.plusYears(-n)
+    }
 
     pub fn atTime_hm(&self, hour: i32, minute: i32) -> JLocalDateTime {
         JLocalDateTime {

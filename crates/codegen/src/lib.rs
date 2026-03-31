@@ -1499,22 +1499,18 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                 let code = &args_ts[0];
                                 Ok(quote! { std::process::exit(#code) })
                             }
-                            "currentTimeMillis" => {
-                                Ok(quote! { {
-                                    std::time::SystemTime::now()
-                                        .duration_since(std::time::UNIX_EPOCH)
-                                        .unwrap()
-                                        .as_millis() as i64
-                                } })
-                            }
-                            "nanoTime" => {
-                                Ok(quote! { {
-                                    std::time::SystemTime::now()
-                                        .duration_since(std::time::UNIX_EPOCH)
-                                        .unwrap()
-                                        .as_nanos() as i64
-                                } })
-                            }
+                            "currentTimeMillis" => Ok(quote! { {
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_millis() as i64
+                            } }),
+                            "nanoTime" => Ok(quote! { {
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_nanos() as i64
+                            } }),
                             "getenv" => {
                                 let key = &args_ts[0];
                                 Ok(quote! { JString::from(
@@ -1577,9 +1573,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                     } })
                                 }
                             }
-                            "lineSeparator" => {
-                                Ok(quote! { JString::from("\n") })
-                            }
+                            "lineSeparator" => Ok(quote! { JString::from("\n") }),
                             _ => Err(CodegenError::Unsupported(format!(
                                 "Unsupported java.lang.System static method: {}.{}",
                                 name, method_name
@@ -1782,7 +1776,9 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     if name == "Instant" {
                         return match method_name.as_str() {
                             "now" => Ok(quote! { JInstant::now() }),
-                            "ofEpochSecond" => Ok(quote! { JInstant::ofEpochSecond(#(#args_ts),*) }),
+                            "ofEpochSecond" => {
+                                Ok(quote! { JInstant::ofEpochSecond(#(#args_ts),*) })
+                            }
                             "ofEpochMilli" => Ok(quote! { JInstant::ofEpochMilli(#(#args_ts),*) }),
                             _ => {
                                 let m = ident(method_name);
@@ -1913,9 +1909,12 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                 } else {
                                     let fmt = &args_ts[0];
                                     let rest = &args_ts[1..];
-                                    let rest_strs: Vec<TokenStream> = rest.iter().map(|a| {
-                                        quote! { format!("{}", #a) }
-                                    }).collect();
+                                    let rest_strs: Vec<TokenStream> = rest
+                                        .iter()
+                                        .map(|a| {
+                                            quote! { format!("{}", #a) }
+                                        })
+                                        .collect();
                                     Ok(quote! { java_compat::jformat(#fmt, &[#(#rest_strs),*]) })
                                 }
                             }
@@ -1923,9 +1922,12 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                 // String.join(delimiter, elements...)
                                 let delim = &args_ts[0];
                                 let rest = &args_ts[1..];
-                                let rest_strs: Vec<TokenStream> = rest.iter().map(|a| {
-                                    quote! { format!("{}", #a) }
-                                }).collect();
+                                let rest_strs: Vec<TokenStream> = rest
+                                    .iter()
+                                    .map(|a| {
+                                        quote! { format!("{}", #a) }
+                                    })
+                                    .collect();
                                 Ok(quote! { JString::from(
                                     [#(#rest_strs),*].join(#delim.as_str()).as_str()
                                 ) })
@@ -2137,7 +2139,8 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 }
 
                 // LocalDate.atTime(hour, minute) → atTime_hm(hour, minute)
-                if method_name == "atTime" && args_ts.len() == 2
+                if method_name == "atTime"
+                    && args_ts.len() == 2
                     && matches!(recv.ty(), IrType::Class(c) if c == "LocalDate")
                 {
                     let a = &args_ts[0];
@@ -2146,7 +2149,9 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 }
 
                 // isBefore/isAfter/isEqual on time types — pass arg by reference
-                if (method_name == "isBefore" || method_name == "isAfter" || method_name == "isEqual")
+                if (method_name == "isBefore"
+                    || method_name == "isAfter"
+                    || method_name == "isEqual")
                     && args_ts.len() == 1
                     && matches!(recv.ty(), IrType::Class(c) if
                         c == "LocalDate" || c == "LocalTime" || c == "LocalDateTime"
@@ -2169,7 +2174,8 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 }
 
                 // LocalDate/LocalDateTime/LocalTime.format(formatter) — pass formatter by reference
-                if method_name == "format" && args_ts.len() == 1
+                if method_name == "format"
+                    && args_ts.len() == 1
                     && matches!(recv.ty(), IrType::Class(c) if
                         c == "LocalDate" || c == "LocalDateTime" || c == "LocalTime"
                     )
@@ -2550,7 +2556,11 @@ fn emit_print_call(
             }
         }
         "print" => {
-            let print_macro = if macro_name == "eprintln" { ident("eprint") } else { ident("print") };
+            let print_macro = if macro_name == "eprintln" {
+                ident("eprint")
+            } else {
+                ident("print")
+            };
             if args.is_empty() {
                 Ok(quote! { #print_macro!("") })
             } else {
@@ -2563,15 +2573,22 @@ fn emit_print_call(
             }
         }
         "printf" | "format" => {
-            let print_macro = if macro_name == "eprintln" { ident("eprint") } else { ident("print") };
+            let print_macro = if macro_name == "eprintln" {
+                ident("eprint")
+            } else {
+                ident("print")
+            };
             if args.is_empty() {
                 Ok(quote! { #print_macro!("") })
             } else {
                 let fmt = &args[0];
                 let rest = &args[1..];
-                let rest_strs: Vec<TokenStream> = rest.iter().map(|a| {
-                    quote! { format!("{}", #a) }
-                }).collect();
+                let rest_strs: Vec<TokenStream> = rest
+                    .iter()
+                    .map(|a| {
+                        quote! { format!("{}", #a) }
+                    })
+                    .collect();
                 Ok(quote! { #print_macro!("{}", java_compat::jformat(#fmt, &[#(#rest_strs),*])) })
             }
         }
