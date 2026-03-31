@@ -169,58 +169,6 @@ impl Add<&str> for JString {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn concat_operator() {
-        let a = JString::from("Hello, ");
-        let b = JString::from("World!");
-        assert_eq!((a + b).as_str(), "Hello, World!");
-    }
-
-    #[test]
-    fn length() {
-        assert_eq!(JString::from("abc").length(), 3);
-    }
-
-    #[test]
-    fn char_at() {
-        assert_eq!(JString::from("abc").char_at(1), 'b');
-    }
-
-    #[test]
-    fn clone_shares_allocation() {
-        let a = JString::from("shared");
-        let b = a.clone();
-        // Both should point to the same Arc — same pointer.
-        assert!(Arc::ptr_eq(&a.0, &b.0));
-    }
-
-    #[test]
-    fn jformat_basic() {
-        let r = super::jformat(
-            JString::from("Hello %s, you are %s years old"),
-            &["World".into(), "30".into()],
-        );
-        assert_eq!(r.as_str(), "Hello World, you are 30 years old");
-    }
-
-    #[test]
-    fn jformat_specifiers() {
-        assert_eq!(
-            super::jformat(JString::from("%d items"), &["42".into()]).as_str(),
-            "42 items"
-        );
-        assert_eq!(super::jformat(JString::from("100%%"), &[]).as_str(), "100%");
-        assert_eq!(
-            super::jformat(JString::from("line1%nline2"), &[]).as_str(),
-            "line1\nline2"
-        );
-    }
-}
-
 /// Java-style `String.format(fmt, args...)` — replaces `%s`, `%d`, `%f`, etc.
 /// with the pre-formatted string representations of the arguments.
 ///
@@ -365,4 +313,56 @@ pub fn jformat(fmt: JString, args: &[String]) -> JString {
         }
     }
     JString::from(result.as_str())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn concat_operator() {
+        let a = JString::from("Hello, ");
+        let b = JString::from("World!");
+        assert_eq!((a + b).as_str(), "Hello, World!");
+    }
+
+    #[test]
+    fn length() {
+        assert_eq!(JString::from("abc").length(), 3);
+    }
+
+    #[test]
+    fn char_at() {
+        assert_eq!(JString::from("abc").char_at(1), 'b');
+    }
+
+    #[test]
+    fn clone_shares_allocation() {
+        let a = JString::from("shared");
+        let b = a.clone();
+        // Both should point to the same Arc — same pointer.
+        assert!(Arc::ptr_eq(&a.0, &b.0));
+    }
+
+    #[test]
+    fn jformat_basic() {
+        let r = super::jformat(
+            JString::from("Hello %s, you are %s years old"),
+            &["World".into(), "30".into()],
+        );
+        assert_eq!(r.as_str(), "Hello World, you are 30 years old");
+    }
+
+    #[test]
+    fn jformat_specifiers() {
+        assert_eq!(
+            super::jformat(JString::from("%d items"), &["42".into()]).as_str(),
+            "42 items"
+        );
+        assert_eq!(super::jformat(JString::from("100%%"), &[]).as_str(), "100%");
+        assert_eq!(
+            super::jformat(JString::from("line1%nline2"), &[]).as_str(),
+            "line1\nline2"
+        );
+    }
 }
