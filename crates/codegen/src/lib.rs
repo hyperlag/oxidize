@@ -1544,13 +1544,6 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                         };
                     }
 
-                    // TimeUnit.SECONDS / MILLISECONDS / etc. field access is handled
-                    // in FieldAccess, but TimeUnit.X.toMillis(n) can appear as chained calls.
-                    if name == "TimeUnit" {
-                        let m = ident(method_name);
-                        return Ok(quote! { JTimeUnit::#m(#(#args_ts),*) });
-                    }
-
                     // ThreadLocal.withInitial(supplier)
                     if name == "ThreadLocal" {
                         return match method_name.as_str() {

@@ -829,6 +829,11 @@ pub counter: Arc<AtomicI32>,
 | `cond.signal()`             | `cond.signal()`                      |
 | `cond.signalAll()`          | `cond.signalAll()`                   |
 
+`JReentrantLock` implements full reentrant semantics: the owning thread may call
+`lock()` multiple times and must call a matching number of `unlock()` calls.
+`JCondition.await_()` atomically releases all holds on the associated lock,
+waits for a `signal`/`signalAll`, and re-acquires the lock before returning.
+
 ### ReentrantReadWriteLock
 
 | Java                          | Rust                               |

@@ -3,10 +3,9 @@
 //! Also provides `__sync_block_monitor()`, the global lock used for
 //! `synchronized` block statements.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Condvar, Mutex, OnceLock, RwLock};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
 
 // ─── CountDownLatch ──────────────────────────────────────────────────────────
 
@@ -103,41 +102,92 @@ pub fn __sync_block_monitor() -> &'static (Mutex<()>, Condvar) {
 
 // ─── ReentrantLock ───────────────────────────────────────────────────────────
 
+#[derive(Debug)]
+struct ReentrantLockState {
+    owner: Option<thread::ThreadId>,
+    hold_count: u32,
+}
+
+#[derive(Debug)]
+struct ReentrantLockInner {
+    state: Mutex<ReentrantLockState>,
+    /// Notified when the lock is released so waiting threads can try to acquire.
+    lock_cvar: Condvar,
+    /// Notified by `signal`/`signalAll` to wake threads in `await_`.
+    cond_cvar: Condvar,
+}
+
 /// Mirrors `java.util.concurrent.locks.ReentrantLock`.
 ///
-/// Backed by `Arc<Mutex<()>>` — always "fair" in the sense that the OS scheduler
-/// decides thread ordering. `newCondition()` returns a `JCondition` that shares
-/// the same underlying lock.
+/// Supports full reentrant semantics: the owning thread may call `lock()`
+/// multiple times, with a matching number of `unlock()` calls required to
+/// release.  `newCondition()` returns a `JCondition` backed by the same lock.
 #[derive(Clone, Debug)]
-pub struct JReentrantLock(Arc<(Mutex<()>, Condvar)>);
+pub struct JReentrantLock(Arc<ReentrantLockInner>);
 
 #[allow(non_snake_case)]
 impl JReentrantLock {
     pub fn new() -> Self {
-        JReentrantLock(Arc::new((Mutex::new(()), Condvar::new())))
+        JReentrantLock(Arc::new(ReentrantLockInner {
+            state: Mutex::new(ReentrantLockState {
+                owner: None,
+                hold_count: 0,
+            }),
+            lock_cvar: Condvar::new(),
+            cond_cvar: Condvar::new(),
+        }))
     }
 
-    /// Acquire the lock (blocking).
-    /// Returns an opaque guard token stored inside the lock for later `unlock()`.
+    /// Acquire the lock, blocking until it is available.
+    /// If the calling thread already holds the lock, the hold count is incremented.
     pub fn lock(&mut self) {
-        // ReentrantLock is backed by a Mutex+Condvar. In translated Java code,
-        // lock/unlock pairs bracket a critical section. The codegen approach
-        // for lock/unlock is to call these methods directly; the actual
-        // exclusion comes from the Condvar-based protocol in the codegen block.
-        // This method is intentionally a no-op at the runtime level because
-        // codegen emits: `lock.lock(); { ... } lock.unlock();`
-        // and relies on the lock/unlock calls being syntactic markers.
+        let tid = thread::current().id();
+        let mut state = self.0.state.lock().unwrap();
+        loop {
+            if state.owner == Some(tid) {
+                state.hold_count += 1;
+                return;
+            } else if state.owner.is_none() {
+                state.owner = Some(tid);
+                state.hold_count = 1;
+                return;
+            }
+            state = self.0.lock_cvar.wait(state).unwrap();
+        }
     }
 
-    /// Release the lock.
-    pub fn unlock(&self) {
-        // No-op: see lock() comment above.
+    /// Release the lock.  If the lock was acquired reentrantly, the hold count
+    /// is decremented; the lock is only released when the count reaches zero.
+    pub fn unlock(&mut self) {
+        let tid = thread::current().id();
+        let mut state = self.0.state.lock().unwrap();
+        assert_eq!(
+            state.owner,
+            Some(tid),
+            "IllegalMonitorStateException: unlock() called by a thread that does not hold the lock"
+        );
+        state.hold_count -= 1;
+        if state.hold_count == 0 {
+            state.owner = None;
+            self.0.lock_cvar.notify_one();
+        }
     }
 
     /// Try to acquire the lock without blocking.
+    /// Returns `true` if the lock was acquired (or was already held by this thread).
     pub fn tryLock(&self) -> bool {
-        let (mtx, _) = &*self.0;
-        mtx.try_lock().is_ok()
+        let tid = thread::current().id();
+        let mut state = self.0.state.lock().unwrap();
+        if state.owner == Some(tid) {
+            state.hold_count += 1;
+            true
+        } else if state.owner.is_none() {
+            state.owner = Some(tid);
+            state.hold_count = 1;
+            true
+        } else {
+            false
+        }
     }
 
     /// Create a `JCondition` associated with this lock.
@@ -155,25 +205,52 @@ impl Default for JReentrantLock {
 // ─── Condition ───────────────────────────────────────────────────────────────
 
 /// Mirrors `java.util.concurrent.locks.Condition`.
+///
+/// All operations require the associated `JReentrantLock` to be held by the
+/// calling thread.  `await_` atomically releases all holds on the lock, waits
+/// for a `signal`/`signalAll`, and then re-acquires the lock before returning.
 #[derive(Clone, Debug)]
-pub struct JCondition(Arc<(Mutex<()>, Condvar)>);
+pub struct JCondition(Arc<ReentrantLockInner>);
 
 #[allow(non_snake_case)]
 impl JCondition {
+    /// Atomically release the lock, wait for a signal, then re-acquire the lock.
     pub fn await_(&self) {
-        let (mtx, cvar) = &*self.0;
-        let guard = mtx.lock().unwrap();
-        let _guard = cvar.wait(guard).unwrap();
+        let tid = thread::current().id();
+        let mut state = self.0.state.lock().unwrap();
+        assert_eq!(
+            state.owner,
+            Some(tid),
+            "IllegalMonitorStateException: await_() called by a thread that does not hold the lock"
+        );
+        // Save and release all holds on the lock.
+        let saved_hold_count = state.hold_count;
+        state.owner = None;
+        state.hold_count = 0;
+        // Wake a thread that may be waiting to acquire the lock.
+        self.0.lock_cvar.notify_one();
+        // Wait for a condition signal.
+        state = self.0.cond_cvar.wait(state).unwrap();
+        // Re-acquire the lock for this thread (may need to wait if another thread
+        // grabbed it while we were waking up).
+        loop {
+            if state.owner.is_none() {
+                state.owner = Some(tid);
+                state.hold_count = saved_hold_count;
+                return;
+            }
+            state = self.0.lock_cvar.wait(state).unwrap();
+        }
     }
 
+    /// Wake one thread waiting on this condition.
     pub fn signal(&self) {
-        let (_, cvar) = &*self.0;
-        cvar.notify_one();
+        self.0.cond_cvar.notify_one();
     }
 
+    /// Wake all threads waiting on this condition.
     pub fn signalAll(&self) {
-        let (_, cvar) = &*self.0;
-        cvar.notify_all();
+        self.0.cond_cvar.notify_all();
     }
 }
 
@@ -306,9 +383,7 @@ impl<K: Eq + std::hash::Hash + Clone, V: Clone> Clone for JConcurrentHashMap<K, 
 }
 
 #[allow(non_snake_case)]
-impl<K: Eq + std::hash::Hash + Clone + std::fmt::Display, V: Clone + std::fmt::Display>
-    JConcurrentHashMap<K, V>
-{
+impl<K: Eq + std::hash::Hash + Clone, V: Clone> JConcurrentHashMap<K, V> {
     pub fn new() -> Self {
         JConcurrentHashMap(Arc::new(RwLock::new(HashMap::new())))
     }
@@ -317,27 +392,31 @@ impl<K: Eq + std::hash::Hash + Clone + std::fmt::Display, V: Clone + std::fmt::D
         self.0.write().unwrap().insert(key, value);
     }
 
-    pub fn get(&self, key: &K) -> V
-    where
-        V: Default,
-    {
+    /// # Panics
+    /// Panics if the key is not present (analogous to Java's
+    /// `NullPointerException` when auto-unboxing a `null` returned by
+    /// `ConcurrentHashMap.get`).
+    pub fn get(&self, key: &K) -> V {
         self.0
             .read()
             .unwrap()
             .get(key)
             .cloned()
-            .unwrap_or_default()
+            .unwrap_or_else(|| panic!("NullPointerException: key not found in ConcurrentHashMap"))
     }
 
     pub fn containsKey(&self, key: &K) -> bool {
         self.0.read().unwrap().contains_key(key)
     }
 
-    pub fn remove(&mut self, key: &K) -> V
-    where
-        V: Default,
-    {
-        self.0.write().unwrap().remove(key).unwrap_or_default()
+    /// # Panics
+    /// Panics if the key is not present.
+    pub fn remove(&mut self, key: &K) -> V {
+        self.0
+            .write()
+            .unwrap()
+            .remove(key)
+            .unwrap_or_else(|| panic!("NullPointerException: key not found in ConcurrentHashMap"))
     }
 
     pub fn size(&self) -> i32 {
@@ -352,16 +431,19 @@ impl<K: Eq + std::hash::Hash + Clone + std::fmt::Display, V: Clone + std::fmt::D
         self.0.write().unwrap().clear();
     }
 
+    /// Inserts the key-value pair if the key is absent.
+    /// Returns the existing value if the key was already present, or
+    /// `V::default()` (modelling Java's `null`) if the pair was newly inserted.
     pub fn putIfAbsent(&mut self, key: K, value: V) -> V
     where
         V: Default,
     {
         let mut map = self.0.write().unwrap();
-        if map.contains_key(&key) {
-            map.get(&key).cloned().unwrap_or_default()
+        if let Some(existing) = map.get(&key) {
+            existing.clone()
         } else {
-            map.insert(key, value.clone());
-            value
+            map.insert(key, value);
+            V::default()
         }
     }
 
@@ -375,9 +457,7 @@ impl<K: Eq + std::hash::Hash + Clone + std::fmt::Display, V: Clone + std::fmt::D
     }
 }
 
-impl<K: Eq + std::hash::Hash + Clone + std::fmt::Display, V: Clone + std::fmt::Display> Default
-    for JConcurrentHashMap<K, V>
-{
+impl<K: Eq + std::hash::Hash + Clone, V: Clone> Default for JConcurrentHashMap<K, V> {
     fn default() -> Self {
         Self::new()
     }
@@ -409,7 +489,7 @@ impl<T: Clone> Clone for JCopyOnWriteArrayList<T> {
 }
 
 #[allow(non_snake_case)]
-impl<T: Clone + std::fmt::Display + PartialEq> JCopyOnWriteArrayList<T> {
+impl<T: Clone> JCopyOnWriteArrayList<T> {
     pub fn new() -> Self {
         JCopyOnWriteArrayList(Arc::new(RwLock::new(Vec::new())))
     }
@@ -422,21 +502,46 @@ impl<T: Clone + std::fmt::Display + PartialEq> JCopyOnWriteArrayList<T> {
     }
 
     pub fn get(&self, index: i32) -> T {
-        self.0.read().unwrap()[index as usize].clone()
+        let vec = self.0.read().unwrap();
+        let len = vec.len();
+        let idx = index as usize;
+        if idx >= len {
+            panic!(
+                "IndexOutOfBoundsException: index {} out of bounds for length {}",
+                index, len
+            );
+        }
+        vec[idx].clone()
     }
 
     pub fn set(&mut self, index: i32, element: T) -> T {
         let mut vec = self.0.write().unwrap();
+        let len = vec.len();
+        let idx = index as usize;
+        if idx >= len {
+            panic!(
+                "IndexOutOfBoundsException: index {} out of bounds for length {}",
+                index, len
+            );
+        }
         let mut new_vec = vec.clone();
-        let old = std::mem::replace(&mut new_vec[index as usize], element);
+        let old = std::mem::replace(&mut new_vec[idx], element);
         *vec = new_vec;
         old
     }
 
     pub fn remove_at(&mut self, index: i32) -> T {
         let mut vec = self.0.write().unwrap();
+        let len = vec.len();
+        let idx = index as usize;
+        if idx >= len {
+            panic!(
+                "IndexOutOfBoundsException: index {} out of bounds for length {}",
+                index, len
+            );
+        }
         let mut new_vec = vec.clone();
-        let removed = new_vec.remove(index as usize);
+        let removed = new_vec.remove(idx);
         *vec = new_vec;
         removed
     }
@@ -449,12 +554,15 @@ impl<T: Clone + std::fmt::Display + PartialEq> JCopyOnWriteArrayList<T> {
         self.0.read().unwrap().is_empty()
     }
 
-    pub fn contains(&self, element: &T) -> bool {
-        self.0.read().unwrap().contains(element)
-    }
-
     pub fn clear(&mut self) {
         *self.0.write().unwrap() = Vec::new();
+    }
+}
+
+#[allow(non_snake_case)]
+impl<T: Clone + PartialEq> JCopyOnWriteArrayList<T> {
+    pub fn contains(&self, element: &T) -> bool {
+        self.0.read().unwrap().contains(element)
     }
 
     pub fn indexOf(&self, element: &T) -> i32 {
@@ -468,7 +576,7 @@ impl<T: Clone + std::fmt::Display + PartialEq> JCopyOnWriteArrayList<T> {
     }
 }
 
-impl<T: Clone + std::fmt::Display + PartialEq> Default for JCopyOnWriteArrayList<T> {
+impl<T: Clone> Default for JCopyOnWriteArrayList<T> {
     fn default() -> Self {
         Self::new()
     }
@@ -486,15 +594,26 @@ impl<T: Clone + std::fmt::Display> std::fmt::Display for JCopyOnWriteArrayList<T
 
 /// Mirrors `java.lang.ThreadLocal<T>`.
 ///
-/// Uses `std::thread_local!` under the hood via a `HashMap<ThreadId, T>` protected
-/// by a `Mutex` (since Rust's `thread_local!` macro doesn't work well with
-/// runtime-dynamic values in translated code).
-#[derive(Debug)]
-pub struct JThreadLocal<T: Clone + Send>(Arc<Mutex<HashMap<thread::ThreadId, T>>>, Option<fn() -> T>);
+/// Uses a `HashMap<ThreadId, T>` protected by a `Mutex` to simulate
+/// per-thread storage in translated code.  The initializer (if any) is stored
+/// as an `Arc<dyn Fn() -> T + Send + Sync>` so that capturing closures
+/// (equivalent to Java's `Supplier<T>` lambdas) are fully supported.
+pub struct JThreadLocal<T: Clone + Send>(
+    Arc<Mutex<HashMap<thread::ThreadId, T>>>,
+    Option<Arc<dyn Fn() -> T + Send + Sync>>,
+);
 
 impl<T: Clone + Send> Clone for JThreadLocal<T> {
     fn clone(&self) -> Self {
-        JThreadLocal(self.0.clone(), self.1)
+        JThreadLocal(self.0.clone(), self.1.clone())
+    }
+}
+
+impl<T: Clone + Send> std::fmt::Debug for JThreadLocal<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("JThreadLocal")
+            .field("has_initializer", &self.1.is_some())
+            .finish()
     }
 }
 
@@ -504,8 +623,10 @@ impl<T: Clone + Send + Default> JThreadLocal<T> {
         JThreadLocal(Arc::new(Mutex::new(HashMap::new())), None)
     }
 
-    pub fn withInitial(init: fn() -> T) -> Self {
-        JThreadLocal(Arc::new(Mutex::new(HashMap::new())), Some(init))
+    /// Create a `ThreadLocal` with the given initializer closure.
+    /// Equivalent to Java's `ThreadLocal.withInitial(Supplier<T>)`.
+    pub fn withInitial<F: Fn() -> T + Send + Sync + 'static>(init: F) -> Self {
+        JThreadLocal(Arc::new(Mutex::new(HashMap::new())), Some(Arc::new(init)))
     }
 
     pub fn get(&self) -> T {
@@ -515,7 +636,7 @@ impl<T: Clone + Send + Default> JThreadLocal<T> {
             val.clone()
         } else {
             drop(map);
-            let val = if let Some(init) = self.1 {
+            let val = if let Some(init) = &self.1 {
                 init()
             } else {
                 T::default()
@@ -546,15 +667,21 @@ impl<T: Clone + Send + Default> Default for JThreadLocal<T> {
 
 /// Mirrors `java.util.concurrent.ExecutorService` (fixed thread pool variant).
 ///
-/// Implemented as a simple work-stealing queue: tasks are submitted and
-/// dispatched to a fixed number of worker threads.
+/// Backed by a `Mutex<WorkQueue> + Condvar` so all workers can wait concurrently
+/// without serialising on a single channel receiver lock.
 #[derive(Clone)]
 pub struct JExecutorService {
     inner: Arc<ExecutorInner>,
 }
 
+struct WorkQueue {
+    tasks: VecDeque<Box<dyn FnOnce() + Send + 'static>>,
+    shutdown: bool,
+}
+
 struct ExecutorInner {
-    sender: Mutex<Option<std::sync::mpsc::Sender<Box<dyn FnOnce() + Send + 'static>>>>,
+    queue: Mutex<WorkQueue>,
+    cvar: Condvar,
     workers: Mutex<Vec<JoinHandle<()>>>,
     pool_size: usize,
 }
@@ -570,35 +697,51 @@ impl std::fmt::Debug for JExecutorService {
 #[allow(non_snake_case)]
 impl JExecutorService {
     /// Create a fixed thread pool (mirrors `Executors.newFixedThreadPool(n)`).
+    ///
+    /// # Panics
+    /// Panics if `n_threads` is not greater than zero.
     pub fn newFixedThreadPool(n_threads: i32) -> Self {
+        assert!(
+            n_threads > 0,
+            "IllegalArgumentException: nThreads must be greater than 0, got {}",
+            n_threads
+        );
         let n = n_threads as usize;
-        let (tx, rx) = std::sync::mpsc::channel::<Box<dyn FnOnce() + Send + 'static>>();
-        let rx = Arc::new(Mutex::new(rx));
+        let inner = Arc::new(ExecutorInner {
+            queue: Mutex::new(WorkQueue {
+                tasks: VecDeque::new(),
+                shutdown: false,
+            }),
+            cvar: Condvar::new(),
+            workers: Mutex::new(Vec::with_capacity(n)),
+            pool_size: n,
+        });
 
         let mut handles = Vec::with_capacity(n);
         for _ in 0..n {
-            let rx = rx.clone();
-            handles.push(thread::spawn(move || {
-                loop {
-                    let task = {
-                        let receiver = rx.lock().unwrap();
-                        receiver.recv()
-                    };
-                    match task {
-                        Ok(f) => f(),
-                        Err(_) => break, // channel closed → shutdown
+            let inner2 = inner.clone();
+            handles.push(thread::spawn(move || loop {
+                let task = {
+                    let mut queue = inner2.queue.lock().unwrap();
+                    loop {
+                        if let Some(task) = queue.tasks.pop_front() {
+                            break Some(task);
+                        }
+                        if queue.shutdown {
+                            break None;
+                        }
+                        queue = inner2.cvar.wait(queue).unwrap();
                     }
+                };
+                match task {
+                    Some(f) => f(),
+                    None => break,
                 }
             }));
         }
+        *inner.workers.lock().unwrap() = handles;
 
-        JExecutorService {
-            inner: Arc::new(ExecutorInner {
-                sender: Mutex::new(Some(tx)),
-                workers: Mutex::new(handles),
-                pool_size: n,
-            }),
-        }
+        JExecutorService { inner }
     }
 
     /// Create a single-thread executor (mirrors `Executors.newSingleThreadExecutor()`).
@@ -611,19 +754,26 @@ impl JExecutorService {
         Self::newFixedThreadPool(16)
     }
 
+    /// Enqueue a task, panicking if the executor has already been shut down.
+    fn enqueue(&self, task: Box<dyn FnOnce() + Send + 'static>) {
+        let mut queue = self.inner.queue.lock().unwrap();
+        if queue.shutdown {
+            panic!("RejectedExecutionException: executor has been shut down");
+        }
+        queue.tasks.push_back(task);
+        self.inner.cvar.notify_one();
+    }
+
     /// Submit a `Runnable`-like closure. Returns a `JFuture<()>`.
     pub fn submit_runnable<F: FnOnce() + Send + 'static>(&self, task: F) -> JFuture<()> {
         let result = Arc::new((Mutex::new(None::<()>), Condvar::new()));
         let result2 = result.clone();
-        let wrapped = Box::new(move || {
+        self.enqueue(Box::new(move || {
             task();
             let (lock, cvar) = &*result2;
             *lock.lock().unwrap() = Some(());
             cvar.notify_all();
-        });
-        if let Some(tx) = self.inner.sender.lock().unwrap().as_ref() {
-            tx.send(wrapped).ok();
-        }
+        }));
         JFuture(result)
     }
 
@@ -634,44 +784,42 @@ impl JExecutorService {
     ) -> JFuture<T> {
         let result = Arc::new((Mutex::new(None::<T>), Condvar::new()));
         let result2 = result.clone();
-        let wrapped = Box::new(move || {
+        self.enqueue(Box::new(move || {
             let val = task();
             let (lock, cvar) = &*result2;
             *lock.lock().unwrap() = Some(val);
             cvar.notify_all();
-        });
-        if let Some(tx) = self.inner.sender.lock().unwrap().as_ref() {
-            tx.send(wrapped).ok();
-        }
+        }));
         JFuture(result)
     }
 
     /// Submit a plain Runnable (no return value, no Future needed for codegen).
     pub fn execute<F: FnOnce() + Send + 'static>(&self, task: F) {
-        let wrapped: Box<dyn FnOnce() + Send + 'static> = Box::new(task);
-        if let Some(tx) = self.inner.sender.lock().unwrap().as_ref() {
-            tx.send(wrapped).ok();
-        }
+        self.enqueue(Box::new(task));
     }
 
     /// Initiate orderly shutdown: no new tasks accepted, existing tasks run to completion.
     pub fn shutdown(&self) {
-        // Drop the sender so workers exit after draining the queue.
-        *self.inner.sender.lock().unwrap() = None;
+        let mut queue = self.inner.queue.lock().unwrap();
+        queue.shutdown = true;
+        self.inner.cvar.notify_all();
     }
 
-    /// Block until all tasks complete after shutdown, or timeout elapses.
-    /// Returns `true` if terminated, `false` if timed out.
-    pub fn awaitTermination(&self, timeout_ms: i64) -> bool {
-        let deadline = std::time::Instant::now() + Duration::from_millis(timeout_ms as u64);
+    /// Block until all worker threads terminate after shutdown.
+    ///
+    /// This method must be called only after [`shutdown`]. If called before
+    /// shutdown it returns `false` immediately. Once shutdown has been initiated
+    /// this call blocks until all worker threads have terminated and returns `true`.
+    ///
+    /// The `timeout_ms` parameter is accepted for API compatibility with Java's
+    /// `ExecutorService` interface but is currently ignored; the method blocks
+    /// until all workers exit regardless of the timeout value.
+    pub fn awaitTermination(&self, _timeout_ms: i64) -> bool {
+        if !self.isShutdown() {
+            return false;
+        }
         let mut workers = self.inner.workers.lock().unwrap();
-        // Drain and join each worker with remaining timeout
         while let Some(handle) = workers.pop() {
-            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-            if remaining.is_zero() {
-                return false;
-            }
-            // We can't join with timeout in std, so we just join and hope it finishes
             handle.join().ok();
         }
         true
@@ -679,7 +827,7 @@ impl JExecutorService {
 
     /// Check if the executor has been shut down.
     pub fn isShutdown(&self) -> bool {
-        self.inner.sender.lock().unwrap().is_none()
+        self.inner.queue.lock().unwrap().shutdown
     }
 }
 
