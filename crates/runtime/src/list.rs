@@ -77,6 +77,11 @@ impl<T: Clone> JList<T> {
     pub fn iter(&self) -> std::slice::Iter<'_, T> {
         self.inner.iter()
     }
+
+    /// Java `list.spliterator()`.
+    pub fn spliterator(&self) -> crate::JSpliterator<T> {
+        crate::JSpliterator::from_vec(self.inner.clone())
+    }
 }
 
 impl<T: Clone + Ord> JList<T> {

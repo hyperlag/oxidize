@@ -3,6 +3,8 @@
 //! Backed by `BTreeMap<K, V>` which provides sorted key iteration.
 
 use std::collections::BTreeMap;
+use crate::JList;
+use crate::map::JMapEntry;
 
 /// A Java-compatible sorted map backed by `BTreeMap<K, V>`.
 ///
@@ -96,6 +98,39 @@ impl<K: Ord + Clone, V: Clone> JTreeMap<K, V> {
     /// Iterator over `(&K, &V)` pairs in sorted key order.
     pub fn iter(&self) -> std::collections::btree_map::Iter<'_, K, V> {
         self.inner.iter()
+    }
+
+    /// Java `map.keySet()`.
+    #[allow(non_snake_case)]
+    pub fn keySet(&self) -> JList<K> {
+        let mut l = JList::new();
+        for k in self.inner.keys() {
+            l.add(k.clone());
+        }
+        l
+    }
+
+    /// Java `map.values()`.
+    pub fn values(&self) -> JList<V> {
+        let mut l = JList::new();
+        for v in self.inner.values() {
+            l.add(v.clone());
+        }
+        l
+    }
+
+    /// Java `map.entrySet()`.
+    #[allow(non_snake_case)]
+    pub fn entrySet(&self) -> JList<JMapEntry<K, V>>
+    where
+        K: Eq + std::hash::Hash,
+        V: Eq + std::hash::Hash,
+    {
+        let mut l = JList::new();
+        for (k, v) in &self.inner {
+            l.add(JMapEntry { key: k.clone(), value: v.clone() });
+        }
+        l
     }
 }
 

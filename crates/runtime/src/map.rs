@@ -5,6 +5,32 @@
 //! convention.
 
 use std::collections::HashMap;
+use crate::JList;
+
+/// A Java-compatible `Map.Entry` pair.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct JMapEntry<K, V> {
+    pub(crate) key: K,
+    pub(crate) value: V,
+}
+
+impl<K: Clone, V: Clone> JMapEntry<K, V> {
+    #[allow(non_snake_case)]
+    pub fn getKey(&self) -> K {
+        self.key.clone()
+    }
+
+    #[allow(non_snake_case)]
+    pub fn getValue(&self) -> V {
+        self.value.clone()
+    }
+}
+
+impl<K: std::fmt::Display, V: std::fmt::Display> std::fmt::Display for JMapEntry<K, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}={}", self.key, self.value)
+    }
+}
 
 /// A Java-compatible map backed by a `HashMap<K, V>`.
 ///
@@ -88,6 +114,41 @@ where
     /// Iterator over `(&key, &value)` pairs.
     pub fn iter(&self) -> std::collections::hash_map::Iter<'_, K, V> {
         self.inner.iter()
+    }
+
+    /// Java `map.keySet()`.
+    #[allow(non_snake_case)]
+    pub fn keySet(&self) -> JList<K> {
+        let mut l = JList::new();
+        for k in self.inner.keys() {
+            l.add(k.clone());
+        }
+        l
+    }
+
+    /// Java `map.values()`.
+    pub fn values(&self) -> JList<V> {
+        let mut l = JList::new();
+        for v in self.inner.values() {
+            l.add(v.clone());
+        }
+        l
+    }
+
+    /// Java `map.entrySet()`.
+    #[allow(non_snake_case)]
+    pub fn entrySet(&self) -> JList<JMapEntry<K, V>>
+    where
+        V: Eq + std::hash::Hash,
+    {
+        let mut l = JList::new();
+        for (k, v) in &self.inner {
+            l.add(JMapEntry {
+                key: k.clone(),
+                value: v.clone(),
+            });
+        }
+        l
     }
 }
 

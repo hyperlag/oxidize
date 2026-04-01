@@ -56,14 +56,14 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             JLocalDate, JFile, JStream,
             JLocalTime, JLocalDateTime, JInstant, JDuration, JPeriod, JDateTimeFormatter,
             JLinkedList, JPriorityQueue, JTreeMap, JTreeSet,
-            JLinkedHashMap, JLinkedHashSet, JIterator,
+            JLinkedHashMap, JLinkedHashSet, JIterator, JMapEntry,
             JEnumMap, JEnumSet,
             JBufferedReader, JBufferedWriter, JPrintWriter,
             JFileReader, JFileWriter, JFileInputStream, JFileOutputStream,
             JScanner, JPath, JPaths, JFiles,
             JBigDecimal, JMathContext, JRoundingMode,
             JURL, JSocket, JServerSocket, JHttpURLConnection,
-            JavaObject,
+            JSpliterator, JavaObject,
         };
     });
 
@@ -2659,14 +2659,19 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             Ok(quote! { #inner._instanceof(#type_name_str) })
         }
 
-        IrExpr::Lambda { params, body, .. } => {
+        IrExpr::Lambda { params, body, body_stmts, .. } => {
             let param_idents: Vec<Ident> = params.iter().map(|p| ident(p)).collect();
             let body_ts = emit_expr(body)?;
-            if param_idents.len() == 1 {
-                let p = &param_idents[0];
-                Ok(quote! { |#p| { #body_ts } })
+            if body_stmts.is_empty() {
+                if param_idents.len() == 1 {
+                    let p = &param_idents[0];
+                    Ok(quote! { |#p| { #body_ts } })
+                } else {
+                    Ok(quote! { |#(#param_idents),*| { #body_ts } })
+                }
             } else {
-                Ok(quote! { |#(#param_idents),*| { #body_ts } })
+                let stmts_ts = emit_stmts(body_stmts)?;
+                Ok(quote! { |#(#param_idents),*| { #(#stmts_ts)* #body_ts } })
             }
         }
     }
@@ -2896,6 +2901,8 @@ fn emit_type(ty: &IrType) -> TokenStream {
                 "LinkedHashSet" => quote! { JLinkedHashSet<JavaObject> },
                 "TreeSet" => quote! { JTreeSet<JavaObject> },
                 "Iterator" => quote! { JIterator<JavaObject> },
+                "Map.Entry" => quote! { JMapEntry<JavaObject, JavaObject> },
+                "Spliterator" => quote! { JSpliterator<JavaObject> },
                 "Object" => quote! { JavaObject },
                 _ => {
                     // Resolve through the enum alias map so that a type
@@ -2972,6 +2979,15 @@ fn emit_type(ty: &IrType) -> TokenStream {
                     "Stream" => {
                         let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
                         return quote! { JStream<#a> };
+                    }
+                    "Map.Entry" => {
+                        let k = emit_type(args.first().unwrap_or(&IrType::Unknown));
+                        let v = emit_type(args.get(1).unwrap_or(&IrType::Unknown));
+                        return quote! { JMapEntry<#k, #v> };
+                    }
+                    "Spliterator" => {
+                        let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
+                        return quote! { JSpliterator<#a> };
                     }
                     _ => {}
                 }
@@ -3915,6 +3931,7 @@ mod tests {
                 rhs: Box::new(IrExpr::LitInt(2)),
                 ty: IrType::Int,
             }),
+            body_stmts: vec![],
             ty: IrType::Class("Function".into()),
         };
         let stmt = IrStmt::LocalVar {
@@ -5772,6 +5789,7 @@ mod tests {
                 rhs: Box::new(IrExpr::LitInt(2)),
                 ty: IrType::Int,
             }),
+            body_stmts: vec![],
             ty: IrType::Unknown,
         };
         let stmt = IrStmt::LocalVar {

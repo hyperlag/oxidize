@@ -77,9 +77,12 @@ pub enum IrExpr {
     },
 
     /// Lambda expression: `x -> body` or `(x, y) -> body`.
+    /// For block lambdas `(x) -> { stmts; return expr; }`, `body_stmts`
+    /// holds the leading statements and `body` holds the final expression.
     Lambda {
         params: Vec<String>,
         body: Box<IrExpr>,
+        body_stmts: Vec<crate::stmt::IrStmt>,
         ty: IrType,
     },
 

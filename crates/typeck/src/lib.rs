@@ -708,16 +708,21 @@ fn check_expr(
             })
         }
 
-        IrExpr::Lambda { params, body, .. } => {
+        IrExpr::Lambda { params, body, body_stmts, .. } => {
             // Add each param as Unknown-typed into a child env
             let mut lambda_env = env.clone();
             for p in &params {
                 lambda_env.insert(p.clone(), IrType::Unknown);
             }
+            let mut checked_stmts = body_stmts;
+            for s in checked_stmts.iter_mut() {
+                check_stmt(s, cls, class_map, enum_map, &mut lambda_env)?;
+            }
             let body = check_expr(*body, cls, class_map, enum_map, &lambda_env)?;
             Ok(IrExpr::Lambda {
                 params,
                 body: Box::new(body),
+                body_stmts: checked_stmts,
                 ty: IrType::Unknown,
             })
         }
@@ -1801,6 +1806,7 @@ mod tests {
             init: Some(IrExpr::Lambda {
                 params: vec!["x".into()],
                 body: Box::new(IrExpr::LitInt(1)),
+                body_stmts: vec![],
                 ty: IrType::Class("Function".into()),
             }),
         }];

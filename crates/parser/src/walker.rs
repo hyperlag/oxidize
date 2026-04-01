@@ -1233,8 +1233,15 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
         }
         "string_literal" => {
             let raw = text(node, src);
-            let unquoted = raw.trim_start_matches('"').trim_end_matches('"');
-            Ok(IrExpr::LitString(unescape_java_string(unquoted)))
+            if raw.starts_with("\"\"\"") {
+                // Java text block – strip delimiters then apply indent-stripping
+                let inner = &raw[3..raw.len() - 3]; // remove leading/trailing """
+                let content = strip_text_block_indent(inner);
+                Ok(IrExpr::LitString(unescape_java_string(&content)))
+            } else {
+                let unquoted = raw.trim_start_matches('"').trim_end_matches('"');
+                Ok(IrExpr::LitString(unescape_java_string(unquoted)))
+            }
         }
         "character_literal" => {
             let raw = text(node, src);
@@ -1552,30 +1559,29 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
             };
 
             if let Some(body_node) = child_by_field(node, "body") {
-                let body_expr = if body_node.kind() == "block" {
-                    // Block lambda: only support a single `return <expr>;` statement
-                    let stmts = lower_block(body_node, src)?;
-                    if stmts.len() == 1 {
-                        match stmts.into_iter().next().unwrap() {
-                            IrStmt::Return(Some(e)) => e,
-                            _ => {
-                                return Err(ParseError::Unsupported(
-                                    "block lambdas must be a single `return <expr>;` statement"
-                                        .into(),
-                                ));
+                let (body_expr, body_stmts) = if body_node.kind() == "block" {
+                    let mut stmts = lower_block(body_node, src)?;
+                    // If the last statement is `return expr;`, pull it out as body
+                    let final_expr =
+                        if let Some(IrStmt::Return(Some(_))) = stmts.last() {
+                            if let IrStmt::Return(Some(e)) = stmts.pop().unwrap()
+                            {
+                                e
+                            } else {
+                                unreachable!()
                             }
-                        }
-                    } else {
-                        return Err(ParseError::Unsupported(
-                            "block lambdas must be a single `return <expr>;` statement".into(),
-                        ));
-                    }
+                        } else {
+                            // Void block lambda — no return value
+                            IrExpr::LitInt(0)
+                        };
+                    (final_expr, stmts)
                 } else {
-                    lower_expr(body_node, src)?
+                    (lower_expr(body_node, src)?, vec![])
                 };
                 Ok(IrExpr::Lambda {
                     params,
                     body: Box::new(body_expr),
+                    body_stmts,
                     ty: IrType::Unknown,
                 })
             } else {
@@ -1669,6 +1675,60 @@ fn parse_int_literal(s: &str) -> Option<i64> {
 fn parse_hex_float(s: &str) -> f64 {
     // Basic support; full parsing is deferred
     s.replace("0x", "").replace("0X", "").parse().unwrap_or(0.0)
+}
+
+/// Strip common leading whitespace from a Java text block (JEP 378).
+/// `inner` is the content between the opening and closing `"""` delimiters,
+/// including the leading newline after the opening `"""`.
+fn strip_text_block_indent(inner: &str) -> String {
+    let lines: Vec<&str> = inner.split('\n').collect();
+    if lines.is_empty() {
+        return String::new();
+    }
+    // lines[0] is the remainder after opening """ (must be blank per spec); skip it
+    let content_lines = &lines[1..];
+    if content_lines.is_empty() {
+        return String::new();
+    }
+
+    // The last line is the closing-delimiter line if it is whitespace-only
+    let last_is_delim = content_lines.last().map_or(false, |l| l.trim().is_empty());
+
+    // Compute common indent: consider non-blank content lines AND the
+    // closing-delimiter line (even though it is all whitespace).
+    let mut min_indent = usize::MAX;
+    for (i, line) in content_lines.iter().enumerate() {
+        let is_last = i == content_lines.len() - 1;
+        if is_last && last_is_delim {
+            min_indent = min_indent.min(line.len());
+        } else if !line.trim().is_empty() {
+            min_indent = min_indent.min(line.len() - line.trim_start().len());
+        }
+    }
+    if min_indent == usize::MAX {
+        min_indent = 0;
+    }
+
+    // Strip common indent and trailing whitespace from each line
+    let mut result_lines: Vec<&str> = Vec::new();
+    for line in content_lines {
+        if line.len() >= min_indent {
+            result_lines.push(line[min_indent..].trim_end());
+        } else {
+            result_lines.push("");
+        }
+    }
+
+    // If closing """ was on its own line, drop that (now-empty) last element
+    // and add a trailing newline to preserve the line break before it.
+    if last_is_delim {
+        result_lines.pop();
+        let mut result = result_lines.join("\n");
+        result.push('\n');
+        result
+    } else {
+        result_lines.join("\n")
+    }
 }
 
 fn unescape_java_string(s: &str) -> String {
