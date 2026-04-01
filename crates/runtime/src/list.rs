@@ -205,4 +205,20 @@ mod tests {
         let list: JList<i32> = JList::default();
         assert!(list.isEmpty());
     }
+
+    #[test]
+    fn spliterator_estimate_size_and_try_advance() {
+        let mut list: JList<i32> = JList::new();
+        list.add(10);
+        list.add(20);
+        list.add(30);
+        let mut sp = list.spliterator();
+        assert_eq!(sp.estimateSize(), 3);
+        let mut seen = Vec::new();
+        assert!(sp.tryAdvance(|v| seen.push(v)));
+        assert!(sp.tryAdvance(|v| seen.push(v)));
+        assert!(sp.tryAdvance(|v| seen.push(v)));
+        assert!(!sp.tryAdvance(|v| seen.push(v)));
+        assert_eq!(seen, vec![10, 20, 30]);
+    }
 }

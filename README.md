@@ -258,7 +258,7 @@ cargo test -p tests -- --test-threads=4
 - `Collections.sort()`, `Collections.reverse()`, `Collections.unmodifiableList/Map/Set()`, `Collections.emptyList/Map/Set()`, `Collections.singletonList()`, `Arrays.asList()`
 - `Iterator` with `hasNext()`/`next()`/`remove()`
 - Map `keySet()`/`values()`/`entrySet()` iteration with `JMapEntry<K,V>`
-- `Spliterator` stub (`trySplit`, `estimateSize`, `forEachRemaining`, `tryAdvance`)
+- `Spliterator` stub (`trySplit`, `estimateSize`, `forEachRemaining`, `tryAdvance`, `characteristics()`)
 
 ### Exception Handling
 

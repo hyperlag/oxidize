@@ -1202,7 +1202,7 @@ for (Map.Entry<String, Integer> entry : map.entrySet()) {
 ```rust
 for entry in map.entrySet().iter() {
     let entry: JMapEntry<JString, i32> = entry.clone();
-    println!("{}", JString::from(entry.getKey()) + "=" + &entry.getValue().to_string());
+    println!("{}", entry);
 }
 ```
 

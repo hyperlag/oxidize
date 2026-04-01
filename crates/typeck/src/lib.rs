@@ -387,8 +387,9 @@ fn check_expr(
     env: &HashMap<String, IrType>,
 ) -> Result<IrExpr, TypeckError> {
     match expr {
-        // Literals already have correct types
-        IrExpr::LitBool(_)
+        // Unit / Literals already have correct types
+        IrExpr::Unit
+        | IrExpr::LitBool(_)
         | IrExpr::LitInt(_)
         | IrExpr::LitLong(_)
         | IrExpr::LitFloat(_)

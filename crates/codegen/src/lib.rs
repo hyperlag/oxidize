@@ -1322,6 +1322,7 @@ fn emit_place(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
 
 fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
     match expr {
+        IrExpr::Unit => Ok(quote! { () }),
         IrExpr::LitBool(b) => Ok(quote! { #b }),
         IrExpr::LitInt(n) => {
             let lit = Literal::i32_unsuffixed(*n as i32);

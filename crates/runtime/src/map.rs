@@ -138,8 +138,6 @@ where
     /// Java `map.entrySet()`.
     #[allow(non_snake_case)]
     pub fn entrySet(&self) -> JList<JMapEntry<K, V>>
-    where
-        V: Eq + std::hash::Hash,
     {
         let mut l = JList::new();
         for (k, v) in &self.inner {

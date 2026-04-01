@@ -1572,7 +1572,7 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                             }
                         } else {
                             // Void block lambda — no return value
-                            IrExpr::LitInt(0)
+                            IrExpr::Unit
                         };
                     (final_expr, stmts)
                 } else {
@@ -1709,11 +1709,16 @@ fn strip_text_block_indent(inner: &str) -> String {
         min_indent = 0;
     }
 
-    // Strip common indent and trailing whitespace from each line
+    // Strip common indent from each line, normalizing CRLF but preserving trailing spaces
     let mut result_lines: Vec<&str> = Vec::new();
     for line in content_lines {
         if line.len() >= min_indent {
-            result_lines.push(line[min_indent..].trim_end());
+            let mut stripped = &line[min_indent..];
+            // Normalize possible CRLF line endings by removing a trailing '\r'
+            if stripped.ends_with('\r') {
+                stripped = &stripped[..stripped.len() - 1];
+            }
+            result_lines.push(stripped);
         } else {
             result_lines.push("");
         }

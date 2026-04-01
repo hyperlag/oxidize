@@ -122,9 +122,6 @@ impl<K: Ord + Clone, V: Clone> JTreeMap<K, V> {
     /// Java `map.entrySet()`.
     #[allow(non_snake_case)]
     pub fn entrySet(&self) -> JList<JMapEntry<K, V>>
-    where
-        K: Eq + std::hash::Hash,
-        V: Eq + std::hash::Hash,
     {
         let mut l = JList::new();
         for (k, v) in &self.inner {
