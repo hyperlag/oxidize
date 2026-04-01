@@ -4,8 +4,8 @@
 //! complications in generated code.  Method names use Java's camelCase
 //! convention.
 
-use std::collections::HashMap;
 use crate::JList;
+use std::collections::HashMap;
 
 /// A Java-compatible `Map.Entry` pair.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -137,8 +137,7 @@ where
 
     /// Java `map.entrySet()`.
     #[allow(non_snake_case)]
-    pub fn entrySet(&self) -> JList<JMapEntry<K, V>>
-    {
+    pub fn entrySet(&self) -> JList<JMapEntry<K, V>> {
         let mut l = JList::new();
         for (k, v) in &self.inner {
             l.add(JMapEntry {

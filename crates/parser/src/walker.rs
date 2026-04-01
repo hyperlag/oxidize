@@ -1562,18 +1562,16 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                 let (body_expr, body_stmts) = if body_node.kind() == "block" {
                     let mut stmts = lower_block(body_node, src)?;
                     // If the last statement is `return expr;`, pull it out as body
-                    let final_expr =
-                        if let Some(IrStmt::Return(Some(_))) = stmts.last() {
-                            if let IrStmt::Return(Some(e)) = stmts.pop().unwrap()
-                            {
-                                e
-                            } else {
-                                unreachable!()
-                            }
+                    let final_expr = if let Some(IrStmt::Return(Some(_))) = stmts.last() {
+                        if let IrStmt::Return(Some(e)) = stmts.pop().unwrap() {
+                            e
                         } else {
-                            // Void block lambda — no return value
-                            IrExpr::Unit
-                        };
+                            unreachable!()
+                        }
+                    } else {
+                        // Void block lambda — no return value
+                        IrExpr::Unit
+                    };
                     (final_expr, stmts)
                 } else {
                     (lower_expr(body_node, src)?, vec![])
@@ -1692,7 +1690,7 @@ fn strip_text_block_indent(inner: &str) -> String {
     }
 
     // The last line is the closing-delimiter line if it is whitespace-only
-    let last_is_delim = content_lines.last().map_or(false, |l| l.trim().is_empty());
+    let last_is_delim = content_lines.last().is_some_and(|l| l.trim().is_empty());
 
     // Compute common indent: consider non-blank content lines AND the
     // closing-delimiter line (even though it is all whitespace).

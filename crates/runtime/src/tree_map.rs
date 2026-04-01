@@ -2,9 +2,9 @@
 //!
 //! Backed by `BTreeMap<K, V>` which provides sorted key iteration.
 
-use std::collections::BTreeMap;
-use crate::JList;
 use crate::map::JMapEntry;
+use crate::JList;
+use std::collections::BTreeMap;
 
 /// A Java-compatible sorted map backed by `BTreeMap<K, V>`.
 ///
@@ -121,11 +121,13 @@ impl<K: Ord + Clone, V: Clone> JTreeMap<K, V> {
 
     /// Java `map.entrySet()`.
     #[allow(non_snake_case)]
-    pub fn entrySet(&self) -> JList<JMapEntry<K, V>>
-    {
+    pub fn entrySet(&self) -> JList<JMapEntry<K, V>> {
         let mut l = JList::new();
         for (k, v) in &self.inner {
-            l.add(JMapEntry { key: k.clone(), value: v.clone() });
+            l.add(JMapEntry {
+                key: k.clone(),
+                value: v.clone(),
+            });
         }
         l
     }

@@ -85,10 +85,10 @@ pub mod prelude {
         JEnumMap, JEnumSet, JException, JExecutorService, JExecutors, JFile, JFileInputStream,
         JFileOutputStream, JFileReader, JFileWriter, JFiles, JFuture, JHttpURLConnection, JInstant,
         JIterator, JLinkedHashMap, JLinkedHashSet, JLinkedList, JList, JLocalDate, JLocalDateTime,
-        JLocalTime, JMap, JMapEntry, JMatcher, JMathContext, JNull, JObject, JOptional, JPath, JPaths,
-        JPattern, JPeriod, JPrintWriter, JPriorityQueue, JReadLock, JReentrantLock,
+        JLocalTime, JMap, JMapEntry, JMatcher, JMathContext, JNull, JObject, JOptional, JPath,
+        JPaths, JPattern, JPeriod, JPrintWriter, JPriorityQueue, JReadLock, JReentrantLock,
         JReentrantReadWriteLock, JRoundingMode, JScanner, JSemaphore, JServerSocket, JSet, JSocket,
-        JStream, JString, JStringBuilder, JThread, JThreadLocal, JTimeUnit, JTreeMap, JTreeSet,
-        JWriteLock, JURL, JSpliterator,
+        JSpliterator, JStream, JString, JStringBuilder, JThread, JThreadLocal, JTimeUnit, JTreeMap,
+        JTreeSet, JWriteLock, JURL,
     };
 }

@@ -2660,7 +2660,12 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             Ok(quote! { #inner._instanceof(#type_name_str) })
         }
 
-        IrExpr::Lambda { params, body, body_stmts, .. } => {
+        IrExpr::Lambda {
+            params,
+            body,
+            body_stmts,
+            ..
+        } => {
             let param_idents: Vec<Ident> = params.iter().map(|p| ident(p)).collect();
             let body_ts = emit_expr(body)?;
             if body_stmts.is_empty() {

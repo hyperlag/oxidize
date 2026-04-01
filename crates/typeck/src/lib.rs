@@ -709,7 +709,12 @@ fn check_expr(
             })
         }
 
-        IrExpr::Lambda { params, body, body_stmts, .. } => {
+        IrExpr::Lambda {
+            params,
+            body,
+            body_stmts,
+            ..
+        } => {
             // Add each param as Unknown-typed into a child env
             let mut lambda_env = env.clone();
             for p in &params {

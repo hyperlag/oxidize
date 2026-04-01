@@ -2,9 +2,9 @@
 //!
 //! Backed by `indexmap::IndexMap<K, V>` which preserves insertion order.
 
-use indexmap::IndexMap;
-use crate::JList;
 use crate::map::JMapEntry;
+use crate::JList;
+use indexmap::IndexMap;
 
 /// A Java-compatible insertion-ordered map backed by `IndexMap<K, V>`.
 ///
@@ -105,11 +105,13 @@ where
 
     /// Java `map.entrySet()`.
     #[allow(non_snake_case)]
-    pub fn entrySet(&self) -> JList<JMapEntry<K, V>>
-    {
+    pub fn entrySet(&self) -> JList<JMapEntry<K, V>> {
         let mut l = JList::new();
         for (k, v) in &self.inner {
-            l.add(JMapEntry { key: k.clone(), value: v.clone() });
+            l.add(JMapEntry {
+                key: k.clone(),
+                value: v.clone(),
+            });
         }
         l
     }
