@@ -120,18 +120,20 @@ Map `keySet()`/`values()`/`entrySet()` iteration is supported on `HashMap`,
 `Spliterator` has a minimal stub (`trySplit`, `estimateSize`,
 `characteristics`, `forEachRemaining`, `tryAdvance`).
 
-## Standard Library Gaps
+### Standard Library Gaps
 
 ### java.lang
 
-- `Process` / `ProcessBuilder` (subprocess execution)
-- `Runtime.getRuntime()` (JVM runtime queries)
+- `Runtime.getRuntime()` (JVM runtime queries beyond subprocess execution)
 - `ClassLoader`
 - `SecurityManager`
 
 **Supported:** `System.exit()`, `System.currentTimeMillis()`, `System.nanoTime()`,
 `System.getenv()`, `System.getProperty()` (1- and 2-arg forms with inline
-known-property resolution), `System.lineSeparator()`, `System.arraycopy()`.
+known-property resolution), `System.lineSeparator()`, `System.arraycopy()`,
+`ProcessBuilder` / `Process` (subprocess spawn, stdout/stderr capture, exit
+code, working-directory override; `Runtime.getRuntime().exec(String)` is a
+convenience alias).
 
 ### java.io / java.nio
 

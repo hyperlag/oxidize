@@ -64,6 +64,7 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             JBigDecimal, JMathContext, JRoundingMode,
             JURL, JSocket, JServerSocket, JHttpURLConnection,
             JSpliterator, JavaObject,
+            JProcessBuilder, JProcess,
         };
     });
 
@@ -1506,6 +1507,30 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     }
                 }
 
+                // Runtime.getRuntime().exec(cmd) — subprocess convenience wrapper.
+                // Detect the two-level chain: MethodCall(Var("Runtime"), "getRuntime").exec(...)
+                if let IrExpr::MethodCall {
+                    receiver: Some(rt_recv),
+                    method_name: inner_method,
+                    ..
+                } = recv.as_ref()
+                {
+                    if let IrExpr::Var { name: rt_name, .. } = rt_recv.as_ref() {
+                        if rt_name == "Runtime" && inner_method == "getRuntime" {
+                            return match method_name.as_str() {
+                                "exec" if !args_ts.is_empty() => {
+                                    let cmd = &args_ts[0];
+                                    Ok(quote! { JProcessBuilder::exec_string(#cmd) })
+                                }
+                                _ => {
+                                    let m = ident(method_name);
+                                    Ok(quote! { JProcessBuilder::#m(#(#args_ts),*) })
+                                }
+                            };
+                        }
+                    }
+                }
+
                 // Thread.sleep(ms) — static call on the Thread class name.
                 if let IrExpr::Var { name, .. } = recv.as_ref() {
                     if name == "Thread" && method_name == "sleep" {
@@ -1563,6 +1588,15 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                 Ok(quote! { JThreadLocal::#m(#(#args_ts),*) })
                             }
                         };
+                    }
+                    // Runtime.getRuntime() — returns a sentinel; exec handled via chain detection.
+                    if name == "Runtime" && method_name == "getRuntime" {
+                        // Emit a placeholder struct literal; the subsequent .exec() call is
+                        // handled by the chained MethodCall detection above.  If the result
+                        // is stored in a variable and exec() called on it, we need a type.
+                        // Emit a ZST-style no-op value; the exec() instance dispatch below
+                        // will handle the actual logic.
+                        return Ok(quote! { JProcessBuilder::new_varargs(vec![]) });
                     }
                     // System.exit / currentTimeMillis / nanoTime / getenv / getProperty / arraycopy
                     if name == "System" {
@@ -2324,6 +2358,15 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     }
                 }
 
+                // Runtime instance → exec() produces a JProcess.
+                if matches!(recv.ty(), IrType::Class(c) if c == "Runtime" || c == "ProcessBuilder")
+                    && method_name == "exec"
+                    && !args_ts.is_empty()
+                {
+                    let cmd = &args_ts[0];
+                    return Ok(quote! { JProcessBuilder::exec_string(#cmd) });
+                }
+
                 // Rename Java method names to their Rust runtime equivalents.
                 let method = match method_name.as_str() {
                     "await" => ident("await_"),
@@ -2423,10 +2466,38 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     }
                 }
                 "BufferedReader" => {
-                    // new BufferedReader(new FileReader(...)) or (new InputStreamReader(System.in))
+                    // new BufferedReader(new FileReader(...)) or (new InputStreamReader(...))
                     if args_ts.is_empty() {
                         Ok(quote! { JBufferedReader::new_stdin() })
                     } else {
+                        // Detect: new BufferedReader(new InputStreamReader(X.getInputStream()))
+                        // or new BufferedReader(new InputStreamReader(X.getErrorStream()))
+                        // → lower to X.getInputStream() / X.getErrorStream()
+                        if let Some(IrExpr::New {
+                            class: inner_cls,
+                            args: inner_args,
+                            ..
+                        }) = args.first()
+                        {
+                            if inner_cls == "InputStreamReader" {
+                                if let Some(IrExpr::MethodCall {
+                                    receiver: Some(recv),
+                                    method_name,
+                                    ..
+                                }) = inner_args.first()
+                                {
+                                    if method_name == "getInputStream"
+                                        || method_name == "getErrorStream"
+                                    {
+                                        let recv_ts = emit_expr(recv)?;
+                                        let m = ident(method_name);
+                                        return Ok(quote! { (#recv_ts).#m() });
+                                    }
+                                }
+                                // InputStreamReader(System.in) → stdin
+                                return Ok(quote! { JBufferedReader::new_stdin() });
+                            }
+                        }
                         let a = &args_ts[0];
                         let arg_ty = args.first().map(|e| e.ty());
                         match arg_ty {
@@ -2512,6 +2583,27 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                         })
                     } else {
                         Ok(quote! { JThread::new(|| {}) })
+                    }
+                }
+                "ProcessBuilder" => {
+                    // new ProcessBuilder(String... args)  or  new ProcessBuilder(List<String>)
+                    if args_ts.is_empty() {
+                        Ok(quote! { JProcessBuilder::new_varargs(vec![]) })
+                    } else {
+                        let arg_ty = args.first().map(|e| e.ty());
+                        let is_list = matches!(
+                            arg_ty,
+                            Some(IrType::Generic { base, .. })
+                            if matches!(base.as_ref(),
+                                IrType::Class(c) if matches!(c.as_str(),
+                                    "List" | "ArrayList" | "Collection"))
+                        );
+                        if is_list && args_ts.len() == 1 {
+                            let a = &args_ts[0];
+                            Ok(quote! { JProcessBuilder::new_list(#a) })
+                        } else {
+                            Ok(quote! { JProcessBuilder::new_varargs(vec![#(#args_ts),*]) })
+                        }
                     }
                 }
                 _ => {
@@ -2909,6 +3001,8 @@ fn emit_type(ty: &IrType) -> TokenStream {
                 "Iterator" => quote! { JIterator<JavaObject> },
                 "Map.Entry" => quote! { JMapEntry<JavaObject, JavaObject> },
                 "Spliterator" => quote! { JSpliterator<JavaObject> },
+                "ProcessBuilder" => quote! { JProcessBuilder },
+                "Process" => quote! { JProcess },
                 "Object" => quote! { JavaObject },
                 _ => {
                     // Resolve through the enum alias map so that a type
