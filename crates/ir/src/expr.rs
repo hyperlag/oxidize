@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum IrExpr {
     // ── Literals ──────────────────────────────────────────────────────────
+    /// Unit value `()` — used for void-returning block lambdas.
+    Unit,
     LitBool(bool),
     LitInt(i64),
     LitLong(i64),
@@ -77,9 +79,12 @@ pub enum IrExpr {
     },
 
     /// Lambda expression: `x -> body` or `(x, y) -> body`.
+    /// For block lambdas `(x) -> { stmts; return expr; }`, `body_stmts`
+    /// holds the leading statements and `body` holds the final expression.
     Lambda {
         params: Vec<String>,
         body: Box<IrExpr>,
+        body_stmts: Vec<crate::stmt::IrStmt>,
         ty: IrType,
     },
 
@@ -123,6 +128,7 @@ impl IrExpr {
     /// Returns the static type of this expression.
     pub fn ty(&self) -> &IrType {
         match self {
+            IrExpr::Unit => &IrType::Void,
             IrExpr::LitBool(_) => &IrType::Bool,
             IrExpr::LitInt(_) => &IrType::Int,
             IrExpr::LitLong(_) => &IrType::Long,

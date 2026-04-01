@@ -27,6 +27,7 @@ pub mod priority_queue;
 pub mod reflect;
 pub mod regex_support;
 pub mod set;
+pub mod spliterator;
 pub mod stream;
 pub mod string;
 pub mod string_builder;
@@ -56,7 +57,7 @@ pub use linked_hash_map::JLinkedHashMap;
 pub use linked_hash_set::JLinkedHashSet;
 pub use linked_list::JLinkedList;
 pub use list::JList;
-pub use map::JMap;
+pub use map::{JMap, JMapEntry};
 pub use net::{JHttpURLConnection, JServerSocket, JSocket, JURL};
 pub use object::{JNull, JObject, JavaObject};
 pub use optional::JOptional;
@@ -64,6 +65,7 @@ pub use priority_queue::JPriorityQueue;
 pub use reflect::JClass;
 pub use regex_support::{JMatcher, JPattern};
 pub use set::JSet;
+pub use spliterator::JSpliterator;
 pub use stream::JStream;
 pub use string::jformat;
 pub use string::JString;
@@ -83,10 +85,10 @@ pub mod prelude {
         JEnumMap, JEnumSet, JException, JExecutorService, JExecutors, JFile, JFileInputStream,
         JFileOutputStream, JFileReader, JFileWriter, JFiles, JFuture, JHttpURLConnection, JInstant,
         JIterator, JLinkedHashMap, JLinkedHashSet, JLinkedList, JList, JLocalDate, JLocalDateTime,
-        JLocalTime, JMap, JMatcher, JMathContext, JNull, JObject, JOptional, JPath, JPaths,
-        JPattern, JPeriod, JPrintWriter, JPriorityQueue, JReadLock, JReentrantLock,
+        JLocalTime, JMap, JMapEntry, JMatcher, JMathContext, JNull, JObject, JOptional, JPath,
+        JPaths, JPattern, JPeriod, JPrintWriter, JPriorityQueue, JReadLock, JReentrantLock,
         JReentrantReadWriteLock, JRoundingMode, JScanner, JSemaphore, JServerSocket, JSet, JSocket,
-        JStream, JString, JStringBuilder, JThread, JThreadLocal, JTimeUnit, JTreeMap, JTreeSet,
-        JWriteLock, JURL,
+        JSpliterator, JStream, JString, JStringBuilder, JThread, JThreadLocal, JTimeUnit, JTreeMap,
+        JTreeSet, JWriteLock, JURL,
     };
 }

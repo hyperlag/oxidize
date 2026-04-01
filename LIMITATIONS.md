@@ -115,10 +115,10 @@ with `LinkedList`, `ArrayDeque`, `PriorityQueue`, `TreeMap`, `TreeSet`,
 `Collections.singletonList()`, `Arrays.asList()`, and `Iterator` with
 `hasNext()`/`next()`/`remove()`.
 
-The following are **not** supported:
-
-- `Spliterator`
-- Map `keySet()`/`values()`/`entrySet()` iteration
+Map `keySet()`/`values()`/`entrySet()` iteration is supported on `HashMap`,
+`TreeMap`, and `LinkedHashMap` via `JMapEntry<K,V>` for entry pairs.
+`Spliterator` has a minimal stub (`trySplit`, `estimateSize`,
+`characteristics`, `forEachRemaining`, `tryAdvance`).
 
 ## Standard Library Gaps
 
@@ -214,7 +214,9 @@ The following advanced enum features are **not** supported:
 
 ### Text Blocks (Java 13+)
 
-Multi-line string literals (`"""..."""`) are not supported.
+Multi-line string literals (`"""..."""`) are supported. The parser strips
+the common leading indentation per the Java spec (JEP 378) and preserves
+relative indentation within the block.
 
 ### Modules (Java 9+)
 

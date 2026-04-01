@@ -1160,6 +1160,59 @@ JStream::of_list(&list).filter(|x: &i32| *x > 0).collect_to_list();
 ```
 
 Lambda expressions are translated to Rust closures (`|params| { body }`).
+Multi-statement block lambdas are fully supported:
+
+```java
+list.stream().map(x -> {
+    int y = x * 2;
+    return y + 1;
+})
+```
+```rust
+list.stream().map(|x: i32| {
+    let mut y: i32 = x * 2;
+    y + 1
+})
+```
+
+## Text Blocks (Java 13+)
+
+```java
+String sql = """
+        SELECT *
+        FROM users
+        WHERE id = ?
+        """;
+```
+```rust
+let mut sql: JString = JString::from("SELECT *\nFROM users\nWHERE id = ?\n");
+```
+
+Common leading indentation is stripped per JEP 378. The level is determined
+by the least-indented content line (or the closing `"""` line if it is placed
+on its own line with less indentation).
+
+## Map Iteration
+
+```java
+for (Map.Entry<String, Integer> entry : map.entrySet()) {
+    System.out.println(entry.getKey() + "=" + entry.getValue());
+}
+```
+```rust
+for entry in map.entrySet().iter() {
+    let entry: JMapEntry<JString, i32> = entry.clone();
+    println!("{}", entry);
+}
+```
+
+| Java method | Rust runtime method |
+|-------------|---------------------|
+| `map.keySet()` | `map.keySet() → JList<K>` (sorted for `JTreeMap`) |
+| `map.values()` | `map.values() → JList<V>` |
+| `map.entrySet()` | `map.entrySet() → JList<JMapEntry<K,V>>` |
+| `entry.getKey()` | `entry.getKey() → K` |
+| `entry.getValue()` | `entry.getValue() → V` |
 
 ## Annotations
 

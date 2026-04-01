@@ -1194,4 +1194,40 @@ Expression calculator tests complete",
              done",
         );
     }
+
+    #[test]
+    fn test_lambda_block() {
+        check(
+            "LambdaBlock.java",
+            "cf = hello world\n\
+             cf2 = 42\n\
+             cf3 = computed=50\n\
+             done",
+        );
+    }
+
+    #[test]
+    fn test_text_block() {
+        check(
+            "TextBlock.java",
+            "simple=hello\nworld\nindented=line1\n    line2\nline3\nnoTrailing=abc\ndef\ndone",
+        );
+    }
+
+    #[test]
+    fn test_map_iteration() {
+        check(
+            "MapIteration.java",
+            "keys:\n\
+             \x20\x20alpha\n\
+             \x20\x20beta\n\
+             \x20\x20gamma\n\
+             sum=6\n\
+             entries:\n\
+             \x20\x20alpha=1\n\
+             \x20\x20beta=2\n\
+             \x20\x20gamma=3\n\
+             done",
+        );
+    }
 }
