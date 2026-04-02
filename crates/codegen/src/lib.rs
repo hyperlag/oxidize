@@ -28,6 +28,22 @@ thread_local! {
     /// Field names of the enum currently being emitted (empty when not in an enum method).
     static ENUM_FIELD_NAMES: std::cell::RefCell<std::collections::HashSet<String>> =
         std::cell::RefCell::new(std::collections::HashSet::new());
+    /// Maps method_name → number of non-varargs parameters for varargs methods.
+    /// Populated from ALL classes before any method body is emitted, so
+    /// cross-class varargs calls resolve correctly.
+    static VARARGS_METHODS: std::cell::RefCell<std::collections::HashMap<String, usize>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+    /// Maps Java field name → mangled Rust static name for mutable static
+    /// (non-const) fields in the class currently being emitted.
+    /// Cleared at the start of each `emit_class` call.
+    static STATIC_ATOMIC_FIELDS: std::cell::RefCell<std::collections::HashMap<String, String>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+    /// Whether the class currently being emitted has a `__clinit__` method
+    /// (static initializer block).
+    static HAS_STATIC_INIT: Cell<bool> = const { Cell::new(false) };
+    /// Name of the class currently being emitted (used for static Once guard).
+    static CURRENT_CLASS_NAME: std::cell::RefCell<String> =
+        const { std::cell::RefCell::new(String::new()) };
 }
 
 /// Errors produced during code-generation.
@@ -42,9 +58,14 @@ pub enum CodegenError {
 pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
     let mut items: Vec<TokenStream> = Vec::new();
 
+    // Module-level allows to keep the generated code warning-free.
+    items.push(quote! {
+        #![allow(non_upper_case_globals, non_snake_case, unused_mut, unused_variables)]
+    });
+
     // Emit a use for the runtime crate
     items.push(quote! {
-        #[allow(unused_imports)]
+        #[allow(unused_imports, non_upper_case_globals)]
         use java_compat::{
             JString, JArray, JObject, JNull, JList, JMap, JSet, JException,
             JAtomicInteger, JAtomicLong, JAtomicBoolean,
@@ -124,6 +145,24 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
                 names
                     .entry(simple.to_owned())
                     .or_insert_with(|| name.clone());
+            }
+        }
+    });
+
+    // Pre-scan ALL methods across all classes to populate VARARGS_METHODS
+    // before any method body is emitted.  This ensures varargs call sites in
+    // class B resolve even when the varargs method is defined in class A.
+    VARARGS_METHODS.with(|vm| {
+        let mut map = vm.borrow_mut();
+        map.clear();
+        for decl in &module.decls {
+            if let IrDecl::Class(cls) = decl {
+                for method in &cls.methods {
+                    if let Some(varargs_pos) = method.params.iter().position(|p| p.is_varargs) {
+                        // Number of regular (non-varargs) parameters before the varargs one
+                        map.insert(method.name.clone(), varargs_pos);
+                    }
+                }
             }
         }
     });
@@ -493,26 +532,85 @@ fn emit_class(
         }
     };
 
-    // Static fields → const items
-    let static_items: Vec<TokenStream> = cls
-        .fields
-        .iter()
-        .filter(|f| f.is_static)
-        .filter_map(|f| {
-            if f.is_final {
-                if let Some(init) = &f.init {
-                    if let Some(lit) = as_const_literal(init) {
-                        let fname = ident(&f.name.to_uppercase());
-                        let fty = emit_type(&f.ty);
-                        return Some(quote! {
-                            pub const #fname: #fty = #lit;
-                        });
-                    }
+    // ── Static-field thread-local setup ──────────────────────────────────
+    // Clear the per-class state and re-populate for this class.
+    let cls_name_str = cls.name.clone();
+    CURRENT_CLASS_NAME.with(|cn| *cn.borrow_mut() = cls_name_str.clone());
+    STATIC_ATOMIC_FIELDS.with(|sf| sf.borrow_mut().clear());
+
+    // Static fields → const items (for static final with literal value)
+    //               → module-level Rust statics (for mutable primitive statics)
+    let mut static_items: Vec<TokenStream> = Vec::new();
+    let has_clinit = cls.methods.iter().any(|m| m.name == "__clinit__");
+    HAS_STATIC_INIT.with(|c| c.set(has_clinit));
+    if has_clinit {
+        // Emit a Once guard for the static initializer block.
+        let once_name = ident(&format!("__STATIC_INIT_ONCE_{}", cls.name));
+        static_items.push(quote! {
+            static #once_name: ::std::sync::Once = ::std::sync::Once::new();
+        });
+    }
+    for f in cls.fields.iter().filter(|f| f.is_static) {
+        // static final field with a compile-time literal → const
+        if f.is_final {
+            if let Some(init) = &f.init {
+                if let Some(lit) = as_const_literal(init) {
+                    let fname = ident(&f.name.to_uppercase());
+                    let fty = emit_type(&f.ty);
+                    static_items.push(quote! { pub const #fname: #fty = #lit; });
+                    continue;
                 }
             }
-            None
-        })
-        .collect();
+        }
+        // Mutable static primitive field → AtomicI32 / AtomicI64 / AtomicBool
+        let mangled = format!("{}_{}", cls.name, f.name);
+        let mangled_ident = ident(&mangled);
+        match &f.ty {
+            IrType::Int | IrType::Short | IrType::Byte => {
+                let init_val = f.init.as_ref().and_then(as_i32_literal).unwrap_or(0);
+                let lit = Literal::i32_unsuffixed(init_val);
+                static_items.push(quote! {
+                    static #mangled_ident: ::std::sync::atomic::AtomicI32 =
+                        ::std::sync::atomic::AtomicI32::new(#lit);
+                });
+                STATIC_ATOMIC_FIELDS.with(|sf| {
+                    sf.borrow_mut().insert(f.name.clone(), mangled.clone());
+                });
+            }
+            IrType::Long => {
+                let init_val = f.init.as_ref().and_then(as_i64_literal).unwrap_or(0);
+                let lit = Literal::i64_unsuffixed(init_val);
+                static_items.push(quote! {
+                    static #mangled_ident: ::std::sync::atomic::AtomicI64 =
+                        ::std::sync::atomic::AtomicI64::new(#lit);
+                });
+                STATIC_ATOMIC_FIELDS.with(|sf| {
+                    sf.borrow_mut().insert(f.name.clone(), mangled.clone());
+                });
+            }
+            IrType::Bool => {
+                let init_val = f.init.as_ref().and_then(as_bool_literal).unwrap_or(false);
+                static_items.push(quote! {
+                    static #mangled_ident: ::std::sync::atomic::AtomicBool =
+                        ::std::sync::atomic::AtomicBool::new(#init_val);
+                });
+                STATIC_ATOMIC_FIELDS.with(|sf| {
+                    sf.borrow_mut().insert(f.name.clone(), mangled.clone());
+                });
+            }
+            _ => {
+                // Non-primitive static: OnceLock for reference types.
+                let fty = emit_type(&f.ty);
+                static_items.push(quote! {
+                    static #mangled_ident: ::std::sync::OnceLock<#fty> =
+                        ::std::sync::OnceLock::new();
+                });
+                STATIC_ATOMIC_FIELDS.with(|sf| {
+                    sf.borrow_mut().insert(f.name.clone(), mangled.clone());
+                });
+            }
+        }
+    }
 
     // Collect non-overriding ancestor methods that need delegation stubs
     let own_method_names: std::collections::HashSet<String> =
@@ -538,6 +636,23 @@ fn emit_class(
     // Constructors and own methods (excluding interface-implemented methods)
     let mut method_tokens: Vec<TokenStream> = Vec::new();
 
+    // If the class has a static initializer block (`static { ... }`), emit a
+    // Once-guarded `__run_static_init()` method.  All other static methods
+    // will call this at their start.
+    if has_clinit {
+        if let Some(clinit) = cls.methods.iter().find(|m| m.name == "__clinit__") {
+            let once_name = ident(&format!("__STATIC_INIT_ONCE_{}", cls.name));
+            let body = emit_stmts(clinit.body.as_deref().unwrap_or(&[]))?;
+            method_tokens.push(quote! {
+                fn __run_static_init() {
+                    #once_name.call_once(|| {
+                        #(#body)*
+                    });
+                }
+            });
+        }
+    }
+
     // Always emit a `pub fn new() -> Self` even when no explicit constructor
     // exists, so that `new Foo()` calls in the generated code compile.
     if cls.constructors.is_empty() {
@@ -551,6 +666,9 @@ fn emit_class(
         method_tokens.push(emit_constructor(ctor, cls)?);
     }
     for method in &cls.methods {
+        if method.name == "__clinit__" {
+            continue; // already handled above as __run_static_init
+        }
         if !interface_methods.contains(&method.name) {
             method_tokens.push(emit_method(method, &cls.name)?);
         }
@@ -870,6 +988,14 @@ fn emit_method_with_pub(method: &IrMethod, pub_vis: bool) -> Result<TokenStream,
         quote! {}
     };
 
+    // Static initializer guard: ensure `__run_static_init()` is called before
+    // every static method (except the init method itself).
+    let static_init_preamble = if method.is_static && HAS_STATIC_INIT.with(|c| c.get()) {
+        quote! { Self::__run_static_init(); }
+    } else {
+        quote! {}
+    };
+
     let ret_clause = if method.return_ty == IrType::Void {
         quote! {}
     } else {
@@ -880,6 +1006,7 @@ fn emit_method_with_pub(method: &IrMethod, pub_vis: bool) -> Result<TokenStream,
         Ok(quote! {
             pub fn #name(#self_param #(#params),*) #ret_clause {
                 #sync_preamble
+                #static_init_preamble
                 #(#body)*
             }
         })
@@ -887,6 +1014,7 @@ fn emit_method_with_pub(method: &IrMethod, pub_vis: bool) -> Result<TokenStream,
         Ok(quote! {
             fn #name(#self_param #(#params),*) #ret_clause {
                 #sync_preamble
+                #static_init_preamble
                 #(#body)*
             }
         })
@@ -898,8 +1026,19 @@ fn emit_params(params: &[IrParam]) -> Vec<TokenStream> {
         .iter()
         .map(|p| {
             let name = ident(&p.name);
-            let ty = emit_type(&p.ty);
-            quote! { mut #name: #ty }
+            if p.is_varargs {
+                // Java `T... args` → Rust `args: JArray<T>`
+                // The parser stores the varargs param type as Array(elem) so
+                // that .length accesses resolve via the normal Array path.
+                let elem_ty = match &p.ty {
+                    IrType::Array(inner) => emit_type(inner),
+                    other => emit_type(other),
+                };
+                quote! { mut #name: JArray<#elem_ty> }
+            } else {
+                let ty = emit_type(&p.ty);
+                quote! { mut #name: #ty }
+            }
         })
         .collect()
 }
@@ -1346,6 +1485,13 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
         IrExpr::LitNull => Ok(quote! { None }),
 
         IrExpr::Var { name, .. } => {
+            // Check if this variable refers to a mutable static field.
+            let static_mangled =
+                STATIC_ATOMIC_FIELDS.with(|sf| sf.borrow().get(name.as_str()).cloned());
+            if let Some(mangled) = static_mangled {
+                let mid = ident(&mangled);
+                return Ok(quote! { #mid.load(::std::sync::atomic::Ordering::SeqCst) });
+            }
             let id = ident(name);
             Ok(quote! { #id })
         }
@@ -1480,7 +1626,32 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             args,
             ..
         } => {
-            let args_ts: Vec<TokenStream> = args.iter().map(emit_expr).collect::<Result<_, _>>()?;
+            let mut args_ts: Vec<TokenStream> =
+                args.iter().map(emit_expr).collect::<Result<_, _>>()?;
+
+            // Varargs wrapping: if this method has a varargs parameter, bundle
+            // the trailing arguments on the call site into a JArray::from_vec.
+            {
+                let va_info =
+                    VARARGS_METHODS.with(|vm| vm.borrow().get(method_name.as_str()).copied());
+                if let Some(non_va_count) = va_info {
+                    // Only wrap if we have more than just a single JArray arg
+                    // (otherwise assume an array is already being passed through).
+                    let should_wrap = !(args_ts.len() == non_va_count + 1
+                        && matches!(
+                            args.get(non_va_count).map(|a| a.ty()),
+                            Some(IrType::Array(_))
+                        ));
+                    if should_wrap {
+                        let regular: Vec<TokenStream> =
+                            args_ts.drain(..non_va_count.min(args_ts.len())).collect();
+                        let va: Vec<TokenStream> = std::mem::take(&mut args_ts);
+                        let mut new_args = regular;
+                        new_args.push(quote! { JArray::from_vec(vec![#(#va),*]) });
+                        args_ts = new_args;
+                    }
+                }
+            }
 
             // System.out.println(x) → println!("{}", x)  /  System.err.println → eprintln!
             if let Some(recv) = receiver {
@@ -2648,6 +2819,28 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             Ok(quote! { JArray::<#elem_ts>::new_default(#len_ts) })
         }
 
+        IrExpr::NewArrayMultiDim { elem_ty, dims, .. } => {
+            // Build nested allocation from the innermost dimension outward.
+            // For `new int[r][c]`:
+            //   JArray::<JArray<i32>>::new_with(r, |_| JArray::<i32>::new_default(c))
+            let n = dims.len();
+            if n == 0 {
+                return Ok(quote! { JArray::<()>::new_default(0) });
+            }
+            let last_dim_ts = emit_expr(&dims[n - 1])?;
+            let elem_ts = emit_type(elem_ty);
+            let mut inner_expr = quote! { JArray::<#elem_ts>::new_default(#last_dim_ts) };
+            let mut current_elem_ty = elem_ty.clone();
+            for i in (0..n - 1).rev() {
+                let dim_ts = emit_expr(&dims[i])?;
+                let wrapped_ty = IrType::Array(Box::new(current_elem_ty.clone()));
+                let wrapped_ts = emit_type(&wrapped_ty);
+                inner_expr = quote! { JArray::<#wrapped_ts>::new_with(#dim_ts, |_| #inner_expr) };
+                current_elem_ty = wrapped_ty;
+            }
+            Ok(inner_expr)
+        }
+
         IrExpr::ArrayAccess { array, index, .. } => {
             let arr = emit_expr(array)?;
             let idx = emit_expr(index)?;
@@ -2691,6 +2884,40 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
         }
 
         IrExpr::UnOp { op, operand, .. } => {
+            // Check if the operand is a mutable static field; if so use atomics.
+            if let IrExpr::Var { name, .. } = operand.as_ref() {
+                let static_mangled =
+                    STATIC_ATOMIC_FIELDS.with(|sf| sf.borrow().get(name.as_str()).cloned());
+                if let Some(mangled) = static_mangled {
+                    let mid = ident(&mangled);
+                    let seqcst = quote! { ::std::sync::atomic::Ordering::SeqCst };
+                    return match op {
+                        UnOp::PostInc => Ok(quote! {
+                            #mid.fetch_add(1, #seqcst)
+                        }),
+                        UnOp::PostDec => Ok(quote! {
+                            #mid.fetch_sub(1, #seqcst)
+                        }),
+                        UnOp::PreInc => Ok(quote! { {
+                            #mid.fetch_add(1, #seqcst);
+                            #mid.load(#seqcst)
+                        }}),
+                        UnOp::PreDec => Ok(quote! { {
+                            #mid.fetch_sub(1, #seqcst);
+                            #mid.load(#seqcst)
+                        }}),
+                        _ => {
+                            let operand_ts = emit_expr(operand)?;
+                            match op {
+                                UnOp::Neg => Ok(quote! { (-#operand_ts) }),
+                                UnOp::Not => Ok(quote! { (!#operand_ts) }),
+                                UnOp::BitNot => Ok(quote! { (!#operand_ts) }),
+                                _ => unreachable!(),
+                            }
+                        }
+                    };
+                }
+            }
             let operand_ts = emit_expr(operand)?;
             match op {
                 UnOp::Neg => Ok(quote! { (-#operand_ts) }),
@@ -2719,6 +2946,18 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 let val = emit_expr(rhs)?;
                 return Ok(quote! { (#arr).set(#idx, #val) });
             }
+            // Mutable static field write: emit atomic store.
+            if let IrExpr::Var { name, .. } = lhs.as_ref() {
+                let static_mangled =
+                    STATIC_ATOMIC_FIELDS.with(|sf| sf.borrow().get(name.as_str()).cloned());
+                if let Some(mangled) = static_mangled {
+                    let mid = ident(&mangled);
+                    let val = emit_expr(rhs)?;
+                    return Ok(quote! {
+                        #mid.store(#val, ::std::sync::atomic::Ordering::SeqCst)
+                    });
+                }
+            }
             // Volatile field write: emit .store(val, SeqCst) instead of assignment.
             if let IrExpr::FieldAccess {
                 receiver,
@@ -2741,6 +2980,33 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
         }
 
         IrExpr::CompoundAssign { op, lhs, rhs, .. } => {
+            // Mutable static field compound-assign: emit fetch_add/fetch_sub etc.
+            if let IrExpr::Var { name, .. } = lhs.as_ref() {
+                let static_mangled =
+                    STATIC_ATOMIC_FIELDS.with(|sf| sf.borrow().get(name.as_str()).cloned());
+                if let Some(mangled) = static_mangled {
+                    let mid = ident(&mangled);
+                    let r = emit_expr(rhs)?;
+                    let seqcst = quote! { ::std::sync::atomic::Ordering::SeqCst };
+                    return match op {
+                        BinOp::Add | BinOp::Concat => Ok(quote! { #mid.fetch_add(#r, #seqcst) }),
+                        BinOp::Sub => Ok(quote! { #mid.fetch_sub(#r, #seqcst) }),
+                        BinOp::BitAnd => Ok(quote! { #mid.fetch_and(#r, #seqcst) }),
+                        BinOp::BitOr => Ok(quote! { #mid.fetch_or(#r, #seqcst) }),
+                        BinOp::BitXor => Ok(quote! { #mid.fetch_xor(#r, #seqcst) }),
+                        _ => {
+                            // Fallback: load → op → store
+                            let op_ts = emit_binop(op);
+                            Ok(quote! {
+                                #mid.store(
+                                    #mid.load(#seqcst) #op_ts #r,
+                                    #seqcst,
+                                )
+                            })
+                        }
+                    };
+                }
+            }
             let l = emit_place(lhs)?;
             let r = emit_expr(rhs)?;
             let compound = match op {
@@ -3230,6 +3496,30 @@ fn as_const_literal(expr: &IrExpr) -> Option<TokenStream> {
             Some(quote! { #lit })
         }
         _ => None,
+    }
+}
+
+fn as_i32_literal(expr: &IrExpr) -> Option<i32> {
+    if let IrExpr::LitInt(n) = expr {
+        Some(*n as i32)
+    } else {
+        None
+    }
+}
+
+fn as_i64_literal(expr: &IrExpr) -> Option<i64> {
+    match expr {
+        IrExpr::LitLong(n) => Some(*n),
+        IrExpr::LitInt(n) => Some(*n),
+        _ => None,
+    }
+}
+
+fn as_bool_literal(expr: &IrExpr) -> Option<bool> {
+    if let IrExpr::LitBool(b) = expr {
+        Some(*b)
+    } else {
+        None
     }
 }
 

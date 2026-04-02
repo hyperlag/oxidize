@@ -1240,4 +1240,26 @@ Expression calculator tests complete",
     fn test_process_env() {
         check("ProcessEnvTest.java", "wd=/tmp\nexit=0");
     }
+
+    // ── Stage 3 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_varargs_basic() {
+        check("VarargsBasic.java", "6\n30\n0\n8");
+    }
+
+    #[test]
+    fn test_static_counter() {
+        check("StaticCounter.java", "3\n13");
+    }
+
+    #[test]
+    fn test_multi_dim_array() {
+        check("MultiDimArray.java", "0\n6\n11\nfalse\ntrue\ntrue");
+    }
+
+    #[test]
+    fn test_static_initializer() {
+        check("StaticInitializer.java", "42\n84");
+    }
 }

@@ -693,6 +693,14 @@ fn check_expr(
             })
         }
 
+        IrExpr::NewArrayMultiDim { elem_ty, dims, ty } => {
+            let dims = dims
+                .into_iter()
+                .map(|d| check_expr(d, cls, class_map, enum_map, env))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(IrExpr::NewArrayMultiDim { elem_ty, dims, ty })
+        }
+
         IrExpr::Cast { target, expr } => {
             let expr = check_expr(*expr, cls, class_map, enum_map, env)?;
             Ok(IrExpr::Cast {

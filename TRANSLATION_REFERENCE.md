@@ -650,9 +650,48 @@ Trailing `break` statements are stripped (Rust match arms do not fall through).
 | Java                          | Rust                               |
 |-------------------------------|--------------------------------------|
 | `new int[10]`                | `JArray::new_default(10)`            |
+| `new int[r][c]`              | `JArray::<JArray<i32>>::new_with(r, \|_\| JArray::<i32>::new_default(c))` |
 | `arr[i]`                    | `arr.get(i)`                         |
 | `arr[i] = x`                | `arr.set(i, x)`                     |
 | `arr.length`                 | `arr.length()`                       |
+| `int[] a`                   | `JArray<i32>`                        |
+| `int[][] a`                 | `JArray<JArray<i32>>`                |
+
+## Varargs
+
+```java
+int sum(int... nums) { return nums.length; }
+sum(1, 2, 3);
+```
+```rust
+fn sum(mut nums: JArray<i32>) -> i32 { return nums.length(); }
+sum(JArray::from_vec(vec![1_i32, 2, 3]));
+```
+
+## Static Fields and Initializers
+
+```java
+class Foo {
+    static int count = 0;
+    static { count = 42; }
+    static void inc() { count++; }
+}
+```
+```rust
+static Foo_count: AtomicI32 = AtomicI32::new(0);
+static __STATIC_INIT_ONCE_Foo: Once = Once::new();
+impl Foo {
+    fn __run_static_init() {
+        __STATIC_INIT_ONCE_Foo.call_once(|| {
+            Foo_count.store(42, SeqCst);
+        });
+    }
+    fn inc() {
+        Self::__run_static_init();
+        Foo_count.fetch_add(1, SeqCst);
+    }
+}
+```
 
 ## Exception Handling
 

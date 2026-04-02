@@ -250,7 +250,8 @@ declarations in a single file may not translate correctly.
 void log(String... messages) { ... }
 ```
 
-Variable-length argument lists are not supported.
+Variargs methods are supported. Parameters are emitted as `JArray<T>` and
+call sites automatically bundle trailing arguments into an array.
 
 ### Multi-Dimensional Arrays
 
@@ -258,7 +259,9 @@ Variable-length argument lists are not supported.
 int[][] matrix = new int[3][4];
 ```
 
-Only single-dimensional arrays are supported.
+Multi-dimensional arrays are supported. `new T[r][c]` is emitted as
+`JArray::<JArray<T>>::new_with(r, |_| JArray::<T>::new_default(c))` and
+array accesses chain `.get(i).get(j)` calls.
 
 ### Reference Casting
 
@@ -277,7 +280,9 @@ class Foo {
 }
 ```
 
-Static initializer blocks are not supported.
+Static initializer blocks are supported. They are lowered to a
+`std::sync::Once`-guarded `__run_static_init()` method that is called at the
+start of every static method in the class.
 
 ### Try-with-resources (Custom AutoCloseable)
 

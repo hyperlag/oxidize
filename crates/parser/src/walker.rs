@@ -245,6 +245,31 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<(IrClass, Vec<IrEnum>), Par
                 "enum_declaration" => {
                     inner_enums.push(lower_enum(child, src)?);
                 }
+                "static_initializer" => {
+                    // Represent as a synthetic `__clinit__` static method so
+                    // the codegen can emit an Once-guarded init function.
+                    // tree-sitter-java: static_initializer has no named fields;
+                    // its body is the anonymous `block` named child.
+                    let mut c = child.walk();
+                    let block = child.named_children(&mut c).find(|n| n.kind() == "block");
+                    let body_stmts = block
+                        .map(|b| lower_block(b, src))
+                        .transpose()?
+                        .unwrap_or_default();
+                    methods.push(IrMethod {
+                        name: "__clinit__".into(),
+                        visibility: Visibility::Public,
+                        is_static: true,
+                        is_abstract: false,
+                        is_final: false,
+                        is_synchronized: false,
+                        type_params: vec![],
+                        params: vec![],
+                        return_ty: IrType::Void,
+                        body: Some(body_stmts),
+                        throws: vec![],
+                    });
+                }
                 _ => {}
             }
         }
@@ -564,12 +589,40 @@ fn lower_params(node: Node<'_>, src: &[u8]) -> Vec<IrParam> {
         .filter(|n| n.kind() == "formal_parameter" || n.kind() == "spread_parameter")
         .map(|p| {
             let is_varargs = p.kind() == "spread_parameter";
-            let ty = child_by_field(p, "type")
-                .map(|n| lower_type(n, src))
-                .unwrap_or(IrType::Unknown);
-            let name = child_by_field(p, "name")
-                .map(|n| text(n, src).to_owned())
-                .unwrap_or_default();
+            // spread_parameter has no named "type" field; find the type by looking
+            // for the first child that is not `modifiers` or `variable_declarator`.
+            // Store the type as IrType::Array(elem) so that field-accesses like
+            // `nums.length` resolve correctly through the normal Array path.
+            let ty = if is_varargs {
+                let mut cur2 = p.walk();
+                let ty_node = p
+                    .named_children(&mut cur2)
+                    .find(|n| n.kind() != "modifiers" && n.kind() != "variable_declarator");
+                let elem_ty = ty_node
+                    .map(|n| lower_type(n, src))
+                    .unwrap_or(IrType::Unknown);
+                IrType::Array(Box::new(elem_ty))
+            } else {
+                child_by_field(p, "type")
+                    .map(|n| lower_type(n, src))
+                    .unwrap_or(IrType::Unknown)
+            };
+            // spread_parameter has no direct "name" field; its name is inside a
+            // variable_declarator child.  formal_parameter DOES have "name" directly.
+            let name = if is_varargs {
+                let mut cur2 = p.walk();
+                let varargs_name = p
+                    .named_children(&mut cur2)
+                    .find(|n| n.kind() == "variable_declarator")
+                    .and_then(|vd| child_by_field(vd, "name"))
+                    .map(|n| text(n, src).to_owned())
+                    .unwrap_or_default();
+                varargs_name
+            } else {
+                child_by_field(p, "name")
+                    .map(|n| text(n, src).to_owned())
+                    .unwrap_or_default()
+            };
             IrParam {
                 name,
                 ty,
@@ -601,7 +654,19 @@ fn lower_type(node: Node<'_>, src: &[u8]) -> IrType {
             let elem = child_by_field(node, "element")
                 .map(|n| lower_type(n, src))
                 .unwrap_or(IrType::Unknown);
-            IrType::Array(Box::new(elem))
+            // Count the number of `[]` pairs in the `dimensions` field to
+            // handle multi-dimensional types like `int[][]`.
+            let dim_count = child_by_field(node, "dimensions")
+                .map(|d| {
+                    let dim_text = text(d, src);
+                    dim_text.chars().filter(|&c| c == '[').count()
+                })
+                .unwrap_or(1);
+            let mut ty = elem;
+            for _ in 0..dim_count {
+                ty = IrType::Array(Box::new(ty));
+            }
+            ty
         }
         "type_identifier" => {
             let t = text(node, src);
@@ -1452,19 +1517,28 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
             let elem_ty = child_by_field(node, "type")
                 .map(|n| lower_type(n, src))
                 .unwrap_or(IrType::Unknown);
-            let len = children_by_field_name(node, "dimensions")
+            // Collect ALL dimension expressions (handles `new int[3][4]` etc.)
+            let dims: Vec<IrExpr> = children_by_field_name(node, "dimensions")
                 .into_iter()
-                .next()
-                .and_then(|dim| dim.named_child(0))
+                .filter_map(|dim| dim.named_child(0))
                 .map(|n| lower_expr(n, src))
-                .transpose()?
-                .unwrap_or(IrExpr::LitInt(0));
-            let ty = IrType::Array(Box::new(elem_ty.clone()));
-            Ok(IrExpr::NewArray {
-                elem_ty,
-                len: Box::new(len),
-                ty,
-            })
+                .collect::<Result<Vec<_>, _>>()?;
+            if dims.len() >= 2 {
+                // Multi-dimensional: build a nested IrType and use NewArrayMultiDim
+                let mut ty = elem_ty.clone();
+                for _ in &dims {
+                    ty = IrType::Array(Box::new(ty));
+                }
+                Ok(IrExpr::NewArrayMultiDim { elem_ty, dims, ty })
+            } else {
+                let len = dims.into_iter().next().unwrap_or(IrExpr::LitInt(0));
+                let ty = IrType::Array(Box::new(elem_ty.clone()));
+                Ok(IrExpr::NewArray {
+                    elem_ty,
+                    len: Box::new(len),
+                    ty,
+                })
+            }
         }
 
         // ── array access ──────────────────────────────────────────────────
