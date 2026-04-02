@@ -1520,12 +1520,16 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             return match method_name.as_str() {
                                 "exec" if !args_ts.is_empty() => {
                                     let cmd = &args_ts[0];
-                                    Ok(quote! { JProcessBuilder::exec_string(#cmd) })
+                                    // Dispatch to exec_array for String[] arg, exec_string otherwise.
+                                    if matches!(args.first().map(|e| e.ty()), Some(IrType::Array(_))) && args_ts.len() == 1 {
+                                        Ok(quote! { JProcessBuilder::exec_array(#cmd) })
+                                    } else {
+                                        Ok(quote! { JProcessBuilder::exec_string(#cmd) })
+                                    }
                                 }
-                                _ => {
-                                    let m = ident(method_name);
-                                    Ok(quote! { JProcessBuilder::#m(#(#args_ts),*) })
-                                }
+                                _ => Err(CodegenError::Unsupported(
+                                    "Runtime.getRuntime() methods other than exec are unsupported".into(),
+                                )),
                             };
                         }
                     }
@@ -1589,14 +1593,12 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             }
                         };
                     }
-                    // Runtime.getRuntime() — returns a sentinel; exec handled via chain detection.
+                    // Runtime.getRuntime() — returns a unit sentinel; exec handled via chain detection.
                     if name == "Runtime" && method_name == "getRuntime" {
-                        // Emit a placeholder struct literal; the subsequent .exec() call is
-                        // handled by the chained MethodCall detection above.  If the result
-                        // is stored in a variable and exec() called on it, we need a type.
-                        // Emit a ZST-style no-op value; the exec() instance dispatch below
-                        // will handle the actual logic.
-                        return Ok(quote! { JProcessBuilder::new_varargs(vec![]) });
+                        // Emit unit; the subsequent .exec() call is handled by the chained
+                        // MethodCall detection above which matches on the Var("Runtime") receiver
+                        // directly (not the result of getRuntime()).
+                        return Ok(quote! { () });
                     }
                     // System.exit / currentTimeMillis / nanoTime / getenv / getProperty / arraycopy
                     if name == "System" {
@@ -2359,11 +2361,14 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 }
 
                 // Runtime instance → exec() produces a JProcess.
-                if matches!(recv.ty(), IrType::Class(c) if c == "Runtime" || c == "ProcessBuilder")
+                if matches!(recv.ty(), IrType::Class(c) if c == "Runtime")
                     && method_name == "exec"
                     && !args_ts.is_empty()
                 {
                     let cmd = &args_ts[0];
+                    if matches!(args.first().map(|e| e.ty()), Some(IrType::Array(_))) && args_ts.len() == 1 {
+                        return Ok(quote! { JProcessBuilder::exec_array(#cmd) });
+                    }
                     return Ok(quote! { JProcessBuilder::exec_string(#cmd) });
                 }
 
@@ -2480,21 +2485,38 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                         }) = args.first()
                         {
                             if inner_cls == "InputStreamReader" {
-                                if let Some(IrExpr::MethodCall {
-                                    receiver: Some(recv),
-                                    method_name,
-                                    ..
-                                }) = inner_args.first()
-                                {
-                                    if method_name == "getInputStream"
-                                        || method_name == "getErrorStream"
+                                if let Some(first_inner) = inner_args.first() {
+                                    if let IrExpr::MethodCall {
+                                        receiver: Some(recv),
+                                        method_name,
+                                        ..
+                                    } = first_inner
                                     {
-                                        let recv_ts = emit_expr(recv)?;
-                                        let m = ident(method_name);
-                                        return Ok(quote! { (#recv_ts).#m() });
+                                        if method_name == "getInputStream"
+                                            || method_name == "getErrorStream"
+                                        {
+                                            let recv_ts = emit_expr(recv)?;
+                                            let m = ident(method_name);
+                                            return Ok(quote! { (#recv_ts).#m() });
+                                        }
                                     }
+                                    // Only map InputStreamReader(System.in) → stdin.
+                                    let is_system_in = matches!(
+                                        first_inner,
+                                        IrExpr::FieldAccess { receiver: r, field_name: f, .. }
+                                        if f == "in" && matches!(r.as_ref(), IrExpr::Var { name, .. } if name == "System")
+                                    );
+                                    if is_system_in {
+                                        return Ok(quote! { JBufferedReader::new_stdin() });
+                                    }
+                                    return Err(CodegenError::Unsupported(
+                                        "new BufferedReader(new InputStreamReader(...)) is only \
+                                         supported for getInputStream()/getErrorStream() or \
+                                         System.in"
+                                            .into(),
+                                    ));
                                 }
-                                // InputStreamReader(System.in) → stdin
+                                // InputStreamReader with no args → stdin
                                 return Ok(quote! { JBufferedReader::new_stdin() });
                             }
                         }

@@ -91,16 +91,13 @@ impl JProcessBuilder {
             cmd.env(k, v);
         }
         cmd.stdout(Stdio::piped());
-        if self.redirect_error_stream {
-            // Discard stderr when merging (full fd-dup not available in std).
-            cmd.stderr(Stdio::null());
-        } else {
-            cmd.stderr(Stdio::piped());
-        }
+        // Always pipe stderr so it can be read via getErrorStream() or merged
+        // into stdout when redirect_error_stream is set.
+        cmd.stderr(Stdio::piped());
         let child = cmd.spawn().unwrap_or_else(|e| {
             panic!("ProcessBuilder.start() failed to spawn {:?}: {}", self.command, e)
         });
-        JProcess::new(child)
+        JProcess::new(child, self.redirect_error_stream)
     }
 
     // ── Convenience: Runtime.getRuntime().exec(String) ────────────────────
@@ -133,6 +130,7 @@ impl JProcessBuilder {
 pub struct JProcess {
     child: std::process::Child,
     exit_code: Option<i32>,
+    redirect_error_stream: bool,
 }
 
 impl std::fmt::Debug for JProcess {
@@ -144,19 +142,37 @@ impl std::fmt::Debug for JProcess {
 }
 
 impl JProcess {
-    fn new(child: std::process::Child) -> Self {
+    fn new(child: std::process::Child, redirect_error_stream: bool) -> Self {
         Self {
             child,
             exit_code: None,
+            redirect_error_stream,
         }
     }
 
     /// Java `p.getInputStream()` — returns stdout as a [`JBufferedReader`].
     ///
-    /// Takes the stdout pipe from the child process.  Subsequent calls on the
+    /// Takes the stdout pipe from the child process.  When
+    /// [`redirectErrorStream`](JProcessBuilder::redirectErrorStream) was set to
+    /// `true` on the builder, stderr is appended after stdout (i.e. the two
+    /// streams are concatenated, not interleaved).  Subsequent calls on the
     /// same process return an empty reader.
     pub fn getInputStream(&mut self) -> JBufferedReader {
-        if let Some(stdout) = self.child.stdout.take() {
+        if self.redirect_error_stream {
+            match (self.child.stdout.take(), self.child.stderr.take()) {
+                (Some(stdout), Some(stderr)) => {
+                    // `chain` reads stdout to EOF before starting stderr,
+                    // so the streams are concatenated rather than interleaved.
+                    JBufferedReader::from_bufreader(std::io::BufReader::new(
+                        std::io::Read::chain(stdout, stderr),
+                    ))
+                }
+                (Some(stdout), None) => {
+                    JBufferedReader::from_bufreader(std::io::BufReader::new(stdout))
+                }
+                _ => JBufferedReader::from_raw_string(String::new()),
+            }
+        } else if let Some(stdout) = self.child.stdout.take() {
             JBufferedReader::from_bufreader(std::io::BufReader::new(stdout))
         } else {
             JBufferedReader::from_raw_string(String::new())
@@ -182,16 +198,22 @@ impl JProcess {
             .child
             .wait()
             .expect("JProcess.waitFor(): wait() failed");
-        let code = status.code().unwrap_or(0);
+        let code = status.code().unwrap_or(-1);
         self.exit_code = Some(code);
         code
     }
 
     /// Java `p.exitValue()` — return the cached exit code.
     ///
-    /// Only meaningful after [`waitFor`](JProcess::waitFor) has been called.
+    /// # Panics
+    ///
+    /// Panics if called before the process has exited (i.e., before
+    /// [`waitFor`](JProcess::waitFor) has set the exit code), mirroring
+    /// Java's `Process.exitValue()` behavior.
     pub fn exitValue(&self) -> i32 {
-        self.exit_code.unwrap_or(0)
+        self.exit_code.expect(
+            "JProcess.exitValue(): called before waitFor(); process may still be running",
+        )
     }
 
     /// Java `p.destroy()` — kill the subprocess.
