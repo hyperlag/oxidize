@@ -1679,8 +1679,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             None
                         }
                     });
-                    let current_class =
-                        CURRENT_CLASS_NAME.with(|cn| cn.borrow().clone());
+                    let current_class = CURRENT_CLASS_NAME.with(|cn| cn.borrow().clone());
                     VARARGS_METHODS.with(|vm| {
                         let map = vm.borrow();
                         // 1. Try resolved receiver class
