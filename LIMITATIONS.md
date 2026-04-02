@@ -250,7 +250,8 @@ declarations in a single file may not translate correctly.
 void log(String... messages) { ... }
 ```
 
-Variable-length argument lists are not supported.
+Varargs methods are supported. Parameters are emitted as `JArray<T>` and
+call sites automatically bundle trailing arguments into an array.
 
 ### Multi-Dimensional Arrays
 
@@ -258,7 +259,9 @@ Variable-length argument lists are not supported.
 int[][] matrix = new int[3][4];
 ```
 
-Only single-dimensional arrays are supported.
+Multi-dimensional arrays are supported. `new T[r][c]` is emitted as
+`JArray::<JArray<T>>::new_with(r, |_| JArray::<T>::new_default(c))` and
+array accesses chain `.get(i).get(j)` calls.
 
 ### Reference Casting
 
@@ -277,7 +280,13 @@ class Foo {
 }
 ```
 
-Static initializer blocks are not supported.
+Static initializer blocks are supported in a limited form. They are lowered to a
+`std::sync::Once`-guarded `__run_static_init()` method that is called at the
+start of every translated static method, constructor, and instance method in the
+class. Constructors and instance methods participate in this scheme, but direct
+static field reads/writes that do not go through any method do not currently
+trigger class initialization, so full Java class initialization semantics are not
+guaranteed.
 
 ### Try-with-resources (Custom AutoCloseable)
 

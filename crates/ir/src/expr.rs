@@ -77,6 +77,12 @@ pub enum IrExpr {
         len: Box<IrExpr>,
         ty: IrType,
     },
+    /// Multi-dimensional array creation: `new int[rows][cols]`.
+    NewArrayMultiDim {
+        elem_ty: IrType,
+        dims: Vec<IrExpr>, // outer → inner dimension expressions
+        ty: IrType,
+    },
 
     /// Lambda expression: `x -> body` or `(x, y) -> body`.
     /// For block lambdas `(x) -> { stmts; return expr; }`, `body_stmts`
@@ -145,6 +151,7 @@ impl IrExpr {
             | IrExpr::MethodCall { ty, .. }
             | IrExpr::New { ty, .. }
             | IrExpr::NewArray { ty, .. }
+            | IrExpr::NewArrayMultiDim { ty, .. }
             | IrExpr::ArrayAccess { ty, .. }
             | IrExpr::Assign { ty, .. }
             | IrExpr::CompoundAssign { ty, .. }

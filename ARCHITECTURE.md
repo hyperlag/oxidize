@@ -101,7 +101,7 @@ type checker. Expression variants include:
   `LitChar`, `LitString`, `LitNull`
 - Variables and field access: `Var`, `FieldAccess`
 - Operators: `BinOp`, `UnOp`, `Ternary`
-- Calls: `MethodCall`, `New`, `NewArray`
+- Calls: `MethodCall`, `New`, `NewArray`, `NewArrayMultiDim`
 - Casts and tests: `Cast`, `InstanceOf`
 - Arrays: `ArrayAccess`
 - Assignments: `Assign`, `CompoundAssign`
