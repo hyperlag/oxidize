@@ -28,15 +28,22 @@ thread_local! {
     /// Field names of the enum currently being emitted (empty when not in an enum method).
     static ENUM_FIELD_NAMES: std::cell::RefCell<std::collections::HashSet<String>> =
         std::cell::RefCell::new(std::collections::HashSet::new());
-    /// Maps method_name → number of non-varargs parameters for varargs methods.
+    /// Maps "ClassName::method_name" → number of non-varargs parameters for varargs methods.
+    /// Keyed by fully-qualified class+method so same-named methods in different classes
+    /// don't accidentally wrap each other's call sites.
     /// Populated from ALL classes before any method body is emitted, so
     /// cross-class varargs calls resolve correctly.
     static VARARGS_METHODS: std::cell::RefCell<std::collections::HashMap<String, usize>> =
         std::cell::RefCell::new(std::collections::HashMap::new());
     /// Maps Java field name → mangled Rust static name for mutable static
-    /// (non-const) fields in the class currently being emitted.
+    /// (non-const) *primitive* fields backed by an Atomic* type.
     /// Cleared at the start of each `emit_class` call.
     static STATIC_ATOMIC_FIELDS: std::cell::RefCell<std::collections::HashMap<String, String>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+    /// Maps Java field name → mangled Rust static name for mutable static
+    /// reference-type fields backed by `OnceLock<T>`.
+    /// Cleared at the start of each `emit_class` call.
+    static STATIC_ONCE_LOCK_FIELDS: std::cell::RefCell<std::collections::HashMap<String, String>> =
         std::cell::RefCell::new(std::collections::HashMap::new());
     /// Whether the class currently being emitted has a `__clinit__` method
     /// (static initializer block).
@@ -152,6 +159,8 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
     // Pre-scan ALL methods across all classes to populate VARARGS_METHODS
     // before any method body is emitted.  This ensures varargs call sites in
     // class B resolve even when the varargs method is defined in class A.
+    // Keys are "ClassName::method_name" to avoid false-positives when
+    // different classes happen to share the same method name.
     VARARGS_METHODS.with(|vm| {
         let mut map = vm.borrow_mut();
         map.clear();
@@ -160,7 +169,8 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
                 for method in &cls.methods {
                     if let Some(varargs_pos) = method.params.iter().position(|p| p.is_varargs) {
                         // Number of regular (non-varargs) parameters before the varargs one
-                        map.insert(method.name.clone(), varargs_pos);
+                        let key = format!("{}::{}", cls.name, method.name);
+                        map.insert(key, varargs_pos);
                     }
                 }
             }
@@ -537,6 +547,7 @@ fn emit_class(
     let cls_name_str = cls.name.clone();
     CURRENT_CLASS_NAME.with(|cn| *cn.borrow_mut() = cls_name_str.clone());
     STATIC_ATOMIC_FIELDS.with(|sf| sf.borrow_mut().clear());
+    STATIC_ONCE_LOCK_FIELDS.with(|sf| sf.borrow_mut().clear());
 
     // Static fields → const items (for static final with literal value)
     //               → module-level Rust statics (for mutable primitive statics)
@@ -600,12 +611,14 @@ fn emit_class(
             }
             _ => {
                 // Non-primitive static: OnceLock for reference types.
+                // Tracked in STATIC_ONCE_LOCK_FIELDS (not STATIC_ATOMIC_FIELDS) so
+                // reads/writes use get_or_init / set instead of atomic ops.
                 let fty = emit_type(&f.ty);
                 static_items.push(quote! {
                     static #mangled_ident: ::std::sync::OnceLock<#fty> =
                         ::std::sync::OnceLock::new();
                 });
-                STATIC_ATOMIC_FIELDS.with(|sf| {
+                STATIC_ONCE_LOCK_FIELDS.with(|sf| {
                     sf.borrow_mut().insert(f.name.clone(), mangled.clone());
                 });
             }
@@ -903,8 +916,18 @@ fn emit_constructor(ctor: &IrConstructor, cls: &IrClass) -> Result<TokenStream, 
 
     let body = emit_stmts(&rest_stmts)?;
 
+    // Call __run_static_init() at the top of every constructor so that class
+    // initialization runs before the first object construction, matching Java
+    // class-initialization semantics.
+    let static_init_preamble = if HAS_STATIC_INIT.with(|c| c.get()) {
+        quote! { Self::__run_static_init(); }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
         pub fn new(#(#params),*) -> Self {
+            #static_init_preamble
             #struct_init
             #(#body)*
             __self__
@@ -989,8 +1012,9 @@ fn emit_method_with_pub(method: &IrMethod, pub_vis: bool) -> Result<TokenStream,
     };
 
     // Static initializer guard: ensure `__run_static_init()` is called before
-    // every static method (except the init method itself).
-    let static_init_preamble = if method.is_static && HAS_STATIC_INIT.with(|c| c.get()) {
+    // every method (static and instance alike) except the init method itself.
+    // This covers all active uses of the class as required by Java semantics.
+    let static_init_preamble = if HAS_STATIC_INIT.with(|c| c.get()) {
         quote! { Self::__run_static_init(); }
     } else {
         quote! {}
@@ -1485,12 +1509,24 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
         IrExpr::LitNull => Ok(quote! { None }),
 
         IrExpr::Var { name, .. } => {
-            // Check if this variable refers to a mutable static field.
+            // Check if this variable refers to a mutable static primitive field (Atomic*).
             let static_mangled =
                 STATIC_ATOMIC_FIELDS.with(|sf| sf.borrow().get(name.as_str()).cloned());
             if let Some(mangled) = static_mangled {
                 let mid = ident(&mangled);
                 return Ok(quote! { #mid.load(::std::sync::atomic::Ordering::SeqCst) });
+            }
+            // Check if this variable refers to a mutable static reference field (OnceLock).
+            // Reads use `get_or_init` so that a field which has not yet been written
+            // (e.g., before the static initializer has run) returns the type's default
+            // value rather than panicking — analogous to Java's null / zero default.
+            let once_lock_mangled =
+                STATIC_ONCE_LOCK_FIELDS.with(|sf| sf.borrow().get(name.as_str()).cloned());
+            if let Some(mangled) = once_lock_mangled {
+                let mid = ident(&mangled);
+                return Ok(quote! {
+                    #mid.get_or_init(|| ::std::default::Default::default()).clone()
+                });
             }
             let id = ident(name);
             Ok(quote! { #id })
@@ -1631,9 +1667,35 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
 
             // Varargs wrapping: if this method has a varargs parameter, bundle
             // the trailing arguments on the call site into a JArray::from_vec.
+            // Look up by "ReceiverClass::method_name" first; fall back to
+            // "CurrentClass::method_name" for unresolved or static calls.
             {
-                let va_info =
-                    VARARGS_METHODS.with(|vm| vm.borrow().get(method_name.as_str()).copied());
+                let va_info = {
+                    // Try to resolve receiver class from its IR type.
+                    let receiver_class: Option<String> = receiver.as_ref().and_then(|r| {
+                        if let IrType::Class(name) = r.ty() {
+                            Some(name.clone())
+                        } else {
+                            None
+                        }
+                    });
+                    let current_class =
+                        CURRENT_CLASS_NAME.with(|cn| cn.borrow().clone());
+                    VARARGS_METHODS.with(|vm| {
+                        let map = vm.borrow();
+                        // 1. Try resolved receiver class
+                        if let Some(cls) = &receiver_class {
+                            let key = format!("{}::{}", cls, method_name);
+                            if let Some(v) = map.get(key.as_str()).copied() {
+                                return Some(v);
+                            }
+                        }
+                        // 2. Try current class (covers static calls and
+                        //    cases where receiver type is not resolved)
+                        let key = format!("{}::{}", current_class, method_name);
+                        map.get(key.as_str()).copied()
+                    })
+                };
                 if let Some(non_va_count) = va_info {
                     // Only wrap if we have more than just a single JArray arg
                     // (otherwise assume an array is already being passed through).
@@ -2946,7 +3008,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 let val = emit_expr(rhs)?;
                 return Ok(quote! { (#arr).set(#idx, #val) });
             }
-            // Mutable static field write: emit atomic store.
+            // Mutable static primitive field write: emit atomic store.
             if let IrExpr::Var { name, .. } = lhs.as_ref() {
                 let static_mangled =
                     STATIC_ATOMIC_FIELDS.with(|sf| sf.borrow().get(name.as_str()).cloned());
@@ -2956,6 +3018,18 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     return Ok(quote! {
                         #mid.store(#val, ::std::sync::atomic::Ordering::SeqCst)
                     });
+                }
+                // Mutable static reference field write: emit OnceLock::set.
+                // The `let _` is safe here: this code path is reached exclusively
+                // from within `__run_static_init`, which is called through a
+                // `std::sync::Once` guard — so `set` is invoked at most once per
+                // field and will always succeed on that first call.
+                let once_lock_mangled =
+                    STATIC_ONCE_LOCK_FIELDS.with(|sf| sf.borrow().get(name.as_str()).cloned());
+                if let Some(mangled) = once_lock_mangled {
+                    let mid = ident(&mangled);
+                    let val = emit_expr(rhs)?;
+                    return Ok(quote! { let _ = #mid.set(#val) });
                 }
             }
             // Volatile field write: emit .store(val, SeqCst) instead of assignment.

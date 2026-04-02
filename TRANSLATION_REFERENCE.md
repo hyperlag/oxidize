@@ -678,6 +678,8 @@ class Foo {
 }
 ```
 ```rust
+use ::std::sync::Once;
+use ::std::sync::atomic::{AtomicI32, Ordering::SeqCst};
 static Foo_count: AtomicI32 = AtomicI32::new(0);
 static __STATIC_INIT_ONCE_Foo: Once = Once::new();
 impl Foo {

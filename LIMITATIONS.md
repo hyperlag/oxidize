@@ -250,7 +250,7 @@ declarations in a single file may not translate correctly.
 void log(String... messages) { ... }
 ```
 
-Variargs methods are supported. Parameters are emitted as `JArray<T>` and
+Varargs methods are supported. Parameters are emitted as `JArray<T>` and
 call sites automatically bundle trailing arguments into an array.
 
 ### Multi-Dimensional Arrays
@@ -280,9 +280,13 @@ class Foo {
 }
 ```
 
-Static initializer blocks are supported. They are lowered to a
+Static initializer blocks are supported in a limited form. They are lowered to a
 `std::sync::Once`-guarded `__run_static_init()` method that is called at the
-start of every static method in the class.
+start of every translated static method, constructor, and instance method in the
+class. Constructors and instance methods participate in this scheme, but direct
+static field reads/writes that do not go through any method do not currently
+trigger class initialization, so full Java class initialization semantics are not
+guaranteed.
 
 ### Try-with-resources (Custom AutoCloseable)
 

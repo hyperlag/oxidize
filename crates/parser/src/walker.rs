@@ -1517,22 +1517,29 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
             let elem_ty = child_by_field(node, "type")
                 .map(|n| lower_type(n, src))
                 .unwrap_or(IrType::Unknown);
-            // Collect ALL dimension expressions (handles `new int[3][4]` etc.)
-            let dims: Vec<IrExpr> = children_by_field_name(node, "dimensions")
+            let dim_nodes = children_by_field_name(node, "dimensions");
+            // Total bracket count determines the full type depth, including
+            // unspecified inner dimensions like `new int[3][]` (depth 2).
+            let total_depth = dim_nodes.len().max(1);
+            // Collect only the non-empty dimension expressions (those that
+            // have explicit sizes, e.g. `[3]` but not `[]`).
+            let dims: Vec<IrExpr> = dim_nodes
                 .into_iter()
                 .filter_map(|dim| dim.named_child(0))
                 .map(|n| lower_expr(n, src))
                 .collect::<Result<Vec<_>, _>>()?;
+            // Build the resulting IrType with the full depth so that partially-
+            // specified allocations like `new int[3][]` still produce the
+            // correct `JArray<JArray<i32>>` type.
+            let mut ty = elem_ty.clone();
+            for _ in 0..total_depth {
+                ty = IrType::Array(Box::new(ty));
+            }
             if dims.len() >= 2 {
-                // Multi-dimensional: build a nested IrType and use NewArrayMultiDim
-                let mut ty = elem_ty.clone();
-                for _ in &dims {
-                    ty = IrType::Array(Box::new(ty));
-                }
+                // Multi-dimensional: use NewArrayMultiDim with provided dims.
                 Ok(IrExpr::NewArrayMultiDim { elem_ty, dims, ty })
             } else {
                 let len = dims.into_iter().next().unwrap_or(IrExpr::LitInt(0));
-                let ty = IrType::Array(Box::new(elem_ty.clone()));
                 Ok(IrExpr::NewArray {
                     elem_ty,
                     len: Box::new(len),
