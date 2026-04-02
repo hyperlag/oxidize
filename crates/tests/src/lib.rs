@@ -1230,4 +1230,14 @@ Expression calculator tests complete",
              done",
         );
     }
+
+    #[test]
+    fn test_process_builder() {
+        check("ProcessBuilderTest.java", "output=hello\nexit=0");
+    }
+
+    #[test]
+    fn test_process_env() {
+        check("ProcessEnvTest.java", "wd=/tmp\nexit=0");
+    }
 }

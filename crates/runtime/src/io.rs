@@ -252,6 +252,21 @@ impl JBufferedReader {
         }
     }
 
+    /// Construct from any `BufRead` implementor (e.g. a wrapped process stdout
+    /// pipe).  Used by [`JProcess::getInputStream`].
+    pub fn from_bufreader<R: std::io::BufRead + 'static>(reader: R) -> Self {
+        Self {
+            inner: Box::new(reader),
+        }
+    }
+
+    /// Construct from a raw `String` (e.g. captured process output).
+    pub fn from_raw_string(s: String) -> Self {
+        Self {
+            inner: Box::new(std::io::Cursor::new(s)),
+        }
+    }
+
     /// Java `br.readLine()` — returns an empty `JString` at EOF.
     pub fn readLine(&mut self) -> JString {
         let mut line = String::new();
