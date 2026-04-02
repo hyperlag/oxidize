@@ -66,11 +66,11 @@ impl<T: Clone + std::fmt::Debug> JArray<T> {
     /// Create an array of length `len` where each element is produced by
     /// calling `init(index)`.  Used for multi-dimensional array allocation:
     /// `new int[r][c]` → `JArray::new_with(r, |_| JArray::new_default(c))`.
-    pub fn new_with<F: FnMut(i32) -> T>(len: i32, mut init: F) -> Self {
+    pub fn new_with<F: FnMut(i32) -> T>(len: i32, init: F) -> Self {
         if len < 0 {
             panic!("NegativeArraySizeException: {len}");
         }
-        JArray(Arc::new(RwLock::new((0..len).map(|i| init(i)).collect())))
+        JArray(Arc::new(RwLock::new((0..len).map(init).collect())))
     }
 
     /// Return all elements as a cloned `Vec<T>`.
