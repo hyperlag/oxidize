@@ -1521,14 +1521,19 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                 "exec" if !args_ts.is_empty() => {
                                     let cmd = &args_ts[0];
                                     // Dispatch to exec_array for String[] arg, exec_string otherwise.
-                                    if matches!(args.first().map(|e| e.ty()), Some(IrType::Array(_))) && args_ts.len() == 1 {
+                                    if matches!(
+                                        args.first().map(|e| e.ty()),
+                                        Some(IrType::Array(_))
+                                    ) && args_ts.len() == 1
+                                    {
                                         Ok(quote! { JProcessBuilder::exec_array(#cmd) })
                                     } else {
                                         Ok(quote! { JProcessBuilder::exec_string(#cmd) })
                                     }
                                 }
                                 _ => Err(CodegenError::Unsupported(
-                                    "Runtime.getRuntime() methods other than exec are unsupported".into(),
+                                    "Runtime.getRuntime() methods other than exec are unsupported"
+                                        .into(),
                                 )),
                             };
                         }
@@ -2366,7 +2371,9 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     && !args_ts.is_empty()
                 {
                     let cmd = &args_ts[0];
-                    if matches!(args.first().map(|e| e.ty()), Some(IrType::Array(_))) && args_ts.len() == 1 {
+                    if matches!(args.first().map(|e| e.ty()), Some(IrType::Array(_)))
+                        && args_ts.len() == 1
+                    {
                         return Ok(quote! { JProcessBuilder::exec_array(#cmd) });
                     }
                     return Ok(quote! { JProcessBuilder::exec_string(#cmd) });

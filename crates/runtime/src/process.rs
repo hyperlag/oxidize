@@ -95,7 +95,10 @@ impl JProcessBuilder {
         // into stdout when redirect_error_stream is set.
         cmd.stderr(Stdio::piped());
         let child = cmd.spawn().unwrap_or_else(|e| {
-            panic!("ProcessBuilder.start() failed to spawn {:?}: {}", self.command, e)
+            panic!(
+                "ProcessBuilder.start() failed to spawn {:?}: {}",
+                self.command, e
+            )
         });
         JProcess::new(child, self.redirect_error_stream)
     }
@@ -105,11 +108,7 @@ impl JProcessBuilder {
     /// Java `Runtime.getRuntime().exec(command)` — split command on whitespace
     /// and start immediately.
     pub fn exec_string(cmd: JString) -> JProcess {
-        let parts: Vec<JString> = cmd
-            .as_str()
-            .split_whitespace()
-            .map(JString::from)
-            .collect();
+        let parts: Vec<JString> = cmd.as_str().split_whitespace().map(JString::from).collect();
         JProcessBuilder::new_varargs(parts).start()
     }
 
@@ -163,9 +162,9 @@ impl JProcess {
                 (Some(stdout), Some(stderr)) => {
                     // `chain` reads stdout to EOF before starting stderr,
                     // so the streams are concatenated rather than interleaved.
-                    JBufferedReader::from_bufreader(std::io::BufReader::new(
-                        std::io::Read::chain(stdout, stderr),
-                    ))
+                    JBufferedReader::from_bufreader(std::io::BufReader::new(std::io::Read::chain(
+                        stdout, stderr,
+                    )))
                 }
                 (Some(stdout), None) => {
                     JBufferedReader::from_bufreader(std::io::BufReader::new(stdout))
@@ -211,9 +210,8 @@ impl JProcess {
     /// [`waitFor`](JProcess::waitFor) has set the exit code), mirroring
     /// Java's `Process.exitValue()` behavior.
     pub fn exitValue(&self) -> i32 {
-        self.exit_code.expect(
-            "JProcess.exitValue(): called before waitFor(); process may still be running",
-        )
+        self.exit_code
+            .expect("JProcess.exitValue(): called before waitFor(); process may still be running")
     }
 
     /// Java `p.destroy()` — kill the subprocess.
