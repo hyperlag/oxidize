@@ -287,7 +287,7 @@ cargo test -p tests -- --test-threads=4
 - `Pattern` / `Matcher` regex, `BigInteger`, `BigDecimal`, `MathContext`, `LocalDate`, `File`
 - `LocalTime`, `LocalDateTime`, `Instant`, `Duration`, `Period`, `DateTimeFormatter`
 - `ZonedDateTime`, `ZoneId`, `Clock`
-- `Properties` (load, get, set, stringPropertyNames)
+- `Properties` (`load_string`, `getProperty`, `getProperty` with default, `setProperty`, `stringPropertyNames`, `containsKey`, `size`, `isEmpty`)
 - `Timer` / `TimerTask` (one-shot and repeating scheduled tasks)
 - `String.format()`, `String.join()`, `System.out.printf()`
 - `System.exit()`, `System.currentTimeMillis()`, `System.nanoTime()`, `System.getenv()`, `System.getProperty()`, `System.lineSeparator()`

@@ -164,8 +164,9 @@ pattern; real HTTP/1.1 over raw TCP).
 
 **Supported:** `String.format()` (specifiers: `%s`, `%d`, `%f`, `%e`, `%x`, `%o`,
 `%b`, `%n`, `%%`; limited support for width, precision, and flags `-` and `0`),
-`String.join()`, `System.out.printf()`, `Properties` (load, get, set, setProperty, containsKey,
-stringPropertyNames, size, isEmpty), `Timer` / `TimerTask` (one-shot and
+`String.join()`, `System.out.printf()`, `Properties` (`load_string`, `getProperty`,
+`getProperty` with default, `setProperty`, `containsKey`, `stringPropertyNames`, `size`,
+`isEmpty`), `Timer` / `TimerTask` (one-shot and
 repeating scheduled tasks with cancel/purge).
 
 ### java.time

@@ -507,10 +507,16 @@ impl JLocalDateTime {
         // Days from 1970-01-01 to the start of this year
         let y = year - 1;
         let leap_days = y / 4 - y / 100 + y / 400;
-        let days_from_epoch_year = (year - 1970) * 365 + (leap_days - (1969 / 4 - 1969 / 100 + 1969 / 400));
+        let days_from_epoch_year =
+            (year - 1970) * 365 + (leap_days - (1969 / 4 - 1969 / 100 + 1969 / 400));
         // Days within the year up to start of this month
-        let days_in_months: [i64; 13] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365];
-        let leap_correction = if month > 2 && is_leap(self.date.year) { 1 } else { 0 };
+        let days_in_months: [i64; 13] =
+            [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365];
+        let leap_correction = if month > 2 && is_leap(self.date.year) {
+            1
+        } else {
+            0
+        };
         let day_of_year = days_in_months[(month - 1) as usize] + leap_correction + day - 1;
         let total_days = days_from_epoch_year + day_of_year;
         total_days * 86400
@@ -1456,6 +1462,9 @@ impl JZonedDateTime {
     pub fn isAfter(&self, other: &JZonedDateTime) -> bool {
         self.toInstant() > other.toInstant()
     }
+    pub fn isEqual(&self, other: &JZonedDateTime) -> bool {
+        self.toInstant() == other.toInstant()
+    }
 
     /// Format using a `JDateTimeFormatter`.
     pub fn format(&self, formatter: &JDateTimeFormatter) -> JString {
@@ -1496,11 +1505,13 @@ impl Ord for JZonedDateTime {
 
 /// Rust equivalent of `java.time.Clock`.
 ///
-/// Wraps a `JZoneId`.  The `instant()` and `millis()` methods read the real
-/// system clock.
+/// Wraps a `JZoneId` and an optional fixed `JInstant`.  When a fixed instant
+/// is set (via `Clock.fixed`), `instant()` / `millis()` return that fixed
+/// value instead of reading the real system clock.
 #[derive(Debug, Clone)]
 pub struct JClock {
     zone: JZoneId,
+    fixed_instant: Option<JInstant>,
 }
 
 impl JClock {
@@ -1508,6 +1519,7 @@ impl JClock {
     pub fn systemUTC() -> Self {
         Self {
             zone: JZoneId::of(&JString::from("UTC")),
+            fixed_instant: None,
         }
     }
 
@@ -1515,23 +1527,26 @@ impl JClock {
     pub fn systemDefaultZone() -> Self {
         Self {
             zone: JZoneId::systemDefault(),
+            fixed_instant: None,
         }
     }
 
     /// `Clock.fixed(instant, zone)` — returns a clock that always returns the given instant.
     pub fn fixed(instant: JInstant, zone: JZoneId) -> Self {
-        let _ = instant;
-        Self { zone }
+        Self {
+            zone,
+            fixed_instant: Some(instant),
+        }
     }
 
-    /// `clock.instant()` — returns the current UTC instant.
+    /// `clock.instant()` — returns the fixed instant if set, otherwise the current UTC instant.
     pub fn instant(&self) -> JInstant {
-        JInstant::now()
+        self.fixed_instant.clone().unwrap_or_else(JInstant::now)
     }
 
-    /// `clock.millis()` — returns current epoch milliseconds.
+    /// `clock.millis()` — returns fixed or current epoch milliseconds.
     pub fn millis(&self) -> i64 {
-        JInstant::now().toEpochMilli()
+        self.instant().toEpochMilli()
     }
 
     /// `clock.getZone()`

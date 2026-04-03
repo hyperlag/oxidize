@@ -642,20 +642,28 @@ impl JHttpClient {
         Self {}
     }
 
-    /// `client.send(request, BodyHandlers.ofString())` — synchronous GET/POST.
+    /// `client.send(request, BodyHandlers.ofString())` — synchronous GET/POST over plain HTTP.
+    ///
+    /// **Note:** HTTPS (`https://`) is not supported because this implementation
+    /// uses a raw `TcpStream` without TLS.  Requests to HTTPS URIs return a
+    /// status code of `-1` with an empty body.
     pub fn send(&self, request: JHttpRequest) -> JHttpResponse {
         use std::io::{BufRead, BufReader, Write};
         let url = JURL::new(JString::from(request.uri.as_str()));
+        // Reject HTTPS — TLS is not implemented.
+        if url.getProtocol().as_str() == "https" {
+            return JHttpResponse {
+                status_code: -1,
+                body: String::new(),
+            };
+        }
         let host = url.getHost();
         let port = {
             let p = url.getPort();
             if p > 0 {
                 p
             } else {
-                match url.getProtocol().as_str() {
-                    "https" => 443,
-                    _ => 80,
-                }
+                80
             }
         };
         let path = {
@@ -688,7 +696,9 @@ impl JHttpClient {
                 } else {
                     format!(
                         "{} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
-                        request.method, full_path, host.as_str()
+                        request.method,
+                        full_path,
+                        host.as_str()
                     )
                 };
                 if stream.write_all(req_str.as_bytes()).is_err() {

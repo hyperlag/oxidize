@@ -55,11 +55,7 @@ impl JTimer {
     /// `timer.schedule(task, delayMs)` — one-shot execution after `delay_ms`.
     ///
     /// Called by codegen when `schedule` is invoked with two arguments.
-    pub fn schedule_fn_once(
-        &self,
-        f: Box<dyn FnOnce() + Send + 'static>,
-        delay_ms: i64,
-    ) {
+    pub fn schedule_fn_once(&self, f: Box<dyn FnOnce() + Send + 'static>, delay_ms: i64) {
         let cancelled = Arc::clone(&self.cancelled);
         thread::spawn(move || {
             if delay_ms > 0 {
@@ -80,6 +76,9 @@ impl JTimer {
         delay_ms: i64,
         period_ms: i64,
     ) {
+        if period_ms <= 0 {
+            return;
+        }
         let cancelled = Arc::clone(&self.cancelled);
         thread::spawn(move || {
             if delay_ms > 0 && !cancelled.load(Ordering::Acquire) {

@@ -26,18 +26,21 @@ impl JProperties {
 
     /// Load properties from a string (equivalent to `load(new StringReader(s))`).
     ///
-    /// Supported formats per line:
+    /// Supported formats per trimmed physical line:
     /// - `key=value`
     /// - `key: value`
     /// - `# comment` / `! comment` / blank — ignored
+    ///
+    /// This parser does not currently support Java `.properties` line
+    /// continuations or escape-aware separator detection.
     pub fn load_string(&mut self, content: &JString) {
         for raw_line in content.as_str().lines() {
-            // Handle line continuation (backslash at end)
+            // Parse each physical line independently after trimming.
             let line = raw_line.trim();
             if line.is_empty() || line.starts_with('#') || line.starts_with('!') {
                 continue;
             }
-            // Find the key-value separator: first unescaped '=' or ':'
+            // Use the first '=' if present; otherwise use the first ':'.
             if let Some(sep_pos) = line.find('=').or_else(|| line.find(':')) {
                 let key = line[..sep_pos].trim().to_owned();
                 let val = line[sep_pos + 1..].trim().to_owned();
@@ -48,7 +51,11 @@ impl JProperties {
         }
     }
 
-    /// `getProperty(String key)` — returns empty string if not found.
+    /// `getProperty(String key)` — returns an empty string if the key is absent.
+    ///
+    /// **Note:** Java's `Properties.getProperty` returns `null` for absent keys.
+    /// This implementation returns an empty `JString` instead, which means
+    /// code that checks `p.getProperty(k) == null` will behave differently.
     pub fn getProperty(&self, key: &JString) -> JString {
         self.map
             .get(key.as_str())

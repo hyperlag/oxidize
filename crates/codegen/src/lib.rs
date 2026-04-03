@@ -1678,18 +1678,17 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 });
             }
             // Cross-class static field read: ClassName.field → mangled_static.load()
-            if let IrExpr::Var { name: class_name, .. } = receiver.as_ref() {
+            if let IrExpr::Var {
+                name: class_name, ..
+            } = receiver.as_ref()
+            {
                 let key = format!("{}::{}", class_name, field_name);
-                let global_atomic =
-                    GLOBAL_STATIC_ATOMIC.with(|m| m.borrow().get(&key).cloned());
+                let global_atomic = GLOBAL_STATIC_ATOMIC.with(|m| m.borrow().get(&key).cloned());
                 if let Some(mangled) = global_atomic {
                     let mid = ident(&mangled);
-                    return Ok(
-                        quote! { #mid.load(::std::sync::atomic::Ordering::SeqCst) },
-                    );
+                    return Ok(quote! { #mid.load(::std::sync::atomic::Ordering::SeqCst) });
                 }
-                let global_once =
-                    GLOBAL_STATIC_ONCE_LOCK.with(|m| m.borrow().get(&key).cloned());
+                let global_once = GLOBAL_STATIC_ONCE_LOCK.with(|m| m.borrow().get(&key).cloned());
                 if let Some(mangled) = global_once {
                     let mid = ident(&mangled);
                     return Ok(quote! {
@@ -2775,10 +2774,14 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             // load(new StringReader(s)) or load(reader) — extract string content
                             // Try to detect new StringReader(...) wrapping
                             let inner = args.first().unwrap();
-                            let content_ts = if let IrExpr::New { class, args: inner_args, .. } = inner {
+                            let content_ts = if let IrExpr::New {
+                                class,
+                                args: inner_args,
+                                ..
+                            } = inner
+                            {
                                 if class == "StringReader" && !inner_args.is_empty() {
-                                    let content = emit_expr(&inner_args[0])?;
-                                    content
+                                    emit_expr(&inner_args[0])?
                                 } else {
                                     args_ts[0].clone()
                                 }
@@ -3754,10 +3757,9 @@ fn emit_type(ty: &IrType) -> TokenStream {
                 }
             }
             // Passthrough for user-defined generics, e.g. Wrapper<T>.
-            // Special-case HttpResponse<T> → JHttpResponse<T>
+            // Special-case HttpResponse<T> → JHttpResponse (runtime type is not generic).
             if matches!(base.as_ref(), IrType::Class(c) if c == "HttpResponse") {
-                let a = emit_type(args.first().unwrap_or(&IrType::Unknown));
-                return quote! { JHttpResponse<#a> };
+                return quote! { JHttpResponse };
             }
             let b = emit_type(base);
             let a: Vec<TokenStream> = args.iter().map(emit_type).collect();
