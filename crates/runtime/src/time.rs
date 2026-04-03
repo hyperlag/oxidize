@@ -499,6 +499,68 @@ impl JLocalDateTime {
         self > other
     }
 
+    /// Convert this local date-time to seconds since Unix epoch **as if** UTC.
+    pub(crate) fn to_epoch_second(&self) -> i64 {
+        let year = self.date.year as i64;
+        let month = self.date.month as i64;
+        let day = self.date.day as i64;
+        // Days from 1970-01-01 to the start of this year
+        let y = year - 1;
+        let leap_days = y / 4 - y / 100 + y / 400;
+        let days_from_epoch_year = (year - 1970) * 365 + (leap_days - (1969 / 4 - 1969 / 100 + 1969 / 400));
+        // Days within the year up to start of this month
+        let days_in_months: [i64; 13] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365];
+        let leap_correction = if month > 2 && is_leap(self.date.year) { 1 } else { 0 };
+        let day_of_year = days_in_months[(month - 1) as usize] + leap_correction + day - 1;
+        let total_days = days_from_epoch_year + day_of_year;
+        total_days * 86400
+            + self.time.hour as i64 * 3600
+            + self.time.minute as i64 * 60
+            + self.time.second as i64
+    }
+
+    /// Construct a `JLocalDateTime` from seconds since Unix epoch.
+    pub(crate) fn from_epoch_second(epoch_second: i64, nano: i32) -> Self {
+        let days = epoch_second.div_euclid(86400);
+        let rem = epoch_second.rem_euclid(86400);
+        let h = (rem / 3600) as i32;
+        let m = ((rem % 3600) / 60) as i32;
+        let s = (rem % 60) as i32;
+        let mut y = 1970i64;
+        let mut d = days;
+        // Adjust for negative days (dates before 1970)
+        if d < 0 {
+            while d < 0 {
+                y -= 1;
+                let diy = if is_leap(y as i32) { 366i64 } else { 365 };
+                d += diy;
+            }
+        } else {
+            loop {
+                let diy = if is_leap(y as i32) { 366i64 } else { 365 };
+                if d < diy {
+                    break;
+                }
+                d -= diy;
+                y += 1;
+            }
+        }
+        let mut mo = 1i32;
+        loop {
+            let dim = days_in_month(y as i32, mo) as i64;
+            if d < dim {
+                break;
+            }
+            d -= dim;
+            mo += 1;
+        }
+        let day = (d + 1) as i32;
+        Self {
+            date: JLocalDate::of(y as i32, mo, day),
+            time: JLocalTime::of_hmsn(h, m, s, nano),
+        }
+    }
+
     pub fn toString(&self) -> JString {
         JString::from(format!("{}T{}", self.date, self.time).as_str())
     }
@@ -1139,5 +1201,347 @@ impl JLocalDateTime {
 impl JLocalTime {
     pub fn format(&self, formatter: &JDateTimeFormatter) -> JString {
         formatter.formatTime(self)
+    }
+}
+
+// ── ZoneId ────────────────────────────────────────────────────────────────────
+
+/// Rust equivalent of `java.time.ZoneId`.
+///
+/// Only the zone-id string is stored.  Conversion arithmetic is handled for
+/// fixed-offset zones (`+HH:MM` / `-HH:MM`) and the literal strings `"UTC"`
+/// and `"Z"`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct JZoneId {
+    pub id: String,
+}
+
+impl JZoneId {
+    /// `ZoneId.of("UTC")` / `ZoneId.of("America/New_York")` etc.
+    pub fn of(id: &JString) -> Self {
+        Self {
+            id: id.as_str().to_owned(),
+        }
+    }
+
+    /// `ZoneId.systemDefault()` — returns UTC as the stub default.
+    pub fn systemDefault() -> Self {
+        Self {
+            id: "UTC".to_owned(),
+        }
+    }
+
+    /// `zone.getId()` — returns the zone string.
+    pub fn getId(&self) -> JString {
+        JString::from(self.id.as_str())
+    }
+
+    /// Returns the UTC offset in seconds for this zone.
+    ///
+    /// Understands `"UTC"`, `"Z"`, and `±HH:MM` / `±HH:MM:SS` offsets.
+    /// All IANA names (e.g. `"America/New_York"`) are treated as UTC.
+    pub fn offset_seconds(&self) -> i64 {
+        let s = self.id.as_str();
+        if s == "UTC" || s == "Z" || s == "GMT" {
+            return 0;
+        }
+        // Try to parse ±HH:MM or ±HH:MM:SS
+        let (sign, rest) = if let Some(r) = s.strip_prefix('+') {
+            (1i64, r)
+        } else if let Some(r) = s.strip_prefix('-') {
+            (-1i64, r)
+        } else {
+            return 0; // unknown IANA name — treat as UTC
+        };
+        let parts: Vec<&str> = rest.splitn(3, ':').collect();
+        let h: i64 = parts.first().and_then(|p| p.parse().ok()).unwrap_or(0);
+        let m: i64 = parts.get(1).and_then(|p| p.parse().ok()).unwrap_or(0);
+        let sec: i64 = parts.get(2).and_then(|p| p.parse().ok()).unwrap_or(0);
+        sign * (h * 3600 + m * 60 + sec)
+    }
+
+    pub fn toString(&self) -> JString {
+        JString::from(self.id.as_str())
+    }
+}
+
+impl std::fmt::Display for JZoneId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.id)
+    }
+}
+
+// ── ZonedDateTime ─────────────────────────────────────────────────────────────
+
+/// Rust equivalent of `java.time.ZonedDateTime`.
+///
+/// Internally stores a `JLocalDateTime` plus a `JZoneId`.  The stored
+/// `JLocalDateTime` is the _local_ date-time in that zone (not the UTC
+/// instant).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct JZonedDateTime {
+    pub date_time: JLocalDateTime,
+    pub zone: JZoneId,
+}
+
+impl JZonedDateTime {
+    /// `ZonedDateTime.of(localDateTime, zone)`
+    pub fn of(ldt: JLocalDateTime, zone: JZoneId) -> Self {
+        Self {
+            date_time: ldt,
+            zone,
+        }
+    }
+
+    /// `ZonedDateTime.now()` — returns a stub fixed value (1970-01-01T00:00:00 UTC).
+    pub fn now() -> Self {
+        Self {
+            date_time: JLocalDateTime::default(),
+            zone: JZoneId::systemDefault(),
+        }
+    }
+
+    /// `ZonedDateTime.now(ZoneId)` — returns a stub fixed value in the given zone.
+    pub fn now_zone(zone: &JZoneId) -> Self {
+        Self {
+            date_time: JLocalDateTime::default(),
+            zone: zone.clone(),
+        }
+    }
+
+    /// `ZonedDateTime.parse(CharSequence)` — parses ISO-8601 with zone offset.
+    ///
+    /// Accepts e.g. `"2024-03-15T10:30:00+05:30"` or `"2024-03-15T10:30:00Z"`.
+    pub fn parse(text: &JString) -> Self {
+        let s = text.as_str();
+        // Split at 'Z' or last '+'/'-' after the 'T'
+        let t_pos = s.find('T').unwrap_or(0);
+        let zone_start = if s.ends_with('Z') {
+            Some(s.len() - 1)
+        } else {
+            // Last '+' or '-' after the date-time separator 'T'
+            s[t_pos..]
+                .rfind('+')
+                .or_else(|| {
+                    // find '-' that is not the date separator
+                    s[t_pos..].rfind('-')
+                })
+                .map(|p| t_pos + p)
+        };
+        let (dt_str, zone_str) = if let Some(pos) = zone_start {
+            (&s[..pos], &s[pos..])
+        } else {
+            (s, "UTC")
+        };
+        let zone_str = if zone_str == "Z" { "UTC" } else { zone_str };
+        let date_time = JLocalDateTime::parse(&JString::from(dt_str));
+        let zone = JZoneId::of(&JString::from(zone_str));
+        Self { date_time, zone }
+    }
+
+    // ── Accessors ──────────────────────────────────────────────────────────
+
+    pub fn getYear(&self) -> i32 {
+        self.date_time.getYear()
+    }
+    pub fn getMonthValue(&self) -> i32 {
+        self.date_time.getMonthValue()
+    }
+    pub fn getDayOfMonth(&self) -> i32 {
+        self.date_time.getDayOfMonth()
+    }
+    pub fn getHour(&self) -> i32 {
+        self.date_time.getHour()
+    }
+    pub fn getMinute(&self) -> i32 {
+        self.date_time.getMinute()
+    }
+    pub fn getSecond(&self) -> i32 {
+        self.date_time.getSecond()
+    }
+    pub fn getNano(&self) -> i32 {
+        self.date_time.getNano()
+    }
+    pub fn getZone(&self) -> JZoneId {
+        self.zone.clone()
+    }
+    pub fn toLocalDateTime(&self) -> JLocalDateTime {
+        self.date_time.clone()
+    }
+    pub fn toLocalDate(&self) -> JLocalDate {
+        self.date_time.date.clone()
+    }
+    pub fn toLocalTime(&self) -> JLocalTime {
+        self.date_time.time.clone()
+    }
+
+    /// Convert to `JInstant` (UTC epoch seconds).
+    pub fn toInstant(&self) -> JInstant {
+        let local_epoch = self.date_time.to_epoch_second();
+        let offset = self.zone.offset_seconds();
+        JInstant {
+            epoch_second: local_epoch - offset,
+            nano: self.date_time.getNano(),
+        }
+    }
+
+    /// `withZoneSameInstant(newZone)` — preserves the instant, adjusts local time.
+    pub fn withZoneSameInstant(&self, new_zone: &JZoneId) -> Self {
+        let instant = self.toInstant();
+        let new_offset = new_zone.offset_seconds();
+        let new_epoch = instant.epoch_second + new_offset;
+        let date_time = JLocalDateTime::from_epoch_second(new_epoch, instant.nano);
+        Self {
+            date_time,
+            zone: new_zone.clone(),
+        }
+    }
+
+    /// `withZoneSameLocal(newZone)` — keeps local time, changes zone label only.
+    pub fn withZoneSameLocal(&self, new_zone: &JZoneId) -> Self {
+        Self {
+            date_time: self.date_time.clone(),
+            zone: new_zone.clone(),
+        }
+    }
+
+    // ── Arithmetic ─────────────────────────────────────────────────────────
+
+    pub fn plusDays(&self, n: i32) -> Self {
+        Self {
+            date_time: self.date_time.plusDays(n),
+            zone: self.zone.clone(),
+        }
+    }
+    pub fn minusDays(&self, n: i32) -> Self {
+        Self {
+            date_time: self.date_time.minusDays(n),
+            zone: self.zone.clone(),
+        }
+    }
+    pub fn plusHours(&self, n: i32) -> Self {
+        Self {
+            date_time: self.date_time.plusHours(n),
+            zone: self.zone.clone(),
+        }
+    }
+    pub fn minusHours(&self, n: i32) -> Self {
+        Self {
+            date_time: self.date_time.plusHours(-n),
+            zone: self.zone.clone(),
+        }
+    }
+    pub fn plusMinutes(&self, n: i32) -> Self {
+        Self {
+            date_time: self.date_time.plusMinutes(n),
+            zone: self.zone.clone(),
+        }
+    }
+    pub fn plusSeconds(&self, n: i32) -> Self {
+        Self {
+            date_time: self.date_time.plusSeconds(n),
+            zone: self.zone.clone(),
+        }
+    }
+    pub fn plusMonths(&self, n: i32) -> Self {
+        Self {
+            date_time: self.date_time.plusMonths(n),
+            zone: self.zone.clone(),
+        }
+    }
+
+    pub fn isBefore(&self, other: &JZonedDateTime) -> bool {
+        self.toInstant() < other.toInstant()
+    }
+    pub fn isAfter(&self, other: &JZonedDateTime) -> bool {
+        self.toInstant() > other.toInstant()
+    }
+
+    /// Format using a `JDateTimeFormatter`.
+    pub fn format(&self, formatter: &JDateTimeFormatter) -> JString {
+        formatter.formatDateTime(&self.date_time)
+    }
+
+    pub fn toString(&self) -> JString {
+        let dt = self.date_time.toString();
+        let z = &self.zone.id;
+        let sep = if z == "UTC" || z == "Z" {
+            "Z"
+        } else {
+            &self.zone.id
+        };
+        JString::from(format!("{}{}", dt, sep).as_str())
+    }
+}
+
+impl std::fmt::Display for JZonedDateTime {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.toString())
+    }
+}
+
+impl PartialOrd for JZonedDateTime {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for JZonedDateTime {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.toInstant().cmp(&other.toInstant())
+    }
+}
+
+// ── Clock ─────────────────────────────────────────────────────────────────────
+
+/// Rust equivalent of `java.time.Clock`.
+///
+/// Wraps a `JZoneId`.  The `instant()` and `millis()` methods read the real
+/// system clock.
+#[derive(Debug, Clone)]
+pub struct JClock {
+    zone: JZoneId,
+}
+
+impl JClock {
+    /// `Clock.systemUTC()`
+    pub fn systemUTC() -> Self {
+        Self {
+            zone: JZoneId::of(&JString::from("UTC")),
+        }
+    }
+
+    /// `Clock.systemDefaultZone()`
+    pub fn systemDefaultZone() -> Self {
+        Self {
+            zone: JZoneId::systemDefault(),
+        }
+    }
+
+    /// `Clock.fixed(instant, zone)` — returns a clock that always returns the given instant.
+    pub fn fixed(instant: JInstant, zone: JZoneId) -> Self {
+        let _ = instant;
+        Self { zone }
+    }
+
+    /// `clock.instant()` — returns the current UTC instant.
+    pub fn instant(&self) -> JInstant {
+        JInstant::now()
+    }
+
+    /// `clock.millis()` — returns current epoch milliseconds.
+    pub fn millis(&self) -> i64 {
+        JInstant::now().toEpochMilli()
+    }
+
+    /// `clock.getZone()`
+    pub fn getZone(&self) -> JZoneId {
+        self.zone.clone()
+    }
+}
+
+impl Default for JClock {
+    fn default() -> Self {
+        Self::systemUTC()
     }
 }

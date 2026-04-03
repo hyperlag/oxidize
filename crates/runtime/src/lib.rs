@@ -34,6 +34,8 @@ pub mod string;
 pub mod string_builder;
 pub mod thread;
 pub mod time;
+pub mod properties;
+pub mod timer;
 pub mod tree_map;
 pub mod tree_set;
 
@@ -59,7 +61,7 @@ pub use linked_hash_set::JLinkedHashSet;
 pub use linked_list::JLinkedList;
 pub use list::JList;
 pub use map::{JMap, JMapEntry};
-pub use net::{JHttpURLConnection, JServerSocket, JSocket, JURL};
+pub use net::{JHttpClient, JHttpRequest, JHttpRequestBuilder, JHttpResponse, JHttpURLConnection, JServerSocket, JSocket, JURL};
 pub use object::{JNull, JObject, JavaObject};
 pub use optional::JOptional;
 pub use priority_queue::JPriorityQueue;
@@ -74,7 +76,12 @@ pub use string::JString;
 pub use string_builder::JStringBuilder;
 pub use thread::JThread;
 pub use time::JLocalDate;
-pub use time::{JDateTimeFormatter, JDuration, JInstant, JLocalDateTime, JLocalTime, JPeriod};
+pub use time::{
+    JClock, JDateTimeFormatter, JDuration, JInstant, JLocalDateTime, JLocalTime, JPeriod,
+    JZonedDateTime, JZoneId,
+};
+pub use properties::JProperties;
+pub use timer::{JTimer, JTimerTask};
 pub use tree_map::JTreeMap;
 pub use tree_set::JTreeSet;
 
@@ -91,6 +98,8 @@ pub mod prelude {
         JPaths, JPattern, JPeriod, JPrintWriter, JPriorityQueue, JProcess, JProcessBuilder,
         JReadLock, JReentrantLock, JReentrantReadWriteLock, JRoundingMode, JScanner, JSemaphore,
         JServerSocket, JSet, JSocket, JSpliterator, JStream, JString, JStringBuilder, JThread,
-        JThreadLocal, JTimeUnit, JTreeMap, JTreeSet, JWriteLock, JURL,
+        JThreadLocal, JTimeUnit, JTimer, JTimerTask, JProperties, JTreeMap, JTreeSet,
+        JZonedDateTime, JZoneId, JClock, JHttpClient, JHttpRequest, JHttpRequestBuilder,
+        JHttpResponse, JWriteLock, JURL,
     };
 }

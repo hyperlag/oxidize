@@ -1262,4 +1262,52 @@ Expression calculator tests complete",
     fn test_static_initializer() {
         check("StaticInitializer.java", "42\n84");
     }
+
+    // ── Stage 4 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_properties() {
+        check(
+            "PropertiesTest.java",
+            "Alice\n\
+             30\n\
+             default\n\
+             size=2\n\
+             has_name=true\n\
+             empty=false\n\
+             localhost\n\
+             8080\n\
+             p2size=2",
+        );
+    }
+
+    #[test]
+    fn test_timer() {
+        check("TimerTest.java", "count >= 4: true\ndone");
+    }
+
+    #[test]
+    fn test_zoned_date_time() {
+        check(
+            "ZonedDateTimeTest.java",
+            "year=2024\n\
+             month=3\n\
+             day=15\n\
+             hour=10\n\
+             zone=UTC\n\
+             nextDay=16\n\
+             laterHour=13\n\
+             before=true\n\
+             after=true\n\
+             zoneId=+05:00",
+        );
+    }
+
+    #[test]
+    fn test_http_client() {
+        check(
+            "HttpClientTest.java",
+            "client created\nrequest built\nmethod=GET",
+        );
+    }
 }

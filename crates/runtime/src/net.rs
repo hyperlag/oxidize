@@ -526,6 +526,214 @@ impl JHttpURLConnection {
     }
 }
 
+// ─── Java 11+ HttpClient ──────────────────────────────────────────────────────
+
+/// Rust equivalent of `java.net.http.HttpRequest` (Java 11+).
+#[derive(Debug, Clone)]
+pub struct JHttpRequest {
+    pub(crate) method: String,
+    pub(crate) uri: String,
+    pub(crate) body: Option<String>,
+}
+
+impl JHttpRequest {
+    /// `request.method()` — returns `"GET"`, `"POST"`, etc.
+    pub fn method(&self) -> JString {
+        JString::from(self.method.as_str())
+    }
+
+    /// `request.uri()` — returns the URI as a `JURL`.
+    pub fn uri(&self) -> JURL {
+        JURL::new(JString::from(self.uri.as_str()))
+    }
+}
+
+impl Default for JHttpRequest {
+    fn default() -> Self {
+        Self {
+            method: "GET".to_string(),
+            uri: String::new(),
+            body: None,
+        }
+    }
+}
+
+/// Builder for `JHttpRequest` (equivalent to Java's `HttpRequest.Builder`).
+#[derive(Debug, Clone, Default)]
+pub struct JHttpRequestBuilder {
+    method: String,
+    uri: String,
+    body: Option<String>,
+}
+
+impl JHttpRequestBuilder {
+    pub fn new() -> Self {
+        Self {
+            method: "GET".to_string(),
+            uri: String::new(),
+            body: None,
+        }
+    }
+
+    /// `.uri(URI.create("..."))` — the `JURL` is treated as a URI string.
+    pub fn uri(self, url: JURL) -> Self {
+        Self {
+            uri: url.toString().as_str().to_owned(),
+            ..self
+        }
+    }
+
+    /// `.GET()` — sets HTTP method to GET.
+    pub fn GET(self) -> Self {
+        Self {
+            method: "GET".to_string(),
+            ..self
+        }
+    }
+
+    /// `.POST(BodyPublishers.ofString(body))` — sets method and body.
+    pub fn POST_body(self, body: JString) -> Self {
+        Self {
+            method: "POST".to_string(),
+            body: Some(body.as_str().to_owned()),
+            ..self
+        }
+    }
+
+    /// `.build()` — creates the `JHttpRequest`.
+    pub fn build(self) -> JHttpRequest {
+        JHttpRequest {
+            method: self.method,
+            uri: self.uri,
+            body: self.body,
+        }
+    }
+}
+
+/// Rust equivalent of `java.net.http.HttpResponse<T>`.
+#[derive(Debug, Clone, Default)]
+pub struct JHttpResponse {
+    status_code: i32,
+    body: String,
+}
+
+impl JHttpResponse {
+    /// `response.statusCode()`
+    pub fn statusCode(&self) -> i32 {
+        self.status_code
+    }
+
+    /// `response.body()` — returns the body as a `JString`.
+    pub fn body(&self) -> JString {
+        JString::from(self.body.as_str())
+    }
+}
+
+/// Rust equivalent of `java.net.http.HttpClient` (Java 11+).
+///
+/// Performs synchronous HTTP/1.1 requests over raw TCP, mirroring
+/// `JHttpURLConnection`.
+#[derive(Debug, Clone, Default)]
+pub struct JHttpClient {}
+
+impl JHttpClient {
+    /// `HttpClient.newHttpClient()`
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    /// `client.send(request, BodyHandlers.ofString())` — synchronous GET/POST.
+    pub fn send(&self, request: JHttpRequest) -> JHttpResponse {
+        use std::io::{BufRead, BufReader, Write};
+        let url = JURL::new(JString::from(request.uri.as_str()));
+        let host = url.getHost();
+        let port = {
+            let p = url.getPort();
+            if p > 0 {
+                p
+            } else {
+                match url.getProtocol().as_str() {
+                    "https" => 443,
+                    _ => 80,
+                }
+            }
+        };
+        let path = {
+            let p = url.getPath();
+            if p.as_str().is_empty() {
+                JString::from("/")
+            } else {
+                p
+            }
+        };
+        let query = url.getQuery();
+        let full_path = if query.as_str().is_empty() {
+            path.as_str().to_owned()
+        } else {
+            format!("{}?{}", path.as_str(), query.as_str())
+        };
+        let addr = format!("{}:{}", host.as_str(), port);
+        match TcpStream::connect(&addr) {
+            Ok(mut stream) => {
+                let body_bytes = request.body.as_deref().unwrap_or("").as_bytes().to_vec();
+                let req_str = if request.method == "POST" {
+                    format!(
+                        "{} {} HTTP/1.1\r\nHost: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        request.method,
+                        full_path,
+                        host.as_str(),
+                        body_bytes.len(),
+                        request.body.as_deref().unwrap_or("")
+                    )
+                } else {
+                    format!(
+                        "{} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
+                        request.method, full_path, host.as_str()
+                    )
+                };
+                if stream.write_all(req_str.as_bytes()).is_err() {
+                    return JHttpResponse {
+                        status_code: -1,
+                        body: String::new(),
+                    };
+                }
+                let mut reader = BufReader::new(stream);
+                let mut status_code = -1i32;
+                let mut first_line = String::new();
+                let _ = reader.read_line(&mut first_line);
+                let parts: Vec<&str> = first_line.splitn(3, ' ').collect();
+                if parts.len() >= 2 {
+                    status_code = parts[1].parse().unwrap_or(-1);
+                }
+                // Skip headers
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                        break;
+                    }
+                    if line == "\r\n" || line == "\n" {
+                        break;
+                    }
+                }
+                let mut body = String::new();
+                loop {
+                    let mut line = String::new();
+                    match reader.read_line(&mut line) {
+                        Ok(0) => break,
+                        Ok(_) => body.push_str(&line),
+                        Err(_) => break,
+                    }
+                }
+                JHttpResponse { status_code, body }
+            }
+            Err(_) => JHttpResponse {
+                status_code: -1,
+                body: String::new(),
+            },
+        }
+    }
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
