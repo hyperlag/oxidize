@@ -242,7 +242,7 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
                 if enm.methods.iter().any(|m| m.name == "main" && m.is_static) {
                     main_class = Some(enm.name.clone());
                 }
-                items.push(emit_enum(enm, &enum_map)?);
+                items.push(emit_enum(enm, &enum_map, &interface_map)?);
             }
         }
     }
@@ -306,6 +306,7 @@ fn emit_interface(iface: &IrInterface) -> Result<TokenStream, CodegenError> {
 fn emit_enum(
     enm: &IrEnum,
     _enum_map: &std::collections::HashMap<String, &IrEnum>,
+    interface_map: &std::collections::HashMap<String, &IrInterface>,
 ) -> Result<TokenStream, CodegenError> {
     let name = ident(&enm.name);
 
@@ -452,9 +453,68 @@ fn emit_enum(
             set.insert(f.name.clone());
         }
     });
+
+    // Collect method names that have at least one per-constant override (5C).
+    let variant_override_names: std::collections::HashSet<&str> = enm
+        .constants
+        .iter()
+        .flat_map(|c| c.body.iter().map(|m| m.name.as_str()))
+        .collect();
+
     for method in &enm.methods {
-        let m = emit_enum_method(method)?;
-        impl_methods.push(m);
+        if variant_override_names.contains(method.name.as_str()) {
+            // Generate a match-dispatch method for constant-specific overrides.
+            let mname = ident(&method.name);
+            let params = emit_params_sig(&method.params);
+            let ret_ty = emit_type(&method.return_ty);
+            let self_param = if method.is_static {
+                quote! {}
+            } else {
+                quote! { &mut self, }
+            };
+            let arms: Vec<TokenStream> = enm
+                .constants
+                .iter()
+                .map(|c| {
+                    let cname = ident(&c.name);
+                    // Use the constant's own override if present, else the
+                    // default body from the enum-level method.
+                    let body_method = c
+                        .body
+                        .iter()
+                        .find(|m| m.name == method.name)
+                        .unwrap_or(method);
+                    let stmts = if let Some(body) = &body_method.body {
+                        emit_stmts(body).unwrap_or_default()
+                    } else {
+                        vec![quote! { unimplemented!(); }]
+                    };
+                    if method.return_ty == IrType::Void {
+                        quote! { Self::#cname => { #(#stmts)* } }
+                    } else {
+                        quote! { Self::#cname => { #(#stmts)* } }
+                    }
+                })
+                .collect();
+            let param_names: Vec<_> = method.params.iter().map(|p| ident(&p.name)).collect();
+            let _ = param_names; // suppress unused warning
+            if method.return_ty == IrType::Void {
+                impl_methods.push(quote! {
+                    pub fn #mname(#self_param #(#params),*) {
+                        match self { #(#arms),* }
+                    }
+                });
+            } else {
+                impl_methods.push(quote! {
+                    pub fn #mname(#self_param #(#params),*) -> #ret_ty {
+                        match self { #(#arms),* }
+                    }
+                });
+            }
+        } else {
+            let m = emit_enum_method(method)?;
+            impl_methods.push(m);
+        }
     }
     ENUM_FIELD_NAMES.with(|names| names.borrow_mut().clear());
 
@@ -473,10 +533,52 @@ fn emit_enum(
         }
     };
 
+    // `impl Trait for Enum` blocks (5B)
+    let mut trait_impls: Vec<TokenStream> = Vec::new();
+    for iface_name in &enm.interfaces {
+        if let Some(iface) = interface_map.get(iface_name.as_str()) {
+            let iface_ident = ident(iface_name);
+            let impl_methods_ts: Vec<TokenStream> = iface
+                .methods
+                .iter()
+                .filter(|m| !m.is_static)
+                .map(|iface_method| {
+                    let body_method = enm
+                        .methods
+                        .iter()
+                        .find(|m| m.name == iface_method.name);
+                    match body_method {
+                        Some(m) => emit_trait_method(m),
+                        None => {
+                            let mname = ident(&iface_method.name);
+                            let params = emit_params_sig(&iface_method.params);
+                            let ret_ty = emit_type(&iface_method.return_ty);
+                            if iface_method.return_ty == IrType::Void {
+                                Ok(quote! {
+                                    fn #mname(&mut self, #(#params),*) { unimplemented!() }
+                                })
+                            } else {
+                                Ok(quote! {
+                                    fn #mname(&mut self, #(#params),*) -> #ret_ty { unimplemented!() }
+                                })
+                            }
+                        }
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            trait_impls.push(quote! {
+                impl #iface_ident for #name {
+                    #(#impl_methods_ts)*
+                }
+            });
+        }
+    }
+
     Ok(quote! {
         #enum_def
         #impl_block
         #display_impl
+        #(#trait_impls)*
     })
 }
 
@@ -1143,7 +1245,7 @@ fn for_body_has_continue(stmts: &[IrStmt]) -> bool {
 
 fn for_stmt_has_continue(stmt: &IrStmt) -> bool {
     match stmt {
-        IrStmt::Continue(_) => true,
+        IrStmt::Continue(None) => true,
         IrStmt::If { then_, else_, .. } => {
             for_body_has_continue(then_)
                 || else_.as_deref().map(for_body_has_continue).unwrap_or(false)
@@ -1166,8 +1268,22 @@ fn transform_for_body(stmts: &[IrStmt]) -> Result<Vec<TokenStream>, CodegenError
 
 fn transform_for_body_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
     match stmt {
-        IrStmt::Continue(_) => Ok(quote! { break 'for_body; }),
-        IrStmt::Break(_) => Ok(quote! { break 'for_loop; }),
+        IrStmt::Continue(None) => Ok(quote! { break 'for_body; }),
+        IrStmt::Continue(Some(lbl)) => {
+            let lt = syn::Lifetime::new(
+                &format!("'{}", lbl),
+                proc_macro2::Span::call_site(),
+            );
+            Ok(quote! { continue #lt; })
+        }
+        IrStmt::Break(None) => Ok(quote! { break 'for_loop; }),
+        IrStmt::Break(Some(lbl)) => {
+            let lt = syn::Lifetime::new(
+                &format!("'{}", lbl),
+                proc_macro2::Span::call_site(),
+            );
+            Ok(quote! { break #lt; })
+        }
         IrStmt::If { cond, then_, else_ } => {
             let cond_ts = emit_expr(cond)?;
             let then_ts = transform_for_body(then_)?;
@@ -1222,26 +1338,48 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
                 })
             }
         }
-        IrStmt::While { cond, body } => {
+        IrStmt::While { cond, body, label } => {
             let cond_ts = emit_expr(cond)?;
             let body_ts = emit_stmts(body)?;
-            Ok(quote! { while #cond_ts { #(#body_ts)* } })
+            if let Some(lbl) = label {
+                let lt = syn::Lifetime::new(
+                    &format!("'{}", lbl),
+                    proc_macro2::Span::call_site(),
+                );
+                Ok(quote! { #lt: while #cond_ts { #(#body_ts)* } })
+            } else {
+                Ok(quote! { while #cond_ts { #(#body_ts)* } })
+            }
         }
-        IrStmt::DoWhile { body, cond } => {
+        IrStmt::DoWhile { body, cond, label } => {
             let body_ts = emit_stmts(body)?;
             let cond_ts = emit_expr(cond)?;
-            Ok(quote! {
-                loop {
-                    #(#body_ts)*
-                    if !(#cond_ts) { break; }
-                }
-            })
+            if let Some(lbl) = label {
+                let lt = syn::Lifetime::new(
+                    &format!("'{}", lbl),
+                    proc_macro2::Span::call_site(),
+                );
+                Ok(quote! {
+                    #lt: loop {
+                        #(#body_ts)*
+                        if !(#cond_ts) { break; }
+                    }
+                })
+            } else {
+                Ok(quote! {
+                    loop {
+                        #(#body_ts)*
+                        if !(#cond_ts) { break; }
+                    }
+                })
+            }
         }
         IrStmt::For {
             init,
             cond,
             update,
             body,
+            label,
         } => {
             let init_ts = init
                 .as_ref()
@@ -1263,30 +1401,66 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
             // update before the next iteration.
             if for_body_has_continue(body) {
                 let body_ts = transform_for_body(body)?;
-                Ok(quote! {
-                    {
-                        #init_ts
-                        'for_loop: loop {
-                            if !(#cond_ts) { break 'for_loop; }
-                            'for_body: loop {
-                                #(#body_ts)*
-                                break 'for_body;
+                if let Some(lbl) = label {
+                    let outer_lt = syn::Lifetime::new(
+                        &format!("'{}", lbl),
+                        proc_macro2::Span::call_site(),
+                    );
+                    Ok(quote! {
+                        {
+                            #init_ts
+                            #outer_lt: loop {
+                                if !(#cond_ts) { break #outer_lt; }
+                                'for_body: loop {
+                                    #(#body_ts)*
+                                    break 'for_body;
+                                }
+                                #(#update_ts)*
                             }
-                            #(#update_ts)*
                         }
-                    }
-                })
+                    })
+                } else {
+                    Ok(quote! {
+                        {
+                            #init_ts
+                            'for_loop: loop {
+                                if !(#cond_ts) { break 'for_loop; }
+                                'for_body: loop {
+                                    #(#body_ts)*
+                                    break 'for_body;
+                                }
+                                #(#update_ts)*
+                            }
+                        }
+                    })
+                }
             } else {
                 let body_ts = emit_stmts(body)?;
-                Ok(quote! {
-                    {
-                        #init_ts
-                        while #cond_ts {
-                            #(#body_ts)*
-                            #(#update_ts)*
+                if let Some(lbl) = label {
+                    let outer_lt = syn::Lifetime::new(
+                        &format!("'{}", lbl),
+                        proc_macro2::Span::call_site(),
+                    );
+                    Ok(quote! {
+                        {
+                            #init_ts
+                            #outer_lt: while #cond_ts {
+                                #(#body_ts)*
+                                #(#update_ts)*
+                            }
                         }
-                    }
-                })
+                    })
+                } else {
+                    Ok(quote! {
+                        {
+                            #init_ts
+                            while #cond_ts {
+                                #(#body_ts)*
+                                #(#update_ts)*
+                            }
+                        }
+                    })
+                }
             }
         }
         IrStmt::ForEach {
@@ -1294,17 +1468,31 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
             var_ty,
             iterable,
             body,
+            label,
         } => {
             let v = ident(var);
             let ty = emit_type(var_ty);
             let iter_ts = emit_expr(iterable)?;
             let body_ts = emit_stmts(body)?;
-            Ok(quote! {
-                for #v in #iter_ts.iter() {
-                    let #v: #ty = #v.clone();
-                    #(#body_ts)*
-                }
-            })
+            if let Some(lbl) = label {
+                let lt = syn::Lifetime::new(
+                    &format!("'{}", lbl),
+                    proc_macro2::Span::call_site(),
+                );
+                Ok(quote! {
+                    #lt: for #v in #iter_ts.iter() {
+                        let #v: #ty = #v.clone();
+                        #(#body_ts)*
+                    }
+                })
+            } else {
+                Ok(quote! {
+                    for #v in #iter_ts.iter() {
+                        let #v: #ty = #v.clone();
+                        #(#body_ts)*
+                    }
+                })
+            }
         }
         IrStmt::Switch {
             expr,
@@ -1346,8 +1534,22 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
                 }
             })
         }
-        IrStmt::Break(_) => Ok(quote! { break; }),
-        IrStmt::Continue(_) => Ok(quote! { continue; }),
+        IrStmt::Break(None) => Ok(quote! { break; }),
+        IrStmt::Break(Some(lbl)) => {
+            let lt = syn::Lifetime::new(
+                &format!("'{}", lbl),
+                proc_macro2::Span::call_site(),
+            );
+            Ok(quote! { break #lt; })
+        }
+        IrStmt::Continue(None) => Ok(quote! { continue; }),
+        IrStmt::Continue(Some(lbl)) => {
+            let lt = syn::Lifetime::new(
+                &format!("'{}", lbl),
+                proc_macro2::Span::call_site(),
+            );
+            Ok(quote! { continue #lt; })
+        }
         IrStmt::Throw(e) => emit_throw(e),
         IrStmt::SuperConstructorCall { .. } => {
             // Already consumed by emit_constructor; should not appear here.
@@ -3390,8 +3592,23 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
 
         IrExpr::Cast { target, expr } => {
             let inner = emit_expr(expr)?;
-            let ty = emit_type(target);
-            Ok(quote! { (#inner as #ty) })
+            match target {
+                // Primitive casts: emit `as T`
+                IrType::Bool
+                | IrType::Byte
+                | IrType::Short
+                | IrType::Int
+                | IrType::Long
+                | IrType::Float
+                | IrType::Double
+                | IrType::Char => {
+                    let ty = emit_type(target);
+                    Ok(quote! { (#inner as #ty) })
+                }
+                // Reference/class casts — just return the value; the Java
+                // type system guarantees correctness at the use site.
+                _ => Ok(quote! { { #inner } }),
+            }
         }
 
         IrExpr::InstanceOf { expr, check_type } => {
@@ -4153,6 +4370,7 @@ mod tests {
         let stmt = IrStmt::While {
             cond: IrExpr::LitBool(false),
             body: vec![IrStmt::Break(None)],
+            label: None,
         };
         module
             .decls
@@ -4168,6 +4386,7 @@ mod tests {
         let stmt = IrStmt::DoWhile {
             body: vec![IrStmt::Continue(None)],
             cond: IrExpr::LitBool(false),
+            label: None,
         };
         module
             .decls
@@ -4203,6 +4422,7 @@ mod tests {
                 ty: IrType::Int,
             }],
             body: vec![],
+            label: None,
         };
         module
             .decls
@@ -4221,6 +4441,7 @@ mod tests {
                 ty: IrType::Class("ArrayList".into()),
             },
             body: vec![],
+            label: None,
         };
         let init = IrStmt::LocalVar {
             name: "list".into(),
@@ -5698,6 +5919,7 @@ mod tests {
                 ty: IrType::Int,
             }],
             body: vec![IrStmt::Continue(None)],
+            label: None,
         }];
         module
             .decls
@@ -7123,6 +7345,7 @@ mod tests {
                 rhs: Box::new(IrExpr::LitInt(10)),
                 ty: IrType::Bool,
             },
+            label: None,
         };
         module
             .decls

@@ -161,6 +161,14 @@ mod tests {
     }
 
     #[test]
+    fn test_labeled_break() {
+        check(
+            "LabeledBreak.java",
+            "0,0\n0,1\n0,2\n0,3\n1,0\n1,1\n1,2\n1,3\n2,0\n2,1\ndone",
+        );
+    }
+
+    #[test]
     fn test_compound_assign() {
         check("CompoundAssign.java", "15\n12\n24\n6\n0");
     }
@@ -297,6 +305,11 @@ mod tests {
     #[test]
     fn test_oop_instanceof() {
         check("OopInstanceof.java", "true\ntrue\nfalse\ntrue");
+    }
+
+    #[test]
+    fn test_reference_cast() {
+        check("ReferenceCast.java", "hello\n5\nworld");
     }
 
     // ── Stage 3: Generics & Collections ───────────────────────────────────
@@ -879,6 +892,19 @@ Expression calculator tests complete",
             "EnumSetBasic.java",
             "2\ntrue\nfalse\n1\nfalse\n2\ntrue\nfalse",
         );
+    }
+
+    #[test]
+    fn test_enum_interface() {
+        check(
+            "EnumInterface.java",
+            "Shape:CIRCLE\nShape:SQUARE\nShape:TRIANGLE",
+        );
+    }
+
+    #[test]
+    fn test_enum_constant_body() {
+        check("EnumConstantBody.java", "7\n7\n30");
     }
 
     #[test]

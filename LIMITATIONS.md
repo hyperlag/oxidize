@@ -197,9 +197,7 @@ Basic Java enums are supported, including:
 
 The following advanced enum features are **not** supported:
 
-- Constant-specific class bodies (methods that differ per variant)
-- Abstract methods declared on the enum and implemented per constant
-- Enums implementing interfaces
+- Anonymous constant subclasses with fields (beyond method overrides)
 
 ### Records (Java 16+)
 
@@ -265,12 +263,10 @@ array accesses chain `.get(i).get(j)` calls.
 
 ### Reference Casting
 
-```java
-Animal a = (Dog) animal;
-```
-
-Reference (downcast) casts between class types are not supported. Primitive
-casts (`(int) doubleVal`) work correctly.
+Same-type reference casts (e.g. `(String) str`) are handled as identity
+expressions. True runtime downcasts (e.g. `(Dog) animal` where `animal` is
+an `Animal` reference) are not checked at runtime — the transpiled Rust
+will fail to compile if the declared types differ.
 
 ### Static Initializers
 
