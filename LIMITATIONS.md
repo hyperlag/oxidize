@@ -153,28 +153,28 @@ The following are **not** supported:
 
 ### java.net
 
-- `java.net.http.HttpClient` (Java 11+ modern HTTP client)
-
 **Supported:** `URL` (parsing, component accessors), `Socket`, `ServerSocket`
-(TCP wrappers), `HttpURLConnection` (basic HTTP/1.1 GET/POST).
+(TCP wrappers), `HttpURLConnection` (basic HTTP/1.1 GET/POST),
+`HttpClient` / `HttpRequest` / `HttpResponse` (Java 11+ HTTP client builder
+pattern; real HTTP/1.1 over raw TCP).
 
 ### java.util
 
-- `Properties`
 - `ResourceBundle`
-- `Timer` / `TimerTask`
 
 **Supported:** `String.format()` (specifiers: `%s`, `%d`, `%f`, `%e`, `%x`, `%o`,
 `%b`, `%n`, `%%`; limited support for width, precision, and flags `-` and `0`),
-`String.join()`, `System.out.printf()`.
+`String.join()`, `System.out.printf()`, `Properties` (`load_string`, `getProperty`,
+`getProperty` with default, `setProperty`, `containsKey`, `stringPropertyNames`, `size`,
+`isEmpty`), `Timer` / `TimerTask` (one-shot and
+repeating scheduled tasks with cancel/purge).
 
 ### java.time
 
-- `ZonedDateTime`
-- `Clock`
-
 **Supported:** `LocalDate`, `LocalTime`, `LocalDateTime`, `Instant`, `Duration`,
-`Period`, `DateTimeFormatter` (pattern-based formatting with `ofPattern()`).
+`Period`, `DateTimeFormatter` (pattern-based formatting with `ofPattern()`),
+`ZonedDateTime`, `ZoneId` (UTC and `±HH:MM` offsets), `Clock`
+(`systemUTC`, `systemDefaultZone`, `instant`, `millis`, `getZone`).
 Covers construction, arithmetic, comparison, parsing, and formatting for all
 supported types.
 

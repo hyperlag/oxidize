@@ -25,6 +25,7 @@ pub mod object;
 pub mod optional;
 pub mod priority_queue;
 pub mod process;
+pub mod properties;
 pub mod reflect;
 pub mod regex_support;
 pub mod set;
@@ -34,6 +35,7 @@ pub mod string;
 pub mod string_builder;
 pub mod thread;
 pub mod time;
+pub mod timer;
 pub mod tree_map;
 pub mod tree_set;
 
@@ -59,11 +61,15 @@ pub use linked_hash_set::JLinkedHashSet;
 pub use linked_list::JLinkedList;
 pub use list::JList;
 pub use map::{JMap, JMapEntry};
-pub use net::{JHttpURLConnection, JServerSocket, JSocket, JURL};
+pub use net::{
+    JHttpClient, JHttpRequest, JHttpRequestBuilder, JHttpResponse, JHttpURLConnection,
+    JServerSocket, JSocket, JURL,
+};
 pub use object::{JNull, JObject, JavaObject};
 pub use optional::JOptional;
 pub use priority_queue::JPriorityQueue;
 pub use process::{JProcess, JProcessBuilder};
+pub use properties::JProperties;
 pub use reflect::JClass;
 pub use regex_support::{JMatcher, JPattern};
 pub use set::JSet;
@@ -74,7 +80,11 @@ pub use string::JString;
 pub use string_builder::JStringBuilder;
 pub use thread::JThread;
 pub use time::JLocalDate;
-pub use time::{JDateTimeFormatter, JDuration, JInstant, JLocalDateTime, JLocalTime, JPeriod};
+pub use time::{
+    JClock, JDateTimeFormatter, JDuration, JInstant, JLocalDateTime, JLocalTime, JPeriod, JZoneId,
+    JZonedDateTime,
+};
+pub use timer::{JTimer, JTimerTask};
 pub use tree_map::JTreeMap;
 pub use tree_set::JTreeSet;
 
@@ -82,15 +92,17 @@ pub use tree_set::JTreeSet;
 pub mod prelude {
     pub use super::{
         JArray, JAtomicBoolean, JAtomicInteger, JAtomicLong, JBigDecimal, JBigInteger,
-        JBufferedReader, JBufferedWriter, JClass, JCompletableFuture, JConcurrentHashMap,
+        JBufferedReader, JBufferedWriter, JClass, JClock, JCompletableFuture, JConcurrentHashMap,
         JCondition, JCopyOnWriteArrayList, JCountDownLatch, JDateTimeFormatter, JDuration,
         JEnumMap, JEnumSet, JException, JExecutorService, JExecutors, JFile, JFileInputStream,
-        JFileOutputStream, JFileReader, JFileWriter, JFiles, JFuture, JHttpURLConnection, JInstant,
-        JIterator, JLinkedHashMap, JLinkedHashSet, JLinkedList, JList, JLocalDate, JLocalDateTime,
-        JLocalTime, JMap, JMapEntry, JMatcher, JMathContext, JNull, JObject, JOptional, JPath,
-        JPaths, JPattern, JPeriod, JPrintWriter, JPriorityQueue, JProcess, JProcessBuilder,
+        JFileOutputStream, JFileReader, JFileWriter, JFiles, JFuture, JHttpClient, JHttpRequest,
+        JHttpRequestBuilder, JHttpResponse, JHttpURLConnection, JInstant, JIterator,
+        JLinkedHashMap, JLinkedHashSet, JLinkedList, JList, JLocalDate, JLocalDateTime, JLocalTime,
+        JMap, JMapEntry, JMatcher, JMathContext, JNull, JObject, JOptional, JPath, JPaths,
+        JPattern, JPeriod, JPrintWriter, JPriorityQueue, JProcess, JProcessBuilder, JProperties,
         JReadLock, JReentrantLock, JReentrantReadWriteLock, JRoundingMode, JScanner, JSemaphore,
         JServerSocket, JSet, JSocket, JSpliterator, JStream, JString, JStringBuilder, JThread,
-        JThreadLocal, JTimeUnit, JTreeMap, JTreeSet, JWriteLock, JURL,
+        JThreadLocal, JTimeUnit, JTimer, JTimerTask, JTreeMap, JTreeSet, JWriteLock, JZoneId,
+        JZonedDateTime, JURL,
     };
 }

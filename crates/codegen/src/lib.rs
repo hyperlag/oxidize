@@ -45,6 +45,16 @@ thread_local! {
     /// Cleared at the start of each `emit_class` call.
     static STATIC_ONCE_LOCK_FIELDS: std::cell::RefCell<std::collections::HashMap<String, String>> =
         std::cell::RefCell::new(std::collections::HashMap::new());
+    /// Cross-class lookup: `"ClassName::field_name"` → mangled Rust name for
+    /// Atomic-backed static fields.  Populated once (pre-scan) before codegen,
+    /// never cleared.
+    static GLOBAL_STATIC_ATOMIC: std::cell::RefCell<std::collections::HashMap<String, String>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+    /// Cross-class lookup: `"ClassName::field_name"` → mangled Rust name for
+    /// OnceLock-backed static fields.  Populated once (pre-scan) before codegen,
+    /// never cleared.
+    static GLOBAL_STATIC_ONCE_LOCK: std::cell::RefCell<std::collections::HashMap<String, String>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
     /// Whether the class currently being emitted has a `__clinit__` method
     /// (static initializer block).
     static HAS_STATIC_INIT: Cell<bool> = const { Cell::new(false) };
@@ -93,6 +103,10 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             JURL, JSocket, JServerSocket, JHttpURLConnection,
             JSpliterator, JavaObject,
             JProcessBuilder, JProcess,
+            JProperties,
+            JTimer, JTimerTask,
+            JZonedDateTime, JZoneId, JClock,
+            JHttpClient, JHttpRequestBuilder, JHttpRequest, JHttpResponse,
         };
     });
 
@@ -176,6 +190,39 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             }
         }
     });
+
+    // Pre-scan ALL static fields across all classes to populate the global
+    // cross-class lookup maps.  This allows `ClassName.field` accesses from
+    // other classes to resolve to the correct mangled Rust statics.
+    GLOBAL_STATIC_ATOMIC.with(|m| m.borrow_mut().clear());
+    GLOBAL_STATIC_ONCE_LOCK.with(|m| m.borrow_mut().clear());
+    for decl in &module.decls {
+        if let IrDecl::Class(cls) = decl {
+            for f in cls.fields.iter().filter(|f| f.is_static) {
+                if f.is_final {
+                    if let Some(init) = &f.init {
+                        if as_const_literal(init).is_some() {
+                            continue; // emitted as `const`, no static backing
+                        }
+                    }
+                }
+                let mangled = format!("{}_{}", cls.name, f.name);
+                let key = format!("{}::{}", cls.name, f.name);
+                match &f.ty {
+                    IrType::Int | IrType::Short | IrType::Byte | IrType::Long | IrType::Bool => {
+                        GLOBAL_STATIC_ATOMIC.with(|m| {
+                            m.borrow_mut().insert(key, mangled);
+                        });
+                    }
+                    _ => {
+                        GLOBAL_STATIC_ONCE_LOCK.with(|m| {
+                            m.borrow_mut().insert(key, mangled);
+                        });
+                    }
+                }
+            }
+        }
+    }
 
     // Collect class names so we know what to emit a main() for
     let mut main_class: Option<String> = None;
@@ -519,8 +566,9 @@ fn emit_class(
     // Struct fields = optional parent struct + own instance fields
     let mut struct_fields: Vec<TokenStream> = Vec::new();
     if let Some(parent_name) = &cls.superclass {
-        let parent_ident = ident(parent_name);
-        struct_fields.push(quote! { pub _super: #parent_ident, });
+        // Use emit_type to map known Java parent names (e.g. TimerTask → JTimerTask).
+        let parent_ty = emit_type(&IrType::Class(parent_name.clone()));
+        struct_fields.push(quote! { pub _super: #parent_ty, });
     }
     for f in &own_instance_fields {
         let fname = ident(&f.name);
@@ -882,13 +930,14 @@ fn emit_constructor(ctor: &IrConstructor, cls: &IrClass) -> Result<TokenStream, 
 
     // Build the struct initializer.
     let super_field_init: Option<TokenStream> = if let Some(parent_name) = &cls.superclass {
-        let parent_ident = ident(parent_name);
+        // Use emit_type to handle mapped parent types (e.g. TimerTask → JTimerTask).
+        let parent_ty = emit_type(&IrType::Class(parent_name.clone()));
         let super_arg_ts: Vec<TokenStream> = super_args
             .as_ref()
             .map(|args| args.iter().map(emit_expr).collect::<Result<Vec<_>, _>>())
             .transpose()?
             .unwrap_or_default();
-        Some(quote! { _super: #parent_ident::new(#(#super_arg_ts),*), })
+        Some(quote! { _super: #parent_ty::new(#(#super_arg_ts),*), })
     } else {
         None
     };
@@ -1628,6 +1677,25 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     (#recv).#field.load(::std::sync::atomic::Ordering::SeqCst)
                 });
             }
+            // Cross-class static field read: ClassName.field → mangled_static.load()
+            if let IrExpr::Var {
+                name: class_name, ..
+            } = receiver.as_ref()
+            {
+                let key = format!("{}::{}", class_name, field_name);
+                let global_atomic = GLOBAL_STATIC_ATOMIC.with(|m| m.borrow().get(&key).cloned());
+                if let Some(mangled) = global_atomic {
+                    let mid = ident(&mangled);
+                    return Ok(quote! { #mid.load(::std::sync::atomic::Ordering::SeqCst) });
+                }
+                let global_once = GLOBAL_STATIC_ONCE_LOCK.with(|m| m.borrow().get(&key).cloned());
+                if let Some(mangled) = global_once {
+                    let mid = ident(&mangled);
+                    return Ok(quote! {
+                        #mid.get_or_init(|| ::std::default::Default::default()).clone()
+                    });
+                }
+            }
             let recv = emit_expr(receiver)?;
             // array.length — check receiver is an array type
             if field_name == "length" {
@@ -2226,6 +2294,90 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                         let m = ident(method_name);
                         return Ok(quote! { JMathContext::#m(#(#args_ts),*) });
                     }
+                    // ZonedDateTime static methods
+                    if name == "ZonedDateTime" {
+                        return match method_name.as_str() {
+                            "of" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { JZonedDateTime::of(#a, #b) })
+                            }
+                            "now" => {
+                                if args_ts.is_empty() {
+                                    Ok(quote! { JZonedDateTime::now() })
+                                } else {
+                                    let a = &args_ts[0];
+                                    Ok(quote! { JZonedDateTime::now_zone(&#a) })
+                                }
+                            }
+                            "parse" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JZonedDateTime::parse(&#a) })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JZonedDateTime::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // ZoneId static methods
+                    if name == "ZoneId" {
+                        return match method_name.as_str() {
+                            "of" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JZoneId::of(&#a) })
+                            }
+                            "systemDefault" => Ok(quote! { JZoneId::systemDefault() }),
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JZoneId::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // Clock static methods
+                    if name == "Clock" {
+                        return match method_name.as_str() {
+                            "systemUTC" => Ok(quote! { JClock::systemUTC() }),
+                            "systemDefaultZone" => Ok(quote! { JClock::systemDefaultZone() }),
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JClock::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // HttpClient static methods
+                    if name == "HttpClient" {
+                        return match method_name.as_str() {
+                            "newHttpClient" => Ok(quote! { JHttpClient::new() }),
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JHttpClient::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // HttpRequest static methods (builder factory)
+                    if name == "HttpRequest" {
+                        return match method_name.as_str() {
+                            "newBuilder" => Ok(quote! { JHttpRequestBuilder::new() }),
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JHttpRequest::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // URI.create(String) → JURL::new(s)
+                    if name == "URI" {
+                        return match method_name.as_str() {
+                            "create" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JURL::new(#a) })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JURL::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
                     // Integer.parseInt / Integer.valueOf
                     if name == "Integer" {
                         return match method_name.as_str() {
@@ -2597,6 +2749,138 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     }
                 }
 
+                // Properties instance methods
+                if type_name_matches(recv.ty(), "Properties") {
+                    match method_name.as_str() {
+                        "getProperty" if args_ts.len() == 1 => {
+                            let k = &args_ts[0];
+                            return Ok(quote! { (#recv_ts).getProperty(&#k) });
+                        }
+                        "getProperty" if args_ts.len() == 2 => {
+                            let k = &args_ts[0];
+                            let d = &args_ts[1];
+                            return Ok(quote! { (#recv_ts).getProperty_default(&#k, &#d) });
+                        }
+                        "setProperty" if args_ts.len() == 2 => {
+                            let k = &args_ts[0];
+                            let v = &args_ts[1];
+                            return Ok(quote! { (#recv_ts).setProperty(&#k, &#v) });
+                        }
+                        "containsKey" if args_ts.len() == 1 => {
+                            let k = &args_ts[0];
+                            return Ok(quote! { (#recv_ts).containsKey(&#k) });
+                        }
+                        "load" if args_ts.len() == 1 => {
+                            // load(new StringReader(s)) or load(reader) — extract string content
+                            // Try to detect new StringReader(...) wrapping
+                            let inner = args.first().unwrap();
+                            let content_ts = if let IrExpr::New {
+                                class,
+                                args: inner_args,
+                                ..
+                            } = inner
+                            {
+                                if class == "StringReader" && !inner_args.is_empty() {
+                                    emit_expr(&inner_args[0])?
+                                } else {
+                                    args_ts[0].clone()
+                                }
+                            } else {
+                                args_ts[0].clone()
+                            };
+                            return Ok(quote! { (#recv_ts).load_string(&#content_ts) });
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Timer instance methods — schedule / cancel / purge
+                if type_name_matches(recv.ty(), "Timer") {
+                    match method_name.as_str() {
+                        "cancel" => {
+                            return Ok(quote! { (#recv_ts).cancel() });
+                        }
+                        "purge" => {
+                            return Ok(quote! { (#recv_ts).purge() });
+                        }
+                        "schedule" if args_ts.len() == 2 => {
+                            // schedule(task, delayMs) — one-shot
+                            let task = &args_ts[0];
+                            let delay = &args_ts[1];
+                            return Ok(quote! { (#recv_ts).schedule_fn_once({
+                                let mut __t = #task;
+                                Box::new(move || { (__t).run(); })
+                            }, #delay) });
+                        }
+                        "schedule" if args_ts.len() == 3 => {
+                            // schedule(task, delayMs, periodMs) — repeating
+                            let task = &args_ts[0];
+                            let delay = &args_ts[1];
+                            let period = &args_ts[2];
+                            return Ok(quote! { (#recv_ts).schedule_fn({
+                                let mut __t = #task;
+                                Box::new(move || { (__t).run(); })
+                            }, #delay, #period) });
+                        }
+                        _ => {}
+                    }
+                }
+
+                // ZonedDateTime instance methods
+                if type_name_matches(recv.ty(), "ZonedDateTime") {
+                    match method_name.as_str() {
+                        "isBefore" | "isAfter" | "isEqual" if args_ts.len() == 1 => {
+                            let a = &args_ts[0];
+                            let m = ident(method_name);
+                            return Ok(quote! { (#recv_ts).#m(&#a) });
+                        }
+                        "format" if args_ts.len() == 1 => {
+                            let a = &args_ts[0];
+                            return Ok(quote! { (#recv_ts).format(&#a) });
+                        }
+                        "withZoneSameInstant" if args_ts.len() == 1 => {
+                            let a = &args_ts[0];
+                            return Ok(quote! { (#recv_ts).withZoneSameInstant(&#a) });
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Clock instance methods
+                if type_name_matches(recv.ty(), "Clock") {
+                    match method_name.as_str() {
+                        "instant" => return Ok(quote! { (#recv_ts).instant() }),
+                        "millis" => return Ok(quote! { (#recv_ts).millis() }),
+                        "getZone" => return Ok(quote! { (#recv_ts).getZone() }),
+                        _ => {}
+                    }
+                }
+
+                // HttpRequestBuilder chain methods — pass-through (generic dispatch handles them)
+                // HttpRequest instance methods
+                if type_name_matches(recv.ty(), "HttpRequest") {
+                    match method_name.as_str() {
+                        "method" => return Ok(quote! { (#recv_ts).method() }),
+                        "uri" => return Ok(quote! { (#recv_ts).uri() }),
+                        _ => {}
+                    }
+                }
+
+                // HttpClient.send(request, handler)
+                if type_name_matches(recv.ty(), "HttpClient") && method_name == "send" {
+                    let req = &args_ts[0];
+                    return Ok(quote! { (#recv_ts).send(#req) });
+                }
+
+                // HttpResponse instance methods
+                if type_name_matches(recv.ty(), "HttpResponse") {
+                    match method_name.as_str() {
+                        "statusCode" => return Ok(quote! { (#recv_ts).statusCode() }),
+                        "body" => return Ok(quote! { (#recv_ts).body() }),
+                        _ => {}
+                    }
+                }
+
                 // Runtime instance → exec() produces a JProcess.
                 if matches!(recv.ty(), IrType::Class(c) if c == "Runtime")
                     && method_name == "exec"
@@ -2867,6 +3151,8 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                         }
                     }
                 }
+                "Properties" => Ok(quote! { JProperties::new() }),
+                "Timer" => Ok(quote! { JTimer::new() }),
                 _ => {
                     let cls = ident(class);
                     Ok(quote! { #cls::new(#(#args_ts),*) })
@@ -3371,6 +3657,16 @@ fn emit_type(ty: &IrType) -> TokenStream {
                 "Spliterator" => quote! { JSpliterator<JavaObject> },
                 "ProcessBuilder" => quote! { JProcessBuilder },
                 "Process" => quote! { JProcess },
+                "Properties" => quote! { JProperties },
+                "Timer" => quote! { JTimer },
+                "TimerTask" => quote! { JTimerTask },
+                "ZonedDateTime" => quote! { JZonedDateTime },
+                "ZoneId" => quote! { JZoneId },
+                "Clock" => quote! { JClock },
+                "HttpClient" => quote! { JHttpClient },
+                "HttpRequest" => quote! { JHttpRequest },
+                "HttpResponse" => quote! { JHttpResponse },
+                "URI" => quote! { JURL },
                 "Object" => quote! { JavaObject },
                 _ => {
                     // Resolve through the enum alias map so that a type
@@ -3461,6 +3757,10 @@ fn emit_type(ty: &IrType) -> TokenStream {
                 }
             }
             // Passthrough for user-defined generics, e.g. Wrapper<T>.
+            // Special-case HttpResponse<T> → JHttpResponse (runtime type is not generic).
+            if matches!(base.as_ref(), IrType::Class(c) if c == "HttpResponse") {
+                return quote! { JHttpResponse };
+            }
             let b = emit_type(base);
             let a: Vec<TokenStream> = args.iter().map(emit_type).collect();
             quote! { #b<#(#a),*> }

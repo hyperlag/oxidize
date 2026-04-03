@@ -36,7 +36,7 @@ Rust source (.rs)
 | `codegen` | Lowers annotated IR to Rust token streams via `proc-macro2` / `quote` |
 | `runtime` | `java-compat` crate: runtime types (`JString`, `JArray`, `JList`, `JMap`, `JOptional`, `JStream`, `JThread`, etc.) |
 | `cli` | `jtrans` binary: CLI driver with `translate`, `init-maven`, `init-gradle` subcommands, watch mode, incremental cache, and source map generation |
-| `tests` | Differential test suite (121 tests: translated Rust output vs. expected output) |
+| `tests` | Differential test suite (125 tests: translated Rust output vs. expected output) |
 
 ## Requirements
 
@@ -210,7 +210,7 @@ cargo test
 
 The differential integration tests in `crates/tests` compile and run each translated Rust
 program, then assert that stdout matches the expected output. No JDK is required to run
-the tests. The suite currently contains **121 differential tests**:
+the tests. The suite currently contains **125 differential tests**:
 
 ```bash
 cargo test -p tests -- --test-threads=4
@@ -286,6 +286,9 @@ cargo test -p tests -- --test-threads=4
 - `Math` static methods, `StringBuilder`, `Optional<T>`, `Stream<T>` API
 - `Pattern` / `Matcher` regex, `BigInteger`, `BigDecimal`, `MathContext`, `LocalDate`, `File`
 - `LocalTime`, `LocalDateTime`, `Instant`, `Duration`, `Period`, `DateTimeFormatter`
+- `ZonedDateTime`, `ZoneId`, `Clock`
+- `Properties` (`load_string`, `getProperty`, `getProperty` with default, `setProperty`, `stringPropertyNames`, `containsKey`, `size`, `isEmpty`)
+- `Timer` / `TimerTask` (one-shot and repeating scheduled tasks)
 - `String.format()`, `String.join()`, `System.out.printf()`
 - `System.exit()`, `System.currentTimeMillis()`, `System.nanoTime()`, `System.getenv()`, `System.getProperty()`, `System.lineSeparator()`
 - Lambda expressions → Rust closures (including multi-statement block bodies)
@@ -296,6 +299,7 @@ cargo test -p tests -- --test-threads=4
 - `URL` (parsing, component accessors)
 - `Socket` / `ServerSocket` (TCP client/server)
 - `HttpURLConnection` (basic HTTP/1.1 GET/POST)
+- `HttpClient` / `HttpRequest` / `HttpResponse` (Java 11+ HTTP client)
 
 ### I/O and NIO
 
@@ -340,6 +344,15 @@ cargo test -p tests -- --test-threads=4
 | `Socket` | `java_compat::JSocket` |
 | `ServerSocket` | `java_compat::JServerSocket` |
 | `HttpURLConnection` | `java_compat::JHttpURLConnection` |
+| `HttpClient` | `java_compat::JHttpClient` |
+| `HttpRequest` | `java_compat::JHttpRequest` |
+| `HttpResponse<T>` | `java_compat::JHttpResponse` |
+| `ZonedDateTime` | `java_compat::JZonedDateTime` |
+| `ZoneId` | `java_compat::JZoneId` |
+| `Clock` | `java_compat::JClock` |
+| `Properties` | `java_compat::JProperties` |
+| `Timer` | `java_compat::JTimer` |
+| `TimerTask` | `java_compat::JTimerTask` |
 | `Pattern` / `Matcher` | `java_compat::JPattern` / `JMatcher` |
 | `LocalDate` | `java_compat::JLocalDate` |
 | `LocalTime` | `java_compat::JLocalTime` |
