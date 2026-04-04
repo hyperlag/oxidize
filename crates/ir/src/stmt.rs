@@ -25,11 +25,15 @@ pub enum IrStmt {
     While {
         cond: IrExpr,
         body: Vec<IrStmt>,
+        #[serde(default)]
+        label: Option<String>,
     },
     /// `do { body } while (cond);`
     DoWhile {
         body: Vec<IrStmt>,
         cond: IrExpr,
+        #[serde(default)]
+        label: Option<String>,
     },
     /// Traditional `for (init; cond; update) { body }`
     For {
@@ -37,6 +41,8 @@ pub enum IrStmt {
         cond: Option<IrExpr>,
         update: Vec<IrExpr>,
         body: Vec<IrStmt>,
+        #[serde(default)]
+        label: Option<String>,
     },
     /// Enhanced `for (Type var : iterable) { body }`
     ForEach {
@@ -44,6 +50,8 @@ pub enum IrStmt {
         var_ty: IrType,
         iterable: IrExpr,
         body: Vec<IrStmt>,
+        #[serde(default)]
+        label: Option<String>,
     },
     /// Traditional `switch (expr) { case ... }`
     Switch {
@@ -127,6 +135,7 @@ mod tests {
         let stmt = IrStmt::While {
             cond: IrExpr::LitBool(false),
             body: vec![],
+            label: None,
         };
         let json = serde_json::to_string(&stmt).unwrap();
         let back: IrStmt = serde_json::from_str(&json).unwrap();

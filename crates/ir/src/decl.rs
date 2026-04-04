@@ -104,6 +104,9 @@ pub struct IrEnumConstant {
     pub name: String,
     /// Constructor arguments (empty for simple enums).
     pub args: Vec<crate::IrExpr>,
+    /// Per-constant method overrides (constant-specific class body).
+    #[serde(default)]
+    pub body: Vec<IrMethod>,
 }
 
 /// An enum declaration.

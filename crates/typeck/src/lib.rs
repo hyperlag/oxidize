@@ -266,7 +266,7 @@ fn check_stmt(
                 }
             }
         }
-        IrStmt::While { cond, body } | IrStmt::DoWhile { body, cond } => {
+        IrStmt::While { cond, body, .. } | IrStmt::DoWhile { body, cond, .. } => {
             *cond = check_expr(cond.clone(), cls, class_map, enum_map, env)?;
             let mut loop_env = env.clone();
             for s in body.iter_mut() {
@@ -278,6 +278,7 @@ fn check_stmt(
             cond,
             update,
             body,
+            ..
         } => {
             let mut loop_env = env.clone();
             if let Some(init_stmt) = init {
@@ -298,6 +299,7 @@ fn check_stmt(
             var_ty,
             iterable,
             body,
+            ..
         } => {
             *iterable = check_expr(iterable.clone(), cls, class_map, enum_map, env)?;
             let mut loop_env = env.clone();
@@ -1350,6 +1352,7 @@ mod tests {
         let stmts = vec![IrStmt::While {
             cond: IrExpr::LitBool(false),
             body: vec![IrStmt::Break(None)],
+            label: None,
         }];
         module
             .decls
@@ -1384,6 +1387,7 @@ mod tests {
                 ty: IrType::Unknown,
             }],
             body: vec![],
+            label: None,
         }];
         module
             .decls
@@ -1397,6 +1401,7 @@ mod tests {
         let stmts = vec![IrStmt::DoWhile {
             body: vec![IrStmt::Continue(None)],
             cond: IrExpr::LitBool(false),
+            label: None,
         }];
         module
             .decls
@@ -1727,6 +1732,7 @@ mod tests {
                     ty: IrType::Class("ArrayList".into()),
                 },
                 body: vec![],
+                label: None,
             },
         ];
         module

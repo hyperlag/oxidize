@@ -384,9 +384,23 @@ fn lower_enum(node: Node<'_>, src: &[u8]) -> Result<IrEnum, ParseError> {
                         })
                         .transpose()?
                         .unwrap_or_default();
+                    // Per-constant class body: methods inside `ADD { ... }`
+                    let const_body = named_children(child)
+                        .into_iter()
+                        .find(|n| n.kind() == "class_body")
+                        .map(|cb| {
+                            named_children(cb)
+                                .into_iter()
+                                .filter(|n| n.kind() == "method_declaration")
+                                .map(|n| lower_method(n, src))
+                                .collect::<Result<Vec<_>, _>>()
+                        })
+                        .transpose()?
+                        .unwrap_or_default();
                     constants.push(IrEnumConstant {
                         name: const_name,
                         args,
+                        body: const_body,
                     });
                 }
                 "enum_body_declarations" => {
@@ -791,7 +805,11 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                 .map(|n| lower_stmt(n, src))
                 .transpose()?
                 .unwrap_or_default();
-            Ok(vec![IrStmt::While { cond, body }])
+            Ok(vec![IrStmt::While {
+                cond,
+                body,
+                label: None,
+            }])
         }
         "do_statement" => {
             let body = child_by_field(node, "body")
@@ -799,7 +817,37 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                 .transpose()?
                 .unwrap_or_default();
             let cond = lower_paren_condition(node, src)?;
-            Ok(vec![IrStmt::DoWhile { body, cond }])
+            Ok(vec![IrStmt::DoWhile {
+                body,
+                cond,
+                label: None,
+            }])
+        }
+        "labeled_statement" => {
+            // Java: `lbl: for (...) { ... }` — attach the label to the inner loop.
+            // tree-sitter-java does not use a named field for labeled_statement;
+            // the label identifier is the first named child (statement_label alias).
+            let kids = named_children(node);
+            let lbl = kids
+                .first()
+                .map(|n| text(*n, src).to_owned())
+                .ok_or_else(|| ParseError::Unsupported("labeled_statement missing label".into()))?;
+            // The body statement is the second named child.
+            let inner_node = kids
+                .into_iter()
+                .nth(1)
+                .ok_or_else(|| ParseError::Unsupported("labeled_statement missing body".into()))?;
+            let mut stmts = lower_stmt(inner_node, src)?;
+            if let Some(
+                IrStmt::While { label, .. }
+                | IrStmt::DoWhile { label, .. }
+                | IrStmt::For { label, .. }
+                | IrStmt::ForEach { label, .. },
+            ) = stmts.first_mut()
+            {
+                *label = Some(lbl);
+            }
+            Ok(stmts)
         }
         "for_statement" => {
             // init is either a local_variable_declaration or expression_statement
@@ -830,6 +878,7 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                 cond,
                 update,
                 body,
+                label: None,
             }])
         }
         "enhanced_for_statement" => {
@@ -852,6 +901,7 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                 var_ty,
                 iterable,
                 body,
+                label: None,
             }])
         }
         "switch_statement" | "switch_expression" => {

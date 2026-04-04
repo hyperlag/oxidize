@@ -197,7 +197,11 @@ fn arb_ir_stmt() -> impl Strategy<Value = IrStmt> {
                 arb_ir_expr(),
                 proptest::collection::vec(inner.clone(), 0..3)
             )
-                .prop_map(|(cond, body)| IrStmt::While { cond, body }),
+                .prop_map(|(cond, body)| IrStmt::While {
+                    cond,
+                    body,
+                    label: None
+                }),
             // Block
             proptest::collection::vec(inner.clone(), 0..4).prop_map(IrStmt::Block),
             // TryCatch
