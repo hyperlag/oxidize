@@ -805,7 +805,11 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                 .map(|n| lower_stmt(n, src))
                 .transpose()?
                 .unwrap_or_default();
-            Ok(vec![IrStmt::While { cond, body, label: None }])
+            Ok(vec![IrStmt::While {
+                cond,
+                body,
+                label: None,
+            }])
         }
         "do_statement" => {
             let body = child_by_field(node, "body")
@@ -813,7 +817,11 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                 .transpose()?
                 .unwrap_or_default();
             let cond = lower_paren_condition(node, src)?;
-            Ok(vec![IrStmt::DoWhile { body, cond, label: None }])
+            Ok(vec![IrStmt::DoWhile {
+                body,
+                cond,
+                label: None,
+            }])
         }
         "labeled_statement" => {
             // Java: `lbl: for (...) { ... }` — attach the label to the inner loop.
@@ -823,13 +831,13 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
             let lbl = kids
                 .first()
                 .map(|n| text(*n, src).to_owned())
-                .unwrap_or_default();
+                .ok_or_else(|| ParseError::Unsupported("labeled_statement missing label".into()))?;
             // The body statement is the second named child.
-            let inner_node = kids.into_iter().nth(1);
-            let mut stmts = inner_node
-                .map(|n| lower_stmt(n, src))
-                .transpose()?
-                .unwrap_or_default();
+            let inner_node = kids
+                .into_iter()
+                .nth(1)
+                .ok_or_else(|| ParseError::Unsupported("labeled_statement missing body".into()))?;
+            let mut stmts = lower_stmt(inner_node, src)?;
             if let Some(
                 IrStmt::While { label, .. }
                 | IrStmt::DoWhile { label, .. }

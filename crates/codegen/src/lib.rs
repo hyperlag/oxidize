@@ -470,7 +470,7 @@ fn emit_enum(
             let self_param = if method.is_static {
                 quote! {}
             } else {
-                quote! { &mut self, }
+                quote! { &self, }
             };
             let arms: Vec<TokenStream> = enm
                 .constants
@@ -485,17 +485,13 @@ fn emit_enum(
                         .find(|m| m.name == method.name)
                         .unwrap_or(method);
                     let stmts = if let Some(body) = &body_method.body {
-                        emit_stmts(body).unwrap_or_default()
+                        emit_stmts(body)?
                     } else {
                         vec![quote! { unimplemented!(); }]
                     };
-                    if method.return_ty == IrType::Void {
-                        quote! { Self::#cname => { #(#stmts)* } }
-                    } else {
-                        quote! { Self::#cname => { #(#stmts)* } }
-                    }
+                    Ok(quote! { Self::#cname => { #(#stmts)* } })
                 })
-                .collect();
+                .collect::<Result<Vec<_>, CodegenError>>()?;
             let param_names: Vec<_> = method.params.iter().map(|p| ident(&p.name)).collect();
             let _ = param_names; // suppress unused warning
             if method.return_ty == IrType::Void {
@@ -553,13 +549,21 @@ fn emit_enum(
                             let mname = ident(&iface_method.name);
                             let params = emit_params_sig(&iface_method.params);
                             let ret_ty = emit_type(&iface_method.return_ty);
+                            let error_message = format!(
+                                "enum `{}` claims to implement interface `{}` but does not provide required instance method `{}`",
+                                enm.name, iface_name, iface_method.name
+                            );
                             if iface_method.return_ty == IrType::Void {
                                 Ok(quote! {
-                                    fn #mname(&mut self, #(#params),*) { unimplemented!() }
+                                    fn #mname(&mut self, #(#params),*) {
+                                        compile_error!(#error_message);
+                                    }
                                 })
                             } else {
                                 Ok(quote! {
-                                    fn #mname(&mut self, #(#params),*) -> #ret_ty { unimplemented!() }
+                                    fn #mname(&mut self, #(#params),*) -> #ret_ty {
+                                        compile_error!(#error_message);
+                                    }
                                 })
                             }
                         }
@@ -1238,19 +1242,24 @@ fn emit_stmts(stmts: &[IrStmt]) -> Result<Vec<TokenStream>, CodegenError> {
 }
 
 /// Returns true if `stmts` (at the outermost level, not inside nested loops)
-/// contains a bare `continue` that targets the enclosing for-loop.
-fn for_body_has_continue(stmts: &[IrStmt]) -> bool {
-    stmts.iter().any(for_stmt_has_continue)
+/// contains a `continue` that targets the enclosing for-loop (either a bare
+/// `continue` or a labeled `continue` whose label matches `for_label`).
+fn for_body_has_continue(stmts: &[IrStmt], for_label: Option<&str>) -> bool {
+    stmts.iter().any(|s| for_stmt_has_continue(s, for_label))
 }
 
-fn for_stmt_has_continue(stmt: &IrStmt) -> bool {
+fn for_stmt_has_continue(stmt: &IrStmt, for_label: Option<&str>) -> bool {
     match stmt {
         IrStmt::Continue(None) => true,
+        IrStmt::Continue(Some(lbl)) => for_label == Some(lbl.as_str()),
         IrStmt::If { then_, else_, .. } => {
-            for_body_has_continue(then_)
-                || else_.as_deref().map(for_body_has_continue).unwrap_or(false)
+            for_body_has_continue(then_, for_label)
+                || else_
+                    .as_deref()
+                    .map(|s| for_body_has_continue(s, for_label))
+                    .unwrap_or(false)
         }
-        IrStmt::Block(inner) => for_body_has_continue(inner),
+        IrStmt::Block(inner) => for_body_has_continue(inner, for_label),
         // Nested loops own their own breaks/continues — don't recurse.
         IrStmt::While { .. }
         | IrStmt::For { .. }
@@ -1261,41 +1270,50 @@ fn for_stmt_has_continue(stmt: &IrStmt) -> bool {
 }
 
 /// Re-emit `stmts` for use inside a labeled for-body loop, replacing bare
-/// `continue` → `break 'for_body` and bare `break` → `break 'for_loop`.
-fn transform_for_body(stmts: &[IrStmt]) -> Result<Vec<TokenStream>, CodegenError> {
-    stmts.iter().map(transform_for_body_stmt).collect()
+/// `continue` (and labeled `continue` targeting `for_label`) → `break 'for_body`
+/// and bare `break` → `break 'for_loop`.
+fn transform_for_body(
+    stmts: &[IrStmt],
+    for_label: Option<&str>,
+) -> Result<Vec<TokenStream>, CodegenError> {
+    stmts
+        .iter()
+        .map(|s| transform_for_body_stmt(s, for_label))
+        .collect()
 }
 
-fn transform_for_body_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
+fn transform_for_body_stmt(
+    stmt: &IrStmt,
+    for_label: Option<&str>,
+) -> Result<TokenStream, CodegenError> {
     match stmt {
         IrStmt::Continue(None) => Ok(quote! { break 'for_body; }),
+        IrStmt::Continue(Some(lbl)) if for_label == Some(lbl.as_str()) => {
+            // `continue <for_label>` in Java means "run the update then loop":
+            // translate to `break 'for_body` so the update step still executes.
+            Ok(quote! { break 'for_body; })
+        }
         IrStmt::Continue(Some(lbl)) => {
-            let lt = syn::Lifetime::new(
-                &format!("'{}", lbl),
-                proc_macro2::Span::call_site(),
-            );
+            let lt = label_lifetime(lbl);
             Ok(quote! { continue #lt; })
         }
         IrStmt::Break(None) => Ok(quote! { break 'for_loop; }),
         IrStmt::Break(Some(lbl)) => {
-            let lt = syn::Lifetime::new(
-                &format!("'{}", lbl),
-                proc_macro2::Span::call_site(),
-            );
+            let lt = label_lifetime(lbl);
             Ok(quote! { break #lt; })
         }
         IrStmt::If { cond, then_, else_ } => {
             let cond_ts = emit_expr(cond)?;
-            let then_ts = transform_for_body(then_)?;
+            let then_ts = transform_for_body(then_, for_label)?;
             if let Some(else_stmts) = else_ {
-                let else_ts = transform_for_body(else_stmts)?;
+                let else_ts = transform_for_body(else_stmts, for_label)?;
                 Ok(quote! { if #cond_ts { #(#then_ts)* } else { #(#else_ts)* } })
             } else {
                 Ok(quote! { if #cond_ts { #(#then_ts)* } })
             }
         }
         IrStmt::Block(inner) => {
-            let inner_ts = transform_for_body(inner)?;
+            let inner_ts = transform_for_body(inner, for_label)?;
             Ok(quote! { { #(#inner_ts)* } })
         }
         // Nested loops keep their own semantics.
@@ -1342,10 +1360,7 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
             let cond_ts = emit_expr(cond)?;
             let body_ts = emit_stmts(body)?;
             if let Some(lbl) = label {
-                let lt = syn::Lifetime::new(
-                    &format!("'{}", lbl),
-                    proc_macro2::Span::call_site(),
-                );
+                let lt = label_lifetime(lbl);
                 Ok(quote! { #lt: while #cond_ts { #(#body_ts)* } })
             } else {
                 Ok(quote! { while #cond_ts { #(#body_ts)* } })
@@ -1355,10 +1370,7 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
             let body_ts = emit_stmts(body)?;
             let cond_ts = emit_expr(cond)?;
             if let Some(lbl) = label {
-                let lt = syn::Lifetime::new(
-                    &format!("'{}", lbl),
-                    proc_macro2::Span::call_site(),
-                );
+                let lt = label_lifetime(lbl);
                 Ok(quote! {
                     #lt: loop {
                         #(#body_ts)*
@@ -1395,17 +1407,14 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
                 .iter()
                 .map(|u| emit_expr(u).map(|ts| quote! { #ts; }))
                 .collect::<Result<_, _>>()?;
-            // If the body contains a bare `continue`, a simple while-loop
-            // desugaring is wrong: the update would be skipped. Use labeled
-            // loops so that `continue` (→ `break 'for_body`) still runs the
-            // update before the next iteration.
-            if for_body_has_continue(body) {
-                let body_ts = transform_for_body(body)?;
+            // If the body contains a bare `continue` (or labeled `continue` targeting
+            // this loop), a simple while-loop desugaring is wrong: the update would be
+            // skipped. Use labeled loops so that `continue` (→ `break 'for_body`) still
+            // runs the update before the next iteration.
+            if for_body_has_continue(body, label.as_deref()) {
+                let body_ts = transform_for_body(body, label.as_deref())?;
                 if let Some(lbl) = label {
-                    let outer_lt = syn::Lifetime::new(
-                        &format!("'{}", lbl),
-                        proc_macro2::Span::call_site(),
-                    );
+                    let outer_lt = label_lifetime(lbl);
                     Ok(quote! {
                         {
                             #init_ts
@@ -1437,10 +1446,7 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
             } else {
                 let body_ts = emit_stmts(body)?;
                 if let Some(lbl) = label {
-                    let outer_lt = syn::Lifetime::new(
-                        &format!("'{}", lbl),
-                        proc_macro2::Span::call_site(),
-                    );
+                    let outer_lt = label_lifetime(lbl);
                     Ok(quote! {
                         {
                             #init_ts
@@ -1475,10 +1481,7 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
             let iter_ts = emit_expr(iterable)?;
             let body_ts = emit_stmts(body)?;
             if let Some(lbl) = label {
-                let lt = syn::Lifetime::new(
-                    &format!("'{}", lbl),
-                    proc_macro2::Span::call_site(),
-                );
+                let lt = label_lifetime(lbl);
                 Ok(quote! {
                     #lt: for #v in #iter_ts.iter() {
                         let #v: #ty = #v.clone();
@@ -1536,18 +1539,12 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
         }
         IrStmt::Break(None) => Ok(quote! { break; }),
         IrStmt::Break(Some(lbl)) => {
-            let lt = syn::Lifetime::new(
-                &format!("'{}", lbl),
-                proc_macro2::Span::call_site(),
-            );
+            let lt = label_lifetime(lbl);
             Ok(quote! { break #lt; })
         }
         IrStmt::Continue(None) => Ok(quote! { continue; }),
         IrStmt::Continue(Some(lbl)) => {
-            let lt = syn::Lifetime::new(
-                &format!("'{}", lbl),
-                proc_macro2::Span::call_site(),
-            );
+            let lt = label_lifetime(lbl);
             Ok(quote! { continue #lt; })
         }
         IrStmt::Throw(e) => emit_throw(e),
@@ -3605,8 +3602,10 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     let ty = emit_type(target);
                     Ok(quote! { (#inner as #ty) })
                 }
-                // Reference/class casts — just return the value; the Java
-                // type system guarantees correctness at the use site.
+                // Reference/class casts are currently erased to identity here:
+                // we do not emit a runtime-checked downcast, and instead rely
+                // on the declared IR types lining up so the generated Rust
+                // type-checks.
                 _ => Ok(quote! { { #inner } }),
             }
         }
@@ -4047,6 +4046,24 @@ fn ident(name: &str) -> Ident {
         other => other.to_owned(),
     };
     Ident::new(&sanitised, Span::call_site())
+}
+
+/// Sanitise a Java loop label and construct a Rust `syn::Lifetime` from it.
+/// Java labels may contain characters (e.g. `$`) that are illegal in Rust
+/// lifetime identifiers; we map every character that is not alphanumeric or
+/// `_` to `_`, mirroring the sanitisation done by `ident()`.
+fn label_lifetime(lbl: &str) -> syn::Lifetime {
+    let sanitised: String = lbl
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    syn::Lifetime::new(&format!("'{}", sanitised), proc_macro2::Span::call_site())
 }
 
 /// Check if an expression is `Collectors.toList()` (a MethodCall on `Collectors` with name `toList`).
