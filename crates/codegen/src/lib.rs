@@ -253,7 +253,9 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
                     for other in &module.decls {
                         if let IrDecl::Class(c) = other {
                             if let Some(rest) = c.name.strip_prefix(&outer_prefix) {
-                                // Simple name is everything after the first "$"
+                                // Key is the suffix after removing the `"{Outer}$"` prefix;
+                                // it may still contain additional `$` separators (for example,
+                                // `Inner$Nested` for `Outer$Inner$Nested`).
                                 imap.insert(rest.to_owned(), c.name.clone());
                             } else if let Some(rest) = c.name.strip_prefix(&loc_prefix) {
                                 imap.insert(rest.to_owned(), c.name.clone());
@@ -1412,15 +1414,14 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
                     } else {
                         // Inner/local class: check if the DECLARED type needs
                         // renaming (e.g. `Counter` → `InnerClass$Counter`).
-                        let renamed_ty =
-                            if let IrType::Class(ref type_name) = ty {
-                                INNER_CLASS_MAP
-                                    .with(|m| m.borrow().get(type_name.as_str()).cloned())
-                                    .map(IrType::Class)
-                                    .unwrap_or_else(|| ty.clone())
-                            } else {
-                                ty.clone()
-                            };
+                        let renamed_ty = if let IrType::Class(ref type_name) = ty {
+                            INNER_CLASS_MAP
+                                .with(|m| m.borrow().get(type_name.as_str()).cloned())
+                                .map(IrType::Class)
+                                .unwrap_or_else(|| ty.clone())
+                        } else {
+                            ty.clone()
+                        };
                         emit_type(&renamed_ty)
                     }
                 } else {

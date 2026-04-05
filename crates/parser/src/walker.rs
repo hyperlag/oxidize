@@ -40,12 +40,30 @@ fn current_outer_class() -> String {
     OUTER_CLASS_STACK.with(|s| s.borrow().last().cloned().unwrap_or_default())
 }
 
+/// Returns the full enclosing-class prefix by joining all stack entries with
+/// `$`, e.g. `"Outer$Inner"` when inside an inner class of `Outer`.
+fn full_outer_class_prefix() -> String {
+    OUTER_CLASS_STACK.with(|s| s.borrow().join("$"))
+}
+
 fn push_outer_class(name: &str) {
     OUTER_CLASS_STACK.with(|s| s.borrow_mut().push(name.to_owned()));
 }
 
 fn pop_outer_class() {
-    OUTER_CLASS_STACK.with(|s| { s.borrow_mut().pop(); });
+    OUTER_CLASS_STACK.with(|s| {
+        s.borrow_mut().pop();
+    });
+}
+
+/// RAII guard that calls `pop_outer_class()` when dropped, ensuring the stack
+/// stays balanced even when `lower_class` returns early via `?`.
+struct OuterClassGuard;
+
+impl Drop for OuterClassGuard {
+    fn drop(&mut self) {
+        pop_outer_class();
+    }
 }
 
 fn hoist_decl(decl: IrDecl) {
@@ -53,7 +71,11 @@ fn hoist_decl(decl: IrDecl) {
 }
 
 fn next_anon_name() -> String {
-    let n = ANON_COUNTER.with(|c| { let v = c.get(); c.set(v + 1); v });
+    let n = ANON_COUNTER.with(|c| {
+        let v = c.get();
+        c.set(v + 1);
+        v
+    });
     format!("__Anon_{n}")
 }
 
@@ -340,7 +362,9 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<(IrClass, Vec<IrEnum>), Par
         .unwrap_or_default();
 
     // Track the class-name stack so inner/local classes can build mangled names.
+    // Use an RAII guard so pop always runs even if an error is returned via `?`.
     push_outer_class(&name);
+    let _outer_guard = OuterClassGuard;
 
     let visibility = extract_visibility(node, src);
 
@@ -408,14 +432,24 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<(IrClass, Vec<IrEnum>), Par
                 }
                 "class_declaration" => {
                     // Non-static inner class: hoist to module level with
-                    // mangled name "{Outer}${Inner}".
-                    let outer = current_outer_class();
+                    // mangled name "{Outer}${Inner}", using the full enclosing-
+                    // class stack so deeply nested classes get names like
+                    // "Outer$Inner$Nested" rather than just "Inner$Nested".
+                    let outer = full_outer_class_prefix();
                     let (mut inner_cls, inner_sub_enums) = lower_class(child, src)?;
                     let orig_inner_name = inner_cls.name.clone();
-                    inner_cls.name = format!("{}${}", outer, orig_inner_name);
-                    // Also mangle any inner-of-inner enums.
+                    let inner_prefix = format!("{}${}", outer, orig_inner_name);
+                    inner_cls.name = inner_prefix.clone();
+                    // Also mangle any inner-of-inner enums, preserving any
+                    // nested suffixes that were already lowered relative to
+                    // the original immediate inner-class name.
+                    let nested_prefix = format!("{}$", orig_inner_name);
                     for mut e in inner_sub_enums {
-                        e.name = format!("{}${}", inner_cls.name, e.name);
+                        if let Some(rest) = e.name.strip_prefix(&nested_prefix) {
+                            e.name = format!("{}${}", inner_prefix, rest);
+                        } else {
+                            e.name = format!("{}${}", inner_prefix, e.name);
+                        }
                         inner_enums.push(e);
                     }
                     hoist_decl(IrDecl::Class(inner_cls));
@@ -449,8 +483,6 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<(IrClass, Vec<IrEnum>), Par
             }
         }
     }
-
-    pop_outer_class();
 
     Ok((
         IrClass {
@@ -1764,19 +1796,16 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                 for child in body_node.named_children(&mut anon_cur) {
                     match child.kind() {
                         "method_declaration" => {
-                            if let Ok(m) = lower_method(child, src) {
-                                anon_methods.push(m);
-                            }
+                            let m = lower_method(child, src)?;
+                            anon_methods.push(m);
                         }
                         "field_declaration" => {
-                            if let Ok(fs) = lower_field(child, src) {
-                                anon_fields.extend(fs);
-                            }
+                            let fs = lower_field(child, src)?;
+                            anon_fields.extend(fs);
                         }
                         "constructor_declaration" => {
-                            if let Ok(ctor) = lower_constructor(child, src) {
-                                anon_ctors.push(ctor);
-                            }
+                            let ctor = lower_constructor(child, src)?;
+                            anon_ctors.push(ctor);
                         }
                         _ => {}
                     }

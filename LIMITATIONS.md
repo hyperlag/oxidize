@@ -239,11 +239,11 @@ supported with the following limitations:
 - **Anonymous inner classes:** supported when implementing an interface with
   method overrides; outer-scope variable capture is not supported.
 - **Non-static inner classes:** hoisted to top-level structs with a mangled
-  name (`Outer_Inner`); implicit `this` reference to the outer instance is not
+  name (`Outer$Inner`); implicit `this` reference to the outer instance is not
   supported — inner class methods cannot access outer fields.
 - **Local classes:** classes declared inside a method body are hoisted to
-  top-level structs using a mangled name; outer-scope variable capture is not
-  supported.
+  top-level structs using a mangled name (`Outer__loc__Local`); outer-scope
+  variable capture is not supported.
 
 Static nested classes are supported as top-level classes.
 
