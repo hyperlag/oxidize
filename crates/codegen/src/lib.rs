@@ -12,6 +12,10 @@ use quote::quote;
 use std::cell::Cell;
 use thiserror::Error;
 
+/// Synthetic local-variable name used when lowering a pattern-`instanceof`
+/// condition to avoid evaluating the checked expression twice.
+const INSTANCEOF_TMP: &str = "__instanceof_tmp__";
+
 thread_local! {
     /// Whether the currently-emitted method is static (no `self` receiver).
     static IN_STATIC_METHOD: Cell<bool> = const { Cell::new(false) };
@@ -888,6 +892,28 @@ fn emit_class(
         });
     }
 
+    // Record accessor methods: each component field gets a public getter,
+    // unless an explicit zero-arg instance method with the same name already
+    // exists (Java allows overriding canonical accessors).
+    if cls.is_record {
+        for f in cls.fields.iter().filter(|f| !f.is_static) {
+            let already_defined = cls
+                .methods
+                .iter()
+                .any(|m| m.name == f.name && !m.is_static && m.params.is_empty());
+            if already_defined {
+                continue;
+            }
+            let fname = ident(&f.name);
+            let fty = emit_type(&f.ty);
+            method_tokens.push(quote! {
+                pub fn #fname(&self) -> #fty {
+                    self.#fname.clone()
+                }
+            });
+        }
+    }
+
     let impl_block = if !method_tokens.is_empty() {
         quote! {
             impl #impl_generics #name #struct_generics {
@@ -942,10 +968,32 @@ fn emit_class(
         }
     }
 
-    // `impl Display` — auto-generated if the class defines a `toString()` method.
-    // This enables use of the class in string-concatenation expressions and
-    // `println!("{}", obj)` calls.
-    let display_impl = if cls
+    // `impl Display` — auto-generated for records (Java-format) and for classes
+    // that define a `toString()` method.
+    let display_impl = if cls.is_record {
+        // Records emit: "ClassName[field1=VALUE1, field2=VALUE2]"
+        let instance_fields: Vec<&ir::decl::IrField> =
+            cls.fields.iter().filter(|f| !f.is_static).collect();
+        let field_format_parts: Vec<String> = instance_fields
+            .iter()
+            .map(|f| format!("{}={{}}", f.name))
+            .collect();
+        let format_str = format!("{}[{}]", cls.name, field_format_parts.join(", "));
+        let field_refs: Vec<TokenStream> = instance_fields
+            .iter()
+            .map(|f| {
+                let field_ident = ident(&f.name);
+                quote! { &self.#field_ident }
+            })
+            .collect();
+        quote! {
+            impl #impl_generics ::std::fmt::Display for #name #struct_generics {
+                fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                    write!(f, #format_str, #(#field_refs),*)
+                }
+            }
+        }
+    } else if cls
         .methods
         .iter()
         .any(|m| m.name == "toString" && !m.is_static)
@@ -1343,6 +1391,41 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
         }
         IrStmt::Return(None) => Ok(quote! { return; }),
         IrStmt::If { cond, then_, else_ } => {
+            // Pattern instanceof: `if (expr instanceof Type name)` injects a
+            // binding variable at the start of the then-block.
+            // Evaluate `inst_expr` into a temp to avoid double evaluation.
+            if let IrExpr::InstanceOf {
+                expr: inst_expr,
+                check_type,
+                binding: Some(binding_name),
+            } = cond
+            {
+                let tmp_name = ident(INSTANCEOF_TMP);
+                let inner_expr = emit_expr(inst_expr)?;
+                let cond_no_binding = IrExpr::InstanceOf {
+                    expr: Box::new(IrExpr::Var {
+                        name: INSTANCEOF_TMP.to_string(),
+                        ty: inst_expr.ty().clone(),
+                    }),
+                    check_type: check_type.clone(),
+                    binding: None,
+                };
+                let cond_ts = emit_expr(&cond_no_binding)?;
+                let bname = ident(binding_name);
+                let bty = emit_type(check_type);
+                let binding_decl = quote! { let mut #bname: #bty = #tmp_name.clone(); };
+                let then_ts = emit_stmts(then_)?;
+                if let Some(else_stmts) = else_ {
+                    let else_ts = emit_stmts(else_stmts)?;
+                    return Ok(quote! {
+                        { let #tmp_name = #inner_expr; if #cond_ts { #binding_decl #(#then_ts)* } else { #(#else_ts)* } }
+                    });
+                } else {
+                    return Ok(quote! {
+                        { let #tmp_name = #inner_expr; if #cond_ts { #binding_decl #(#then_ts)* } }
+                    });
+                }
+            }
             let cond_ts = emit_expr(cond)?;
             let then_ts = emit_stmts(then_)?;
             if let Some(else_stmts) = else_ {
@@ -3610,7 +3693,9 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             }
         }
 
-        IrExpr::InstanceOf { expr, check_type } => {
+        IrExpr::InstanceOf {
+            expr, check_type, ..
+        } => {
             let inner = emit_expr(expr)?;
             let type_name_str = match check_type {
                 IrType::Class(name) => name.clone(),
@@ -4168,6 +4253,7 @@ mod tests {
                 throws: vec![],
             }],
             constructors: vec![],
+            is_record: false,
         }
     }
 
@@ -4886,6 +4972,7 @@ mod tests {
                 ty: IrType::Class("Object".into()),
             }),
             check_type: IrType::Class("String".into()),
+            binding: None,
         };
         let init = IrStmt::LocalVar {
             name: "obj".into(),
@@ -5231,6 +5318,7 @@ mod tests {
                 throws: vec![],
             }],
             constructors: vec![],
+            is_record: false,
         };
         // Child class: Dog extends Animal
         let child = IrClass {
@@ -5260,6 +5348,7 @@ mod tests {
                 throws: vec![],
             }],
             constructors: vec![],
+            is_record: false,
         };
         module.decls.push(IrDecl::Class(parent));
         module.decls.push(IrDecl::Class(child));
@@ -5292,6 +5381,7 @@ mod tests {
             }],
             methods: vec![],
             constructors: vec![],
+            is_record: false,
         };
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
@@ -5365,6 +5455,7 @@ mod tests {
                 },
             ],
             constructors: vec![],
+            is_record: false,
         };
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
@@ -5758,6 +5849,7 @@ mod tests {
                 init: None,
             }],
             methods: vec![],
+            is_record: false,
             constructors: vec![IrConstructor {
                 visibility: Visibility::Public,
                 params: vec![IrParam {
@@ -5809,6 +5901,7 @@ mod tests {
                 body: Some(vec![]),
                 throws: vec![],
             }],
+            is_record: false,
             constructors: vec![IrConstructor {
                 visibility: Visibility::Public,
                 params: vec![IrParam {
@@ -6795,6 +6888,7 @@ mod tests {
                 ty: IrType::Class("Object".into()),
             }),
             check_type: IrType::Class("String".into()),
+            binding: None,
         };
         let stmt = sysout_println(expr);
         module
@@ -7224,6 +7318,7 @@ mod tests {
                 },
             ],
             methods: vec![],
+            is_record: false,
             constructors: vec![ir::decl::IrConstructor {
                 visibility: Visibility::Public,
                 params: vec![],
@@ -7275,6 +7370,7 @@ mod tests {
                 throws: vec![],
             }],
             constructors: vec![],
+            is_record: false,
         };
         let child = IrClass {
             name: "Child".into(),
@@ -7286,6 +7382,7 @@ mod tests {
             type_params: vec![],
             fields: vec![],
             methods: vec![],
+            is_record: false,
             constructors: vec![ir::decl::IrConstructor {
                 visibility: Visibility::Public,
                 params: vec![],
@@ -7502,6 +7599,7 @@ mod tests {
                 throws: vec![],
             }],
             constructors: vec![],
+            is_record: false,
         };
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
@@ -7590,6 +7688,7 @@ mod tests {
                 throws: vec![],
             }],
             constructors: vec![],
+            is_record: false,
         };
         module.decls.push(IrDecl::Class(cls));
         gen(&module); // should not panic on abstract method (no body)
@@ -7678,6 +7777,7 @@ mod tests {
             }],
             methods: vec![],
             constructors: vec![],
+            is_record: false,
         };
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);

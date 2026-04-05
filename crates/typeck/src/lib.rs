@@ -118,6 +118,7 @@ fn check_enum(
         fields: enm.fields.clone(),
         methods: enm.methods.clone(),
         constructors: enm.constructor.iter().cloned().collect(),
+        is_record: false,
     };
 
     for method in &mut enm.methods {
@@ -257,8 +258,18 @@ fn check_stmt(
         IrStmt::Return(None) => {}
         IrStmt::If { cond, then_, else_ } => {
             *cond = check_expr(cond.clone(), cls, class_map, enum_map, env)?;
+            // Pattern instanceof: inject the binding variable into the then-branch env.
+            let mut then_env = env.clone();
+            if let IrExpr::InstanceOf {
+                binding: Some(binding_name),
+                check_type,
+                ..
+            } = cond
+            {
+                then_env.insert(binding_name.clone(), check_type.clone());
+            }
             for s in then_.iter_mut() {
-                check_stmt(s, cls, class_map, enum_map, &mut env.clone())?;
+                check_stmt(s, cls, class_map, enum_map, &mut then_env)?;
             }
             if let Some(else_stmts) = else_ {
                 for s in else_stmts.iter_mut() {
@@ -711,11 +722,16 @@ fn check_expr(
             })
         }
 
-        IrExpr::InstanceOf { expr, check_type } => {
+        IrExpr::InstanceOf {
+            expr,
+            check_type,
+            binding,
+        } => {
             let expr = check_expr(*expr, cls, class_map, enum_map, env)?;
             Ok(IrExpr::InstanceOf {
                 expr: Box::new(expr),
                 check_type,
+                binding,
             })
         }
 
@@ -1207,6 +1223,7 @@ mod tests {
                 throws: vec![],
             }],
             constructors: vec![],
+            is_record: false,
         }
     }
 
@@ -1806,6 +1823,7 @@ mod tests {
                         ty: IrType::Class("Object".into()),
                     }),
                     check_type: IrType::Class("String".into()),
+                    binding: None,
                 },
                 then_: vec![],
                 else_: None,
@@ -3264,6 +3282,7 @@ mod tests {
             }],
             methods: vec![],
             constructors: vec![],
+            is_record: false,
         };
         let child = IrClass {
             name: "Child".into(),
@@ -3291,6 +3310,7 @@ mod tests {
                 throws: vec![],
             }],
             constructors: vec![],
+            is_record: false,
         };
         module.decls.push(IrDecl::Class(parent));
         module.decls.push(IrDecl::Class(child));
@@ -3332,6 +3352,7 @@ mod tests {
                 throws: vec![],
             }],
             constructors: vec![],
+            is_record: false,
         };
         let child = IrClass {
             name: "Dog".into(),
@@ -3361,6 +3382,7 @@ mod tests {
                 throws: vec![],
             }],
             constructors: vec![],
+            is_record: false,
         };
         module.decls.push(IrDecl::Class(parent));
         module.decls.push(IrDecl::Class(child));
@@ -3393,6 +3415,7 @@ mod tests {
             fields: vec![],
             methods: vec![],
             constructors: vec![],
+            is_record: false,
         };
         let child = IrClass {
             name: "Sub".into(),
@@ -3424,6 +3447,7 @@ mod tests {
                 throws: vec![],
             }],
             constructors: vec![],
+            is_record: false,
         };
         module.decls.push(IrDecl::Class(parent));
         module.decls.push(IrDecl::Class(child));
@@ -3503,6 +3527,7 @@ mod tests {
                 },
             ],
             constructors: vec![],
+            is_record: false,
         };
         module.decls.push(IrDecl::Class(cls));
         let checked = tc(module);
@@ -3534,6 +3559,7 @@ mod tests {
             fields: vec![],
             methods: vec![],
             constructors: vec![],
+            is_record: false,
         };
         let child = IrClass {
             name: "Derived2".into(),
@@ -3569,6 +3595,7 @@ mod tests {
                 throws: vec![],
             }],
             constructors: vec![],
+            is_record: false,
         };
         module.decls.push(IrDecl::Class(parent));
         module.decls.push(IrDecl::Class(child));

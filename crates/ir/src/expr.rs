@@ -104,6 +104,9 @@ pub enum IrExpr {
     InstanceOf {
         expr: Box<IrExpr>,
         check_type: IrType,
+        /// Optional pattern-matching binding variable (Java 16+ pattern instanceof).
+        #[serde(default)]
+        binding: Option<String>,
     },
 
     // ── Arrays ────────────────────────────────────────────────────────────

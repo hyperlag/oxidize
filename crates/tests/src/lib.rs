@@ -1336,4 +1336,21 @@ Expression calculator tests complete",
             "client created\nrequest built\nmethod=GET",
         );
     }
+
+    // ── Stage 6: Records, Pattern Instanceof, Sealed Classes ─────────────
+
+    #[test]
+    fn test_record_basic() {
+        check("RecordBasic.java", "3\n4\nPoint[x=3, y=4]\n(3,4)");
+    }
+
+    #[test]
+    fn test_pattern_instanceof() {
+        check("PatternInstanceof.java", "42\ndone");
+    }
+
+    #[test]
+    fn test_sealed_class() {
+        check("SealedClass.java", "10\n14");
+    }
 }
