@@ -888,9 +888,18 @@ fn emit_class(
         });
     }
 
-    // Record accessor methods: each component field gets a public getter.
+    // Record accessor methods: each component field gets a public getter,
+    // unless an explicit zero-arg instance method with the same name already
+    // exists (Java allows overriding canonical accessors).
     if cls.is_record {
         for f in cls.fields.iter().filter(|f| !f.is_static) {
+            let already_defined = cls
+                .methods
+                .iter()
+                .any(|m| m.name == f.name && !m.is_static && m.params.is_empty());
+            if already_defined {
+                continue;
+            }
             let fname = ident(&f.name);
             let fty = emit_type(&f.ty);
             method_tokens.push(quote! {
@@ -961,14 +970,16 @@ fn emit_class(
         // Records emit: "ClassName[field1=VALUE1, field2=VALUE2]"
         let instance_fields: Vec<&ir::decl::IrField> =
             cls.fields.iter().filter(|f| !f.is_static).collect();
-        let field_format_parts: Vec<String> =
-            instance_fields.iter().map(|f| format!("{}={{}}", f.name)).collect();
+        let field_format_parts: Vec<String> = instance_fields
+            .iter()
+            .map(|f| format!("{}={{}}", f.name))
+            .collect();
         let format_str = format!("{}[{}]", cls.name, field_format_parts.join(", "));
         let field_refs: Vec<TokenStream> = instance_fields
             .iter()
             .map(|f| {
                 let fn_ = ident(&f.name);
-                quote! { self.#fn_ }
+                quote! { &self.#fn_ }
             })
             .collect();
         quote! {
@@ -1378,31 +1389,36 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
         IrStmt::If { cond, then_, else_ } => {
             // Pattern instanceof: `if (expr instanceof Type name)` injects a
             // binding variable at the start of the then-block.
+            // Evaluate `inst_expr` into a temp to avoid double evaluation.
             if let IrExpr::InstanceOf {
                 expr: inst_expr,
                 check_type,
                 binding: Some(binding_name),
             } = cond
             {
+                let tmp_name = ident("__instanceof_tmp__");
+                let inner_expr = emit_expr(inst_expr)?;
                 let cond_no_binding = IrExpr::InstanceOf {
-                    expr: inst_expr.clone(),
+                    expr: Box::new(IrExpr::Var {
+                        name: "__instanceof_tmp__".to_string(),
+                        ty: inst_expr.ty().clone(),
+                    }),
                     check_type: check_type.clone(),
                     binding: None,
                 };
                 let cond_ts = emit_expr(&cond_no_binding)?;
                 let bname = ident(binding_name);
                 let bty = emit_type(check_type);
-                let inner_expr = emit_expr(inst_expr)?;
-                let binding_decl = quote! { let mut #bname: #bty = #inner_expr.clone(); };
+                let binding_decl = quote! { let mut #bname: #bty = #tmp_name.clone(); };
                 let then_ts = emit_stmts(then_)?;
                 if let Some(else_stmts) = else_ {
                     let else_ts = emit_stmts(else_stmts)?;
                     return Ok(quote! {
-                        if #cond_ts { #binding_decl #(#then_ts)* } else { #(#else_ts)* }
+                        { let #tmp_name = #inner_expr; if #cond_ts { #binding_decl #(#then_ts)* } else { #(#else_ts)* } }
                     });
                 } else {
                     return Ok(quote! {
-                        if #cond_ts { #binding_decl #(#then_ts)* }
+                        { let #tmp_name = #inner_expr; if #cond_ts { #binding_decl #(#then_ts)* } }
                     });
                 }
             }
@@ -3673,7 +3689,9 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             }
         }
 
-        IrExpr::InstanceOf { expr, check_type, .. } => {
+        IrExpr::InstanceOf {
+            expr, check_type, ..
+        } => {
             let inner = emit_expr(expr)?;
             let type_name_str = match check_type {
                 IrType::Class(name) => name.clone(),

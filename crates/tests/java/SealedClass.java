@@ -2,13 +2,13 @@ sealed interface Shape permits Circle, Rect {
     int perimeter();
 }
 
-class Circle implements Shape {
+final class Circle implements Shape {
     public int perimeter() {
         return 10;
     }
 }
 
-class Rect implements Shape {
+final class Rect implements Shape {
     public int perimeter() {
         return 14;
     }

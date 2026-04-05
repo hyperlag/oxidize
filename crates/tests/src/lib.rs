@@ -1341,10 +1341,7 @@ Expression calculator tests complete",
 
     #[test]
     fn test_record_basic() {
-        check(
-            "RecordBasic.java",
-            "3\n4\nPoint[x=3, y=4]\n(3,4)",
-        );
+        check("RecordBasic.java", "3\n4\nPoint[x=3, y=4]\n(3,4)");
     }
 
     #[test]
