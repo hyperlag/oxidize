@@ -12,6 +12,10 @@ use quote::quote;
 use std::cell::Cell;
 use thiserror::Error;
 
+/// Synthetic local-variable name used when lowering a pattern-`instanceof`
+/// condition to avoid evaluating the checked expression twice.
+const INSTANCEOF_TMP: &str = "__instanceof_tmp__";
+
 thread_local! {
     /// Whether the currently-emitted method is static (no `self` receiver).
     static IN_STATIC_METHOD: Cell<bool> = const { Cell::new(false) };
@@ -978,8 +982,8 @@ fn emit_class(
         let field_refs: Vec<TokenStream> = instance_fields
             .iter()
             .map(|f| {
-                let fn_ = ident(&f.name);
-                quote! { &self.#fn_ }
+                let field_ident = ident(&f.name);
+                quote! { &self.#field_ident }
             })
             .collect();
         quote! {
@@ -1396,11 +1400,11 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
                 binding: Some(binding_name),
             } = cond
             {
-                let tmp_name = ident("__instanceof_tmp__");
+                let tmp_name = ident(INSTANCEOF_TMP);
                 let inner_expr = emit_expr(inst_expr)?;
                 let cond_no_binding = IrExpr::InstanceOf {
                     expr: Box::new(IrExpr::Var {
-                        name: "__instanceof_tmp__".to_string(),
+                        name: INSTANCEOF_TMP.to_string(),
                         ty: inst_expr.ty().clone(),
                     }),
                     check_type: check_type.clone(),
