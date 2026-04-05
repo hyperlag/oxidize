@@ -40,6 +40,9 @@ pub struct IrClass {
     pub fields: Vec<IrField>,
     pub methods: Vec<IrMethod>,
     pub constructors: Vec<IrConstructor>,
+    /// Whether this is a Java `record` class (auto-generates accessors / canonical constructor).
+    #[serde(default)]
+    pub is_record: bool,
 }
 
 /// A field declaration.
@@ -159,6 +162,7 @@ mod tests {
                 is_synchronized: false,
             }],
             constructors: vec![],
+            is_record: false,
         });
         let json = serde_json::to_string_pretty(&cls).unwrap();
         let back: IrDecl = serde_json::from_str(&json).unwrap();

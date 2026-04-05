@@ -168,10 +168,117 @@ fn lower_program(node: Node<'_>, src: &[u8]) -> Result<IrModule, ParseError> {
             "enum_declaration" => {
                 module.decls.push(IrDecl::Enum(lower_enum(child, src)?));
             }
+            "record_declaration" => {
+                module.decls.push(IrDecl::Class(lower_record(child, src)?));
+            }
             _ => {} // skip unknown top-level nodes
         }
     }
     Ok(module)
+}
+
+// ─── record ─────────────────────────────────────────────────────────────────
+
+fn lower_record(node: Node<'_>, src: &[u8]) -> Result<IrClass, ParseError> {
+    let name = child_by_field(node, "name")
+        .map(|n| text(n, src).to_owned())
+        .unwrap_or_default();
+    let visibility = extract_visibility(node, src);
+    let type_params = lower_type_params(node, src);
+
+    // Record components share the same grammar as formal_parameters.
+    let params: Vec<IrParam> = child_by_field(node, "parameters")
+        .map(|params_node| lower_params(params_node, src))
+        .unwrap_or_default();
+
+    // Each component becomes a public final instance field.
+    let fields: Vec<IrField> = params
+        .iter()
+        .map(|p| IrField {
+            name: p.name.clone(),
+            ty: p.ty.clone(),
+            visibility: Visibility::Public,
+            is_static: false,
+            is_final: true,
+            is_volatile: false,
+            init: None,
+        })
+        .collect();
+
+    // Canonical constructor: assigns each component to the corresponding field.
+    let constructor_body: Vec<IrStmt> = params
+        .iter()
+        .map(|p| {
+            IrStmt::Expr(IrExpr::Assign {
+                lhs: Box::new(IrExpr::FieldAccess {
+                    receiver: Box::new(IrExpr::Var {
+                        name: "self".to_owned(),
+                        ty: IrType::Unknown,
+                    }),
+                    field_name: p.name.clone(),
+                    ty: p.ty.clone(),
+                }),
+                rhs: Box::new(IrExpr::Var {
+                    name: p.name.clone(),
+                    ty: p.ty.clone(),
+                }),
+                ty: p.ty.clone(),
+            })
+        })
+        .collect();
+
+    let canonical_ctor = IrConstructor {
+        visibility: Visibility::Public,
+        params: params.clone(),
+        body: constructor_body,
+        throws: vec![],
+    };
+
+    // Interfaces the record implements (from `implements` clause).
+    let interfaces: Vec<String> = child_by_field(node, "interfaces")
+        .map(|ifaces_node| {
+            let mut c = ifaces_node.walk();
+            ifaces_node
+                .named_children(&mut c)
+                .flat_map(|n| {
+                    if n.kind() == "type_identifier" || n.kind() == "generic_type" {
+                        vec![n]
+                    } else {
+                        named_children(n)
+                    }
+                })
+                .filter(|n| n.kind() == "type_identifier" || n.kind() == "generic_type")
+                .map(|n| text(n, src).to_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Extra methods declared in the record body.
+    let mut methods: Vec<IrMethod> = Vec::new();
+    if let Some(body) = child_by_field(node, "body") {
+        let mut cur = body.walk();
+        for child in body.named_children(&mut cur) {
+            if child.kind() == "method_declaration" {
+                if let Ok(m) = lower_method(child, src) {
+                    methods.push(m);
+                }
+            }
+        }
+    }
+
+    Ok(IrClass {
+        name,
+        visibility,
+        is_abstract: false,
+        is_final: true,
+        is_record: true,
+        type_params,
+        superclass: None,
+        interfaces,
+        fields,
+        methods,
+        constructors: vec![canonical_ctor],
+    })
 }
 
 // ─── class ──────────────────────────────────────────────────────────────────
@@ -287,6 +394,7 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<(IrClass, Vec<IrEnum>), Par
             fields,
             methods,
             constructors,
+            is_record: false,
         },
         inner_enums,
     ))
@@ -1652,10 +1760,12 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
             let check_type = child_by_field(node, "right")
                 .map(|n| lower_type(n, src))
                 .unwrap_or(IrType::Unknown);
+            let binding = child_by_field(node, "name").map(|n| text(n, src).to_owned());
             let expr = lower_expr(expr_node, src)?;
             Ok(IrExpr::InstanceOf {
                 expr: Box::new(expr),
                 check_type,
+                binding,
             })
         }
 

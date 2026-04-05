@@ -161,6 +161,7 @@ fn arb_ir_expr() -> impl Strategy<Value = IrExpr> {
             (inner.clone(), arb_ir_type()).prop_map(|(expr, check_type)| IrExpr::InstanceOf {
                 expr: Box::new(expr),
                 check_type,
+                binding: None,
             }),
         ]
     })
@@ -276,6 +277,7 @@ fn arb_ir_class() -> impl Strategy<Value = decl::IrClass> {
             fields: vec![],
             methods,
             constructors: vec![],
+            is_record: false,
         })
 }
 
@@ -372,6 +374,7 @@ proptest! {
         let expr = IrExpr::InstanceOf {
             expr: Box::new(IrExpr::LitNull),
             check_type,
+            binding: None,
         };
         prop_assert_eq!(expr.ty(), &IrType::Bool);
     }

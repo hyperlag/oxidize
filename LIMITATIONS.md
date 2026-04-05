@@ -201,16 +201,24 @@ The following advanced enum features are **not** supported:
 
 ### Records (Java 16+)
 
-`record` declarations are not supported.
+Basic `record` declarations are supported. The parser generates an `IrClass`
+with `is_record: true`, a canonical constructor, public final fields, and
+accessor methods (`x()`, `y()`, etc.). `Display` is implemented with the
+`Name[f1=V1, f2=V2]` format. Advanced record features (compact constructors,
+custom `equals`/`hashCode`) are not yet supported.
 
 ### Sealed Classes (Java 17+)
 
-`sealed` / `permits` class hierarchies are not supported.
+Sealed class/interface hierarchies are supported. The `sealed` modifier and
+`permits` clause are accepted by the parser (the constraint is enforced
+only at the Java level; no Rust-level restriction is emitted).
 
 ### Pattern Matching (Java 16+)
 
-- `instanceof` with pattern binding: `if (obj instanceof String s) { ... }`
-- Switch expressions with patterns (Java 21)
+- `instanceof` with a single binding variable is supported:
+  `if (obj instanceof Box x) { ... }` injects `let mut x: Box = obj.clone();`
+  at the start of the then-block.
+- Switch expressions with patterns (Java 21) are not yet supported.
 
 ### Text Blocks (Java 13+)
 
