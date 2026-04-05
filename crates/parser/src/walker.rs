@@ -1,5 +1,8 @@
 //! Top-level parse entry point and CST → IR lowering.
 
+use std::cell::Cell;
+use std::cell::RefCell;
+
 use ir::{
     decl::{
         IrClass, IrConstructor, IrEnum, IrEnumConstant, IrField, IrInterface, IrMethod, IrParam,
@@ -15,6 +18,44 @@ use crate::{
     from_node::{node_kind_to_ir_type, primitive_keyword_to_ir_type},
     ParseError,
 };
+
+// ─── thread-local state for anonymous/inner/local class hoisting ─────────────
+
+// Counter for generating unique anonymous-class names.
+thread_local! {
+    static ANON_COUNTER: Cell<u32> = const { Cell::new(0) };
+}
+
+// Classes to hoist to module level (anonymous, inner, local).
+thread_local! {
+    static HOISTED_DECLS: RefCell<Vec<IrDecl>> = const { RefCell::new(Vec::new()) };
+}
+
+// Stack of enclosing class names (for mangling inner/local class names).
+thread_local! {
+    static OUTER_CLASS_STACK: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+}
+
+fn current_outer_class() -> String {
+    OUTER_CLASS_STACK.with(|s| s.borrow().last().cloned().unwrap_or_default())
+}
+
+fn push_outer_class(name: &str) {
+    OUTER_CLASS_STACK.with(|s| s.borrow_mut().push(name.to_owned()));
+}
+
+fn pop_outer_class() {
+    OUTER_CLASS_STACK.with(|s| { s.borrow_mut().pop(); });
+}
+
+fn hoist_decl(decl: IrDecl) {
+    HOISTED_DECLS.with(|h| h.borrow_mut().push(decl));
+}
+
+fn next_anon_name() -> String {
+    let n = ANON_COUNTER.with(|c| { let v = c.get(); c.set(v + 1); v });
+    format!("__Anon_{n}")
+}
 
 /// Parse `source` as Java and return the tree-sitter tree.
 ///
@@ -45,9 +86,19 @@ pub fn parse_source(source: &str) -> Result<tree_sitter::Tree, ParseError> {
 
 /// Parse `source` as Java and lower it to an [`IrModule`].
 pub fn parse_to_ir(source: &str) -> Result<IrModule, ParseError> {
+    // Reset thread-locals so re-entrant calls (tests) start clean.
+    ANON_COUNTER.with(|c| c.set(0));
+    HOISTED_DECLS.with(|h| h.borrow_mut().clear());
+    OUTER_CLASS_STACK.with(|s| s.borrow_mut().clear());
+
     let tree = parse_source(source)?;
     let root = tree.root_node();
-    lower_program(root, source.as_bytes())
+    let mut module = lower_program(root, source.as_bytes())?;
+
+    // Append any classes hoisted during the walk (anonymous/inner/local).
+    HOISTED_DECLS.with(|h| module.decls.extend(h.borrow_mut().drain(..)));
+
+    Ok(module)
 }
 
 fn find_first_error(node: Node<'_>) -> Option<Node<'_>> {
@@ -288,6 +339,9 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<(IrClass, Vec<IrEnum>), Par
         .map(|n| text(n, src).to_owned())
         .unwrap_or_default();
 
+    // Track the class-name stack so inner/local classes can build mangled names.
+    push_outer_class(&name);
+
     let visibility = extract_visibility(node, src);
 
     let mut is_abstract = false;
@@ -352,6 +406,20 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<(IrClass, Vec<IrEnum>), Par
                 "enum_declaration" => {
                     inner_enums.push(lower_enum(child, src)?);
                 }
+                "class_declaration" => {
+                    // Non-static inner class: hoist to module level with
+                    // mangled name "{Outer}${Inner}".
+                    let outer = current_outer_class();
+                    let (mut inner_cls, inner_sub_enums) = lower_class(child, src)?;
+                    let orig_inner_name = inner_cls.name.clone();
+                    inner_cls.name = format!("{}${}", outer, orig_inner_name);
+                    // Also mangle any inner-of-inner enums.
+                    for mut e in inner_sub_enums {
+                        e.name = format!("{}${}", inner_cls.name, e.name);
+                        inner_enums.push(e);
+                    }
+                    hoist_decl(IrDecl::Class(inner_cls));
+                }
                 "static_initializer" => {
                     // Represent as a synthetic `__clinit__` static method so
                     // the codegen can emit an Once-guarded init function.
@@ -381,6 +449,8 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<(IrClass, Vec<IrEnum>), Par
             }
         }
     }
+
+    pop_outer_class();
 
     Ok((
         IrClass {
@@ -1399,6 +1469,20 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                 Ok(vec![]) // this(args) — deferred
             }
         }
+        // Local class declaration inside a method body: hoist to module level
+        // as "{Outer}__loc__{ClassName}" and emit no statements.
+        "class_declaration" => {
+            let outer = current_outer_class();
+            let (mut cls, sub_enums) = lower_class(node, src)?;
+            let orig_name = cls.name.clone();
+            cls.name = format!("{}__loc__{}", outer, orig_name);
+            for mut e in sub_enums {
+                e.name = format!("{}${}", cls.name, e.name);
+                hoist_decl(IrDecl::Enum(e));
+            }
+            hoist_decl(IrDecl::Class(cls));
+            Ok(vec![])
+        }
         // empty statement or not yet handled
         _ => Ok(vec![]),
     }
@@ -1663,6 +1747,62 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                 })
                 .transpose()?
                 .unwrap_or_default();
+
+            // Anonymous inner class: has a class_body child with method implementations.
+            // Use named_children() helper (which creates the cursor internally)
+            // to avoid borrow conflicts with the node reference from find().
+            let anon_body_opt = named_children(node)
+                .into_iter()
+                .find(|n| n.kind() == "class_body");
+            if let Some(body_node) = anon_body_opt {
+                let anon_name = next_anon_name();
+                // Collect method declarations from the anonymous class body.
+                let mut anon_methods: Vec<IrMethod> = Vec::new();
+                let mut anon_fields: Vec<IrField> = Vec::new();
+                let mut anon_ctors: Vec<IrConstructor> = Vec::new();
+                let mut anon_cur = body_node.walk();
+                for child in body_node.named_children(&mut anon_cur) {
+                    match child.kind() {
+                        "method_declaration" => {
+                            if let Ok(m) = lower_method(child, src) {
+                                anon_methods.push(m);
+                            }
+                        }
+                        "field_declaration" => {
+                            if let Ok(fs) = lower_field(child, src) {
+                                anon_fields.extend(fs);
+                            }
+                        }
+                        "constructor_declaration" => {
+                            if let Ok(ctor) = lower_constructor(child, src) {
+                                anon_ctors.push(ctor);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                // The anonymous class implements the target interface/superclass.
+                let anon_cls = IrClass {
+                    name: anon_name.clone(),
+                    visibility: Visibility::PackagePrivate,
+                    is_abstract: false,
+                    is_final: true,
+                    is_record: false,
+                    type_params: vec![],
+                    superclass: None,
+                    interfaces: vec![class.clone()],
+                    fields: anon_fields,
+                    methods: anon_methods,
+                    constructors: anon_ctors,
+                };
+                hoist_decl(IrDecl::Class(anon_cls));
+                return Ok(IrExpr::New {
+                    class: anon_name,
+                    args,
+                    ty: IrType::Unknown,
+                });
+            }
+
             Ok(IrExpr::New {
                 class,
                 args,

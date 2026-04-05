@@ -65,6 +65,12 @@ thread_local! {
     /// Name of the class currently being emitted (used for static Once guard).
     static CURRENT_CLASS_NAME: std::cell::RefCell<String> =
         const { std::cell::RefCell::new(String::new()) };
+    /// Maps a simple (original Java) class name to its hoisted mangled name
+    /// for the class currently being emitted.  Used to rename `new Inner()`
+    /// → `new Outer$Inner()` and `new Local()` → `new Outer__loc__Local()`.
+    /// Populated per-class before emit_class; cleared afterwards.
+    static INNER_CLASS_MAP: std::cell::RefCell<std::collections::HashMap<String, String>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
 /// Errors produced during code-generation.
@@ -237,7 +243,27 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
                 if cls.methods.iter().any(|m| m.name == "main" && m.is_static) {
                     main_class = Some(cls.name.clone());
                 }
+                // Build INNER_CLASS_MAP for this class:
+                // - inner class  "Outer$Inner"       → "Inner" → "Outer$Inner"
+                // - local class  "Outer__loc__Local" → "Local" → "Outer__loc__Local"
+                {
+                    let outer_prefix = format!("{}$", cls.name);
+                    let loc_prefix = format!("{}__loc__", cls.name);
+                    let mut imap = std::collections::HashMap::new();
+                    for other in &module.decls {
+                        if let IrDecl::Class(c) = other {
+                            if let Some(rest) = c.name.strip_prefix(&outer_prefix) {
+                                // Simple name is everything after the first "$"
+                                imap.insert(rest.to_owned(), c.name.clone());
+                            } else if let Some(rest) = c.name.strip_prefix(&loc_prefix) {
+                                imap.insert(rest.to_owned(), c.name.clone());
+                            }
+                        }
+                    }
+                    INNER_CLASS_MAP.with(|m| *m.borrow_mut() = imap);
+                }
                 items.push(emit_class(cls, &class_map, &interface_map, &enum_map)?);
+                INNER_CLASS_MAP.with(|m| m.borrow_mut().clear());
             }
             IrDecl::Interface(iface) => {
                 items.push(emit_interface(iface)?);
@@ -1373,11 +1399,37 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
     match stmt {
         IrStmt::LocalVar { name, ty, init } => {
             let n = ident(name);
-            let t = emit_type(ty);
             if let Some(init_expr) = init {
+                // When the RHS constructs an anonymous inner class (name starts
+                // with `__Anon_`), or an inner/local class that has been hoisted
+                // and renamed, emit the concrete struct type rather than the
+                // Java-declared type so that Rust accepts the value.
+                let effective_ty_ts = if let IrExpr::New { class: new_cls, .. } = init_expr {
+                    if new_cls.starts_with("__Anon_") {
+                        // Anonymous class: use the concrete anon struct name.
+                        let cid = ident(new_cls);
+                        quote! { #cid }
+                    } else {
+                        // Inner/local class: check if the DECLARED type needs
+                        // renaming (e.g. `Counter` → `InnerClass$Counter`).
+                        let renamed_ty =
+                            if let IrType::Class(ref type_name) = ty {
+                                INNER_CLASS_MAP
+                                    .with(|m| m.borrow().get(type_name.as_str()).cloned())
+                                    .map(IrType::Class)
+                                    .unwrap_or_else(|| ty.clone())
+                            } else {
+                                ty.clone()
+                            };
+                        emit_type(&renamed_ty)
+                    }
+                } else {
+                    emit_type(ty)
+                };
                 let val = emit_expr(init_expr)?;
-                Ok(quote! { let mut #n: #t = #val; })
+                Ok(quote! { let mut #n: #effective_ty_ts = #val; })
             } else {
+                let t = emit_type(ty);
                 Ok(quote! { let mut #n: #t; })
             }
         }
@@ -3436,7 +3488,12 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 "Properties" => Ok(quote! { JProperties::new() }),
                 "Timer" => Ok(quote! { JTimer::new() }),
                 _ => {
-                    let cls = ident(class);
+                    // Check if this refers to an inner/local class that was
+                    // hoisted: "Counter" → "InnerClass$Counter", etc.
+                    let mangled = INNER_CLASS_MAP
+                        .with(|m| m.borrow().get(class.as_str()).cloned())
+                        .unwrap_or_else(|| class.clone());
+                    let cls = ident(&mangled);
                     Ok(quote! { #cls::new(#(#args_ts),*) })
                 }
             }

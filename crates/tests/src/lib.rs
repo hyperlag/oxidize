@@ -1353,4 +1353,19 @@ Expression calculator tests complete",
     fn test_sealed_class() {
         check("SealedClass.java", "10\n14");
     }
+
+    #[test]
+    fn test_anon_inner_class() {
+        check("AnonInnerClass.java", "10\n15");
+    }
+
+    #[test]
+    fn test_inner_class() {
+        check("InnerClass.java", "3");
+    }
+
+    #[test]
+    fn test_local_class() {
+        check("LocalClass.java", "3,4\ndone");
+    }
 }
