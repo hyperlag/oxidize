@@ -233,9 +233,17 @@ on individual `.java` files or flat directories.
 
 ### Inner Classes
 
-- Non-static inner classes (which capture an implicit `this` reference)
-- Anonymous inner classes: `new Runnable() { ... }` (use lambdas instead)
-- Local classes (classes defined inside a method body)
+Non-static inner classes, anonymous inner classes, and local classes are now
+supported with the following limitations:
+
+- **Anonymous inner classes:** supported when implementing an interface with
+  method overrides; outer-scope variable capture is not supported.
+- **Non-static inner classes:** hoisted to top-level structs with a mangled
+  name (`Outer$Inner`); implicit `this` reference to the outer instance is not
+  supported — inner class methods cannot access outer fields.
+- **Local classes:** classes declared inside a method body are hoisted to
+  top-level structs using a mangled name (`Outer__loc__Local`); outer-scope
+  variable capture is not supported.
 
 Static nested classes are supported as top-level classes.
 
