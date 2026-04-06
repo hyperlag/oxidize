@@ -759,9 +759,7 @@ fn check_expr(
             })
         }
 
-        IrExpr::ClassLiteral { class_name } => {
-            Ok(IrExpr::ClassLiteral { class_name })
-        }
+        IrExpr::ClassLiteral { class_name } => Ok(IrExpr::ClassLiteral { class_name }),
     }
 }
 

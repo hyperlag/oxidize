@@ -165,9 +165,9 @@ pattern; real HTTP/1.1 over raw TCP).
 
 **Supported:** `ResourceBundle` / `PropertyResourceBundle` — backed by a
 `HashMap<String, String>`. `ResourceBundle.getBundle(name)` loads
-`<name>.properties` from the current working directory. `new PropertyResourceBundle(InputStream)`
-reads `.properties`-formatted content from a `ByteArrayInputStream`. Methods:
-`getString(key)`, `getObject(key)`, `containsKey(key)`, `keySet()`.
+`<name>.properties` from the current working directory. `new PropertyResourceBundle(ByteArrayInputStream)`
+reads `.properties`-formatted content. Methods: `getString(key)`,
+`getObject(key)`, `containsKey(key)`, `keySet()`.
 
 Additionally supported: `String.format()` (specifiers: `%s`, `%d`, `%f`, `%e`, `%x`, `%o`,
 `%b`, `%n`, `%%`; limited support for width, precision, and flags `-` and `0`),

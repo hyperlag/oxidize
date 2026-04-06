@@ -2003,7 +2003,7 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
             let class_name = node
                 .named_child(0)
                 .map(|n| text(n, src).to_owned())
-                .unwrap_or_else(|| "Object".to_owned());
+                .ok_or_else(|| ParseError::Unsupported("class literal without type".into()))?;
             Ok(IrExpr::ClassLiteral { class_name })
         }
 

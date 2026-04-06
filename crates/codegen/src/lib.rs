@@ -2923,7 +2923,10 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     }
                     // ResourceBundle.getBundle(name)
                     if name == "ResourceBundle" && method_name == "getBundle" {
-                        let a = args_ts.first().cloned().unwrap_or_else(|| quote! { JString::from("") });
+                        let a = args_ts
+                            .first()
+                            .cloned()
+                            .unwrap_or_else(|| quote! { JString::from("") });
                         return Ok(quote! { JResourceBundle::get_bundle(#a) });
                     }
                     // Enum static method calls: Color.values(), Color.valueOf(...)
@@ -2954,6 +2957,11 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     let a = &args_ts[0];
                     let b = &args_ts[1];
                     return Ok(quote! { (#recv_ts).substring_range(#a, #b) });
+                }
+
+                // getBytes() / getBytes("UTF-8") → getBytes() (charset ignored)
+                if method_name == "getBytes" {
+                    return Ok(quote! { (#recv_ts).getBytes() });
                 }
 
                 // BigDecimal.divide(BigDecimal, int, RoundingMode) → divide_with_scale
@@ -3500,12 +3508,18 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 "Timer" => Ok(quote! { JTimer::new() }),
                 "StringWriter" => Ok(quote! { JStringWriter::new() }),
                 "StringReader" => {
-                    let a = args_ts.first().cloned().unwrap_or_else(|| quote! { JString::from("") });
+                    let a = args_ts
+                        .first()
+                        .cloned()
+                        .unwrap_or_else(|| quote! { JString::from("") });
                     Ok(quote! { JStringReader::new(#a) })
                 }
                 "ByteArrayOutputStream" => Ok(quote! { JByteArrayOutputStream::new() }),
                 "ByteArrayInputStream" => {
-                    let a = args_ts.first().cloned().unwrap_or_else(|| quote! { JArray::<i32>::new_default(0) });
+                    let a = args_ts
+                        .first()
+                        .cloned()
+                        .unwrap_or_else(|| quote! { JArray::<i8>::new_default(0) });
                     Ok(quote! { JByteArrayInputStream::new(#a) })
                 }
                 "ResourceBundle" | "PropertyResourceBundle" => {
@@ -3821,9 +3835,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             }
         }
 
-        IrExpr::ClassLiteral { class_name } => {
-            Ok(quote! { JClass::new(#class_name) })
-        }
+        IrExpr::ClassLiteral { class_name } => Ok(quote! { JClass::new(#class_name) }),
     }
 }
 

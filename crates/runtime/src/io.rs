@@ -1158,8 +1158,8 @@ impl Default for JByteArrayInputStream {
 }
 
 impl JByteArrayInputStream {
-    /// Java `new ByteArrayInputStream(byte[])` — the `JArray<i32>` holds the bytes.
-    pub fn new(data: crate::array::JArray<i32>) -> Self {
+    /// Java `new ByteArrayInputStream(byte[])` — the `JArray<i8>` holds the bytes.
+    pub fn new(data: crate::array::JArray<i8>) -> Self {
         let bytes: Vec<u8> = (0..data.length()).map(|i| data.get(i) as u8).collect();
         Self {
             cursor: std::io::Cursor::new(bytes),

@@ -1,6 +1,6 @@
 // ClassLiteralTest.java
 // Tests class literal expressions (Foo.class) producing a JClass descriptor.
-// Expected output (getName returns simple name in translated code):
+// Expected output (getSimpleName() returns the simple name):
 //   String
 //   Integer
 //   int

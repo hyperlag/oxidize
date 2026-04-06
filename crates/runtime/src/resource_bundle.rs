@@ -21,7 +21,12 @@ impl JResourceBundle {
     /// from the current working directory.
     pub fn get_bundle(base_name: JString) -> Self {
         let path = format!("{}.properties", base_name.as_str());
-        let content = std::fs::read_to_string(&path).unwrap_or_default();
+        let content = std::fs::read_to_string(&path).unwrap_or_else(|err| {
+            panic!(
+                "JException:MissingResourceException:failed to load resource bundle '{}': {}",
+                path, err
+            )
+        });
         Self {
             map: parse_properties(&content),
         }
@@ -75,7 +80,7 @@ impl JResourceBundle {
 ///
 /// Supported line formats (after trimming):
 /// - `key=value`
-/// - `key: value`
+/// - `key: value` or `key:value`
 /// - `# comment` / `! comment` — ignored
 /// - blank lines — ignored
 fn parse_properties(content: &str) -> HashMap<String, String> {
@@ -85,14 +90,13 @@ fn parse_properties(content: &str) -> HashMap<String, String> {
         if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('!') {
             continue;
         }
-        if let Some(idx) = trimmed.find('=') {
-            let key = trimmed[..idx].trim().to_owned();
-            let value = trimmed[idx + 1..].trim().to_owned();
-            map.insert(key, value);
-        } else if let Some(idx) = trimmed.find(": ") {
-            let key = trimmed[..idx].trim().to_owned();
-            let value = trimmed[idx + 2..].trim().to_owned();
-            map.insert(key, value);
+        // Use the first '=' if present; otherwise use the first ':'.
+        if let Some(sep_pos) = trimmed.find('=').or_else(|| trimmed.find(':')) {
+            let key = trimmed[..sep_pos].trim().to_owned();
+            let value = trimmed[sep_pos + 1..].trim().to_owned();
+            if !key.is_empty() {
+                map.insert(key, value);
+            }
         }
     }
     map
