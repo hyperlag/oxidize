@@ -758,6 +758,10 @@ fn check_expr(
                 ty: IrType::Unknown,
             })
         }
+
+        IrExpr::ClassLiteral { class_name } => {
+            Ok(IrExpr::ClassLiteral { class_name })
+        }
     }
 }
 

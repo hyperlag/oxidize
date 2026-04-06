@@ -1997,8 +1997,15 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
             }
         }
 
-        // ── class literal (e.g. Day.class) ────────────────────────────────
-        "class_literal" => Err(ParseError::Unsupported("class literal expression".into())),
+        // ── class literal (e.g. String.class, int.class) ─────────────────
+        "class_literal" => {
+            // First named child is the type node (type_identifier, integral_type, etc.)
+            let class_name = node
+                .named_child(0)
+                .map(|n| text(n, src).to_owned())
+                .unwrap_or_else(|| "Object".to_owned());
+            Ok(IrExpr::ClassLiteral { class_name })
+        }
 
         // ── fallback ──────────────────────────────────────────────────────
         other => Err(ParseError::Unsupported(format!(

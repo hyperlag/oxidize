@@ -133,21 +133,24 @@ Map `keySet()`/`values()`/`entrySet()` iteration is supported on `HashMap`,
 known-property resolution), `System.lineSeparator()`, `System.arraycopy()`,
 `ProcessBuilder` / `Process` (subprocess spawn, stdout/stderr capture, exit
 code, working-directory override; `Runtime.getRuntime().exec(String)` is a
-convenience alias).
+convenience alias). Class literals (`Foo.class`) produce a `JClass` descriptor
+with `getSimpleName()`, `getName()`, and `getCanonicalName()` methods;
+`getClass()` is also supported on all generated classes.
 
 ### java.io / java.nio
 
 The following java.io classes are supported: `File`, `FileReader`, `FileWriter`,
 `BufferedReader`, `BufferedWriter`, `PrintWriter`, `FileInputStream`,
-`FileOutputStream`, and `Scanner`. The following java.nio.file classes are
-supported: `Path`, `Paths`, and `Files` (with `readString`, `writeString`,
-`readAllLines`, `write`, `exists`, `isDirectory`, `isRegularFile`, `size`,
-`delete`, `deleteIfExists`, `createDirectory`, `createDirectories`, `copy`,
-`move`).
+`FileOutputStream`, `Scanner`, `StringWriter`, `StringReader`,
+`ByteArrayOutputStream`, and `ByteArrayInputStream`. The following java.nio.file
+classes are supported: `Path`, `Paths`, and `Files` (with `readString`,
+`writeString`, `readAllLines`, `write`, `exists`, `isDirectory`, `isRegularFile`,
+`size`, `delete`, `deleteIfExists`, `createDirectory`, `createDirectories`,
+`copy`, `move`).
 
 The following are **not** supported:
 
-- Abstract `InputStream` / `OutputStream` / `Reader` / `Writer` base classes
+- Abstract `InputStream` / `OutputStream` / `Reader` / `Writer` base classes as polymorphic types
 - `java.nio.channels` (NIO channels and selectors)
 - Serialization (`Serializable`, `ObjectInputStream`, `ObjectOutputStream`)
 
@@ -160,9 +163,13 @@ pattern; real HTTP/1.1 over raw TCP).
 
 ### java.util
 
-- `ResourceBundle`
+**Supported:** `ResourceBundle` / `PropertyResourceBundle` — backed by a
+`HashMap<String, String>`. `ResourceBundle.getBundle(name)` loads
+`<name>.properties` from the current working directory. `new PropertyResourceBundle(InputStream)`
+reads `.properties`-formatted content from a `ByteArrayInputStream`. Methods:
+`getString(key)`, `getObject(key)`, `containsKey(key)`, `keySet()`.
 
-**Supported:** `String.format()` (specifiers: `%s`, `%d`, `%f`, `%e`, `%x`, `%o`,
+Additionally supported: `String.format()` (specifiers: `%s`, `%d`, `%f`, `%e`, `%x`, `%o`,
 `%b`, `%n`, `%%`; limited support for width, precision, and flags `-` and `0`),
 `String.join()`, `System.out.printf()`, `Properties` (`load_string`, `getProperty`,
 `getProperty` with default, `setProperty`, `containsKey`, `stringPropertyNames`, `size`,

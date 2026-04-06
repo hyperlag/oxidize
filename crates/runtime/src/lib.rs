@@ -28,6 +28,7 @@ pub mod process;
 pub mod properties;
 pub mod reflect;
 pub mod regex_support;
+pub mod resource_bundle;
 pub mod set;
 pub mod spliterator;
 pub mod stream;
@@ -52,8 +53,10 @@ pub use enum_map::JEnumMap;
 pub use enum_set::JEnumSet;
 pub use exception::JException;
 pub use io::{
-    JBufferedReader, JBufferedWriter, JFile, JFileInputStream, JFileOutputStream, JFileReader,
+    JBufferedReader, JBufferedWriter, JByteArrayInputStream, JByteArrayOutputStream,
+    JFile, JFileInputStream, JFileOutputStream, JFileReader,
     JFileWriter, JFiles, JPath, JPaths, JPrintWriter, JScanner,
+    JStringReader, JStringWriter,
 };
 pub use iterator::JIterator;
 pub use linked_hash_map::JLinkedHashMap;
@@ -72,6 +75,7 @@ pub use process::{JProcess, JProcessBuilder};
 pub use properties::JProperties;
 pub use reflect::JClass;
 pub use regex_support::{JMatcher, JPattern};
+pub use resource_bundle::JResourceBundle;
 pub use set::JSet;
 pub use spliterator::JSpliterator;
 pub use stream::JStream;

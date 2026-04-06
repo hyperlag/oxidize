@@ -404,6 +404,17 @@ impl JPrintWriter {
         }
     }
 
+    /// Construct pointing at a `JStringWriter` (writes to in-memory buffer).
+    ///
+    /// The `JStringWriter` and this `JPrintWriter` share the same buffer via
+    /// `Rc<RefCell<String>>`, so content written through `pw` is immediately
+    /// visible in `sw.toString()`.
+    pub fn from_string_writer(sw: &JStringWriter) -> Self {
+        Self {
+            inner: Box::new(SharedStringBuf(sw.shared_buf())),
+        }
+    }
+
     /// Java `pw.println(x)`.
     pub fn println(&mut self, s: JString) {
         let _ = writeln!(self.inner, "{}", s);
@@ -953,6 +964,237 @@ impl JFiles {
         std::fs::rename(source.path_buf(), target.path_buf())
             .unwrap_or_else(|e| panic!("JException:IOException:{}", e));
         target.clone()
+    }
+}
+
+// ─── JStringWriter ────────────────────────────────────────────────────────────
+
+/// Java `java.io.StringWriter` — in-memory character writer.
+///
+/// Writes accumulate in a shared `Rc<RefCell<String>>` buffer so that a
+/// `JPrintWriter` constructed from this `JStringWriter` writes into the same
+/// buffer and the content is visible via `sw.toString()` afterwards.
+#[derive(Debug, Clone, Default)]
+pub struct JStringWriter {
+    buf: std::rc::Rc<std::cell::RefCell<String>>,
+}
+
+/// Private adapter that implements `Write` by forwarding into the shared buffer.
+struct SharedStringBuf(std::rc::Rc<std::cell::RefCell<String>>);
+
+impl Write for SharedStringBuf {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let s = String::from_utf8_lossy(buf);
+        self.0.borrow_mut().push_str(&s);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl JStringWriter {
+    /// Java `new StringWriter()`.
+    pub fn new() -> Self {
+        Self {
+            buf: std::rc::Rc::new(std::cell::RefCell::new(String::new())),
+        }
+    }
+
+    /// Java `sw.write(str)`.
+    pub fn write(&mut self, s: JString) {
+        self.buf.borrow_mut().push_str(s.as_str());
+    }
+
+    /// Java `sw.toString()`.
+    pub fn toString(&self) -> JString {
+        JString::from(self.buf.borrow().as_str())
+    }
+
+    /// Java `sw.getBuffer()` — returns current content as a `JString`.
+    pub fn getBuffer(&self) -> JString {
+        self.toString()
+    }
+
+    /// Java `sw.flush()` — no-op for in-memory.
+    pub fn flush(&mut self) {}
+
+    /// Java `sw.close()` — no-op for in-memory.
+    pub fn close(&mut self) {}
+
+    /// Shared buffer reference for use by `JPrintWriter::from_string_writer`.
+    pub(crate) fn shared_buf(&self) -> std::rc::Rc<std::cell::RefCell<String>> {
+        self.buf.clone()
+    }
+}
+
+impl Write for JStringWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let s = String::from_utf8_lossy(buf);
+        self.buf.borrow_mut().push_str(&s);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for JStringWriter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.buf.borrow())
+    }
+}
+
+// ─── JStringReader ────────────────────────────────────────────────────────────
+
+/// Java `java.io.StringReader` — in-memory character reader.
+#[derive(Debug, Clone)]
+pub struct JStringReader {
+    cursor: std::io::Cursor<Vec<u8>>,
+}
+
+impl Default for JStringReader {
+    fn default() -> Self {
+        Self::new(JString::from(""))
+    }
+}
+
+impl JStringReader {
+    /// Java `new StringReader(str)`.
+    pub fn new(s: JString) -> Self {
+        Self {
+            cursor: std::io::Cursor::new(s.as_str().as_bytes().to_vec()),
+        }
+    }
+
+    /// Java `sr.read()` — reads a single character, or -1 at EOF.
+    pub fn read(&mut self) -> i32 {
+        let mut buf = [0u8; 1];
+        match self.cursor.read(&mut buf) {
+            Ok(0) | Err(_) => -1,
+            Ok(_) => buf[0] as i32,
+        }
+    }
+
+    /// Java `sr.close()` — no-op.
+    pub fn close(&mut self) {}
+}
+
+// ─── JByteArrayOutputStream ───────────────────────────────────────────────────
+
+/// Java `java.io.ByteArrayOutputStream` — in-memory byte writer.
+#[derive(Debug, Clone, Default)]
+pub struct JByteArrayOutputStream {
+    buf: Vec<u8>,
+}
+
+impl JByteArrayOutputStream {
+    /// Java `new ByteArrayOutputStream()`.
+    pub fn new() -> Self {
+        Self { buf: Vec::new() }
+    }
+
+    /// Java `baos.write(int b)` — appends a single byte.
+    pub fn write(&mut self, b: i32) {
+        self.buf.push(b as u8);
+    }
+
+    /// Java `baos.size()` — number of bytes written.
+    pub fn size(&self) -> i32 {
+        self.buf.len() as i32
+    }
+
+    /// Java `baos.toString()` — interprets bytes as UTF-8 (lossy).
+    pub fn toString(&self) -> JString {
+        JString::from(String::from_utf8_lossy(&self.buf).as_ref())
+    }
+
+    /// Java `baos.toByteArray()` — returns a copy as a `JArray<i32>`.
+    pub fn toByteArray(&self) -> crate::array::JArray<i32> {
+        let bytes: Vec<i32> = self.buf.iter().map(|&b| b as i32).collect();
+        crate::array::JArray::from_vec(bytes)
+    }
+
+    /// Java `baos.reset()` — clears the buffer.
+    pub fn reset(&mut self) {
+        self.buf.clear();
+    }
+
+    /// Java `baos.flush()` — no-op.
+    pub fn flush(&mut self) {}
+
+    /// Java `baos.close()` — no-op.
+    pub fn close(&mut self) {}
+}
+
+impl Write for JByteArrayOutputStream {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.buf.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for JByteArrayOutputStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", String::from_utf8_lossy(&self.buf))
+    }
+}
+
+// ─── JByteArrayInputStream ────────────────────────────────────────────────────
+
+/// Java `java.io.ByteArrayInputStream` — in-memory byte reader.
+#[derive(Debug, Clone)]
+pub struct JByteArrayInputStream {
+    cursor: std::io::Cursor<Vec<u8>>,
+}
+
+impl Default for JByteArrayInputStream {
+    fn default() -> Self {
+        Self::new(crate::array::JArray::from_vec(vec![]))
+    }
+}
+
+impl JByteArrayInputStream {
+    /// Java `new ByteArrayInputStream(byte[])` — the `JArray<i32>` holds the bytes.
+    pub fn new(data: crate::array::JArray<i32>) -> Self {
+        let bytes: Vec<u8> = (0..data.length()).map(|i| data.get(i) as u8).collect();
+        Self {
+            cursor: std::io::Cursor::new(bytes),
+        }
+    }
+
+    /// Java `bais.read()` — reads a single byte, returns -1 at EOF.
+    pub fn read(&mut self) -> i32 {
+        let mut buf = [0u8; 1];
+        match self.cursor.read(&mut buf) {
+            Ok(0) | Err(_) => -1,
+            Ok(_) => buf[0] as i32,
+        }
+    }
+
+    /// Java `bais.available()`.
+    pub fn available(&self) -> i32 {
+        let pos = self.cursor.position() as usize;
+        let len = self.cursor.get_ref().len();
+        (len.saturating_sub(pos)) as i32
+    }
+
+    /// Java `bais.close()` — no-op.
+    pub fn close(&mut self) {}
+
+    /// Internal: read all remaining bytes (used by `JResourceBundle`).
+    pub(crate) fn read_all_bytes(&mut self) -> Vec<u8> {
+        let pos = self.cursor.position() as usize;
+        self.cursor.get_ref()[pos..].to_vec()
+    }
+}
+
+impl Read for JByteArrayInputStream {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.cursor.read(buf)
     }
 }
 

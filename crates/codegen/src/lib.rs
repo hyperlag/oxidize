@@ -117,6 +117,8 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             JTimer, JTimerTask,
             JZonedDateTime, JZoneId, JClock,
             JHttpClient, JHttpRequestBuilder, JHttpRequest, JHttpResponse,
+            JStringWriter, JStringReader, JByteArrayOutputStream, JByteArrayInputStream,
+            JResourceBundle,
         };
     });
 
@@ -2919,6 +2921,11 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             }
                         };
                     }
+                    // ResourceBundle.getBundle(name)
+                    if name == "ResourceBundle" && method_name == "getBundle" {
+                        let a = args_ts.first().cloned().unwrap_or_else(|| quote! { JString::from("") });
+                        return Ok(quote! { JResourceBundle::get_bundle(#a) });
+                    }
                     // Enum static method calls: Color.values(), Color.valueOf(...)
                     // Resolve through alias map for mangled inner enum names.
                     let canonical_enum =
@@ -3401,7 +3408,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                         Ok(quote! { JPrintWriter::default() })
                     } else {
                         let a = &args_ts[0];
-                        // Check if arg is a FileWriter/File type or a String path
+                        // Check if arg is a FileWriter/File/StringWriter type or a String path
                         let arg_ty = args.first().map(|e| e.ty());
                         match arg_ty {
                             Some(IrType::Class(ref c)) if c == "FileWriter" => {
@@ -3409,6 +3416,9 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             }
                             Some(IrType::Class(ref c)) if c == "File" => {
                                 Ok(quote! { JPrintWriter::from_file(&#a) })
+                            }
+                            Some(IrType::Class(ref c)) if c == "StringWriter" => {
+                                Ok(quote! { JPrintWriter::from_string_writer(&#a) })
                             }
                             _ => Ok(quote! { JPrintWriter::new_from_path(#a) }),
                         }
@@ -3488,6 +3498,31 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 }
                 "Properties" => Ok(quote! { JProperties::new() }),
                 "Timer" => Ok(quote! { JTimer::new() }),
+                "StringWriter" => Ok(quote! { JStringWriter::new() }),
+                "StringReader" => {
+                    let a = args_ts.first().cloned().unwrap_or_else(|| quote! { JString::from("") });
+                    Ok(quote! { JStringReader::new(#a) })
+                }
+                "ByteArrayOutputStream" => Ok(quote! { JByteArrayOutputStream::new() }),
+                "ByteArrayInputStream" => {
+                    let a = args_ts.first().cloned().unwrap_or_else(|| quote! { JArray::<i32>::new_default(0) });
+                    Ok(quote! { JByteArrayInputStream::new(#a) })
+                }
+                "ResourceBundle" | "PropertyResourceBundle" => {
+                    if let Some(a) = args_ts.first() {
+                        let arg_ty = args.first().map(|e| e.ty());
+                        match arg_ty {
+                            Some(IrType::Class(ref c))
+                                if c == "InputStream" || c == "ByteArrayInputStream" =>
+                            {
+                                Ok(quote! { JResourceBundle::from_input_stream(#a) })
+                            }
+                            _ => Ok(quote! { JResourceBundle::get_bundle(#a) }),
+                        }
+                    } else {
+                        Ok(quote! { JResourceBundle::default() })
+                    }
+                }
                 _ => {
                     // Check if this refers to an inner/local class that was
                     // hoisted: "Counter" → "InnerClass$Counter", etc.
@@ -3785,6 +3820,10 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 Ok(quote! { |#(#param_idents),*| { #(#stmts_ts)* #body_ts } })
             }
         }
+
+        IrExpr::ClassLiteral { class_name } => {
+            Ok(quote! { JClass::new(#class_name) })
+        }
     }
 }
 
@@ -4027,6 +4066,15 @@ fn emit_type(ty: &IrType) -> TokenStream {
                 "HttpResponse" => quote! { JHttpResponse },
                 "URI" => quote! { JURL },
                 "Object" => quote! { JavaObject },
+                // Reflection / class literals
+                "Class" | "JClass" => quote! { JClass },
+                // Abstract I/O base types
+                "StringWriter" => quote! { JStringWriter },
+                "StringReader" => quote! { JStringReader },
+                "ByteArrayOutputStream" => quote! { JByteArrayOutputStream },
+                "ByteArrayInputStream" => quote! { JByteArrayInputStream },
+                // ResourceBundle
+                "ResourceBundle" | "PropertyResourceBundle" => quote! { JResourceBundle },
                 _ => {
                     // Resolve through the enum alias map so that a type
                     // annotation like `Season` emits `EnumCompare_Season`
@@ -4119,6 +4167,10 @@ fn emit_type(ty: &IrType) -> TokenStream {
             // Special-case HttpResponse<T> → JHttpResponse (runtime type is not generic).
             if matches!(base.as_ref(), IrType::Class(c) if c == "HttpResponse") {
                 return quote! { JHttpResponse };
+            }
+            // Class<?> / Class<T> → JClass (the runtime type is not generic).
+            if matches!(base.as_ref(), IrType::Class(c) if c == "Class") {
+                return quote! { JClass };
             }
             let b = emit_type(base);
             let a: Vec<TokenStream> = args.iter().map(emit_type).collect();
