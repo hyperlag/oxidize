@@ -131,6 +131,12 @@ pub enum IrExpr {
         rhs: Box<IrExpr>,
         ty: IrType,
     },
+
+    // ── Reflection ────────────────────────────────────────────────────────
+    /// Class literal: `Foo.class` — produces a `JClass` descriptor.
+    ClassLiteral {
+        class_name: String,
+    },
 }
 
 impl IrExpr {
@@ -161,6 +167,7 @@ impl IrExpr {
             | IrExpr::Lambda { ty, .. } => ty,
             IrExpr::Cast { target, .. } => target,
             IrExpr::InstanceOf { .. } => &IrType::Bool,
+            IrExpr::ClassLiteral { .. } => &IrType::Unknown,
         }
     }
 }

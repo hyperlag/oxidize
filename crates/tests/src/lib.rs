@@ -1368,4 +1368,29 @@ Expression calculator tests complete",
     fn test_local_class() {
         check("LocalClass.java", "3,4\ndone");
     }
+
+    // ── Stage 8 ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_class_literal() {
+        check("ClassLiteralTest.java", "String\nInteger\nint");
+    }
+
+    #[test]
+    fn test_string_writer() {
+        check("StringWriterTest.java", "hello world\nfoo bar");
+    }
+
+    #[test]
+    fn test_byte_array_stream() {
+        check("ByteArrayStreamTest.java", "hi\n2");
+    }
+
+    #[test]
+    fn test_resource_bundle() {
+        check(
+            "ResourceBundleTest.java",
+            "hello\ngoodbye\n42\ntrue\nfalse\ngoodbye",
+        );
+    }
 }

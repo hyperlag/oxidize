@@ -85,6 +85,14 @@ impl JString {
         JString::from(self.0.trim_matches(|c: char| c <= ' '))
     }
 
+    /// Java `String.getBytes()` — returns the UTF-8 byte representation as a
+    /// `JArray<i8>`. Any charset argument in the Java source is ignored by
+    /// codegen (UTF-8 is always used).
+    #[allow(non_snake_case)]
+    pub fn getBytes(&self) -> crate::array::JArray<i8> {
+        crate::array::JArray::from_vec(self.0.as_bytes().iter().map(|&b| b as i8).collect())
+    }
+
     /// Java `String.contains(CharSequence s)`.
     pub fn contains_str(&self, s: &str) -> bool {
         self.0.contains(s)
