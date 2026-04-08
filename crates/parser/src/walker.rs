@@ -2132,7 +2132,7 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                     "identifier" => {
                         // Convention: Java class names start with uppercase.
                         let name = text(obj, src);
-                        if name.chars().next().map_or(false, char::is_uppercase) {
+                        if name.chars().next().is_some_and(char::is_uppercase) {
                             (Some(name.to_owned()), None)
                         } else {
                             (None, lower_expr(obj, src).ok().map(Box::new))
