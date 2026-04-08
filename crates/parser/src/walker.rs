@@ -546,12 +546,11 @@ fn lower_interface(node: Node<'_>, src: &[u8]) -> Result<IrInterface, ParseError
                     .map(|n| text(*n, src))
                     .next()
                     .unwrap_or("");
-                let has_default_modifier = modifiers_text
+                let modifier_tokens: Vec<&str> = modifiers_text
                     .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
-                    .any(|part| part == "default");
-                let has_static_modifier = modifiers_text
-                    .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
-                    .any(|part| part == "static");
+                    .collect();
+                let has_default_modifier = modifier_tokens.contains(&"default");
+                let has_static_modifier = modifier_tokens.contains(&"static");
                 if m.body.is_some() && has_default_modifier && !has_static_modifier {
                     m.is_default = true;
                 }

@@ -3874,6 +3874,8 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 Ok(quote! { |__x0| #cident::#mident(__x0) })
             } else if let Some(recv) = target {
                 let recv_ts = emit_expr(recv)?;
+                // `mut` is required because generated instance methods take `&mut self`;
+                // no `.clone()` needed since the receiver is moved into the closure.
                 Ok(quote! { { let mut __ref = #recv_ts; move |__x0| __ref.#mident(__x0) } })
             } else {
                 Err(CodegenError::Unsupported(
