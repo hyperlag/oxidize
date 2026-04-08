@@ -137,6 +137,32 @@ pub enum IrExpr {
     ClassLiteral {
         class_name: String,
     },
+
+    // ── Switch expression (Java 14+) ──────────────────────────────────────
+    /// `switch(expr) { case A -> rhs; case B, C -> rhs2; default -> rhs3; }`
+    /// used as a value.  Each arm is `(pattern_expr, result_expr)`.
+    SwitchExpr {
+        expr: Box<IrExpr>,
+        /// Non-default arms: `(match_value, result_body)`.
+        arms: Vec<(IrExpr, IrExpr)>,
+        /// Body for the `default ->` arm (if present).
+        default: Option<Box<IrExpr>>,
+        ty: IrType,
+    },
+
+    // ── Method references (Java 8+) ───────────────────────────────────────
+    /// `ClassName::method`, `object::method`, or `ClassName::new`.
+    ///
+    /// Emitted as a single-argument closure in the generated Rust.
+    MethodRef {
+        /// Class name for static method refs and constructor refs.
+        class_name: Option<String>,
+        /// Receiver expression for bound instance method refs.
+        target: Option<Box<IrExpr>>,
+        /// The referenced method name, or `"new"` for constructor refs.
+        method_name: String,
+        ty: IrType,
+    },
 }
 
 impl IrExpr {
@@ -168,6 +194,8 @@ impl IrExpr {
             IrExpr::Cast { target, .. } => target,
             IrExpr::InstanceOf { .. } => &IrType::Bool,
             IrExpr::ClassLiteral { .. } => &IrType::Unknown,
+            IrExpr::SwitchExpr { ty, .. } => ty,
+            IrExpr::MethodRef { ty, .. } => ty,
         }
     }
 }

@@ -72,6 +72,9 @@ pub struct IrMethod {
     /// `None` for abstract or interface methods.
     pub body: Option<Vec<IrStmt>>,
     pub throws: Vec<String>,
+    /// `true` for `default` methods in interfaces (Java 8+).
+    #[serde(default)]
+    pub is_default: bool,
 }
 
 /// A constructor declaration.
@@ -160,6 +163,7 @@ mod tests {
                 body: Some(vec![]),
                 throws: vec![],
                 is_synchronized: false,
+                is_default: false,
             }],
             constructors: vec![],
             is_record: false,

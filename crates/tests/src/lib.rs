@@ -1393,4 +1393,29 @@ Expression calculator tests complete",
             "hello\ngoodbye\n42\ntrue\nfalse\ngoodbye",
         );
     }
+
+    // ── Stage 9 ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_var_keyword() {
+        check("VarKeyword.java", "42\nhello\ntrue\n20\n15");
+    }
+
+    #[test]
+    fn test_interface_default() {
+        check(
+            "InterfaceDefault.java",
+            "Hello, Alice!\nFarewell, Alice.\nHello, Bob!\nGoodbye, Bob.",
+        );
+    }
+
+    #[test]
+    fn test_switch_expression() {
+        check("SwitchExpression.java", "Wednesday\ntwo\nB");
+    }
+
+    #[test]
+    fn test_method_reference() {
+        check("MethodReference.java", "alpha\nbeta\ngamma");
+    }
 }

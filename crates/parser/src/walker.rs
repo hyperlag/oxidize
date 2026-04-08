@@ -477,7 +477,17 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<(IrClass, Vec<IrEnum>), Par
                         return_ty: IrType::Void,
                         body: Some(body_stmts),
                         throws: vec![],
+                        is_default: false,
                     });
+                }
+                "interface_declaration" => {
+                    // Inner interface: hoist to module level with mangled name
+                    // "{Outer}${Interface}" so codegen can find it in interface_map.
+                    let outer = full_outer_class_prefix();
+                    let mut iface = lower_interface(child, src)?;
+                    let orig_name = iface.name.clone();
+                    iface.name = format!("{}${}", outer, orig_name);
+                    hoist_decl(IrDecl::Interface(iface));
                 }
                 _ => {}
             }
@@ -526,7 +536,13 @@ fn lower_interface(node: Node<'_>, src: &[u8]) -> Result<IrInterface, ParseError
         let mut cur = body.walk();
         for child in body.named_children(&mut cur) {
             if child.kind() == "method_declaration" {
-                methods.push(lower_method(child, src)?);
+                let mut m = lower_method(child, src)?;
+                // Java 8+ default methods have a body; mark them so codegen
+                // can emit them as provided Rust trait methods.
+                if m.body.is_some() {
+                    m.is_default = true;
+                }
+                methods.push(m);
             }
         }
     }
@@ -779,6 +795,7 @@ fn lower_method(node: Node<'_>, src: &[u8]) -> Result<IrMethod, ParseError> {
         return_ty,
         body,
         throws,
+        is_default: false,
     })
 }
 
@@ -894,6 +911,10 @@ fn lower_type(node: Node<'_>, src: &[u8]) -> IrType {
         }
         "type_identifier" => {
             let t = text(node, src);
+            // Java 10+ `var` keyword: treat as unknown (inferred from initialiser).
+            if t == "var" {
+                return IrType::Unknown;
+            }
             node_kind_to_ir_type(node.kind(), t)
         }
         "generic_type" => {
@@ -1179,6 +1200,56 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                                 if let Ok(e) = lower_expr(val_node, src) {
                                     current_values.push(e);
                                 }
+                            }
+                        }
+                    }
+                    "switch_rule" => {
+                        // Arrow-form arm (Java 14+): `case A -> body` or `default -> body`.
+                        // Each switch_rule is a self-contained arm; flush any pending
+                        // colon-form state first.
+                        if !current_stmts.is_empty() || !current_values.is_empty() {
+                            if is_default {
+                                default = Some(current_stmts.clone());
+                            }
+                            for val in current_values.drain(..) {
+                                cases.push(SwitchCase {
+                                    value: val,
+                                    body: current_stmts.clone(),
+                                });
+                            }
+                            current_stmts.clear();
+                            is_default = false;
+                        }
+                        // First named child is the switch_label; last is the body.
+                        let label_node = child.named_child(0);
+                        let body_count = child.named_child_count();
+                        let body_child = if body_count > 1 {
+                            child.named_child(body_count - 1)
+                        } else {
+                            None
+                        };
+                        let arm_stmts = if let Some(bc) = body_child {
+                            match bc.kind() {
+                                "block" => lower_block(bc, src)?,
+                                _ => lower_stmt(bc, src)?,
+                            }
+                        } else {
+                            vec![]
+                        };
+                        let label_text = label_node.map(|n| text(n, src)).unwrap_or_default();
+                        if label_text.contains("default") {
+                            default = Some(arm_stmts);
+                        } else if let Some(lbl) = label_node {
+                            // Each case value in the label becomes its own arm.
+                            let case_vals: Vec<IrExpr> = named_children(lbl)
+                                .into_iter()
+                                .filter_map(|vn| lower_expr(vn, src).ok())
+                                .collect();
+                            for val in case_vals {
+                                cases.push(SwitchCase {
+                                    value: val,
+                                    body: arm_stmts.clone(),
+                                });
                             }
                         }
                     }
@@ -2005,6 +2076,130 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                 .map(|n| text(n, src).to_owned())
                 .ok_or_else(|| ParseError::Unsupported("class literal without type".into()))?;
             Ok(IrExpr::ClassLiteral { class_name })
+        }
+
+        // ── method reference (Java 8+): Foo::bar, obj::bar, Foo::new ─────
+        "method_reference" => {
+            let obj_node = child_by_field(node, "object").or_else(|| node.named_child(0));
+            // Method name: last named child (identifier or "new").
+            let named_count = node.named_child_count();
+            let method_name = if named_count >= 2 {
+                node.named_child(named_count - 1)
+                    .map(|n| text(n, src).to_owned())
+                    .unwrap_or_default()
+            } else {
+                child_by_field(node, "name")
+                    .map(|n| text(n, src).to_owned())
+                    .unwrap_or_else(|| {
+                        let raw = text(node, src);
+                        raw.rfind("::")
+                            .map(|i| raw[i + 2..].trim().to_owned())
+                            .unwrap_or_default()
+                    })
+            };
+
+            let (class_name, target) = if let Some(obj) = obj_node {
+                match obj.kind() {
+                    "type_identifier"
+                    | "generic_type"
+                    | "void_type"
+                    | "integral_type"
+                    | "floating_point_type"
+                    | "boolean_type"
+                    | "array_type" => {
+                        let cn = if obj.kind() == "generic_type" {
+                            obj.named_child(0)
+                                .map(|n| text(n, src))
+                                .unwrap_or_else(|| text(obj, src))
+                        } else {
+                            text(obj, src)
+                        }
+                        .to_owned();
+                        (Some(cn), None)
+                    }
+                    "identifier" => {
+                        // Convention: Java class names start with uppercase.
+                        let name = text(obj, src);
+                        if name.chars().next().map_or(false, char::is_uppercase) {
+                            (Some(name.to_owned()), None)
+                        } else {
+                            (None, lower_expr(obj, src).ok().map(Box::new))
+                        }
+                    }
+                    _ => (None, lower_expr(obj, src).ok().map(Box::new)),
+                }
+            } else {
+                (None, None)
+            };
+
+            Ok(IrExpr::MethodRef {                class_name,
+                target,
+                method_name,
+                ty: IrType::Unknown,
+            })
+        }
+
+        // ── switch expression (Java 14+) used as a value ──────────────────
+        "switch_expression" => {
+            let cond_node = child_by_field(node, "condition")
+                .map(|n| {
+                    let inner = if n.kind() == "parenthesized_expression" {
+                        n.named_child(0).unwrap_or(n)
+                    } else {
+                        n
+                    };
+                    lower_expr(inner, src)
+                })
+                .transpose()?
+                .unwrap_or(IrExpr::LitNull);
+
+            let body_node = child_by_field(node, "body").unwrap_or(node);
+            let mut arms: Vec<(IrExpr, IrExpr)> = Vec::new();
+            let mut sw_default: Option<Box<IrExpr>> = None;
+
+            let mut cur = body_node.walk();
+            for child in body_node.named_children(&mut cur) {
+                if child.kind() != "switch_rule" {
+                    continue;
+                }
+                let label_node = child.named_child(0);
+                let label_text = label_node.map(|n| text(n, src)).unwrap_or_default();
+                let body_count = child.named_child_count();
+                let body_child = if body_count > 1 {
+                    child.named_child(body_count - 1)
+                } else {
+                    None
+                };
+                let arm_expr = if let Some(bc) = body_child {
+                    match bc.kind() {
+                        "expression_statement" => bc
+                            .named_child(0)
+                            .map(|e| lower_expr(e, src))
+                            .transpose()?
+                            .unwrap_or(IrExpr::Unit),
+                        "block" => IrExpr::Unit,
+                        _ => lower_expr(bc, src).unwrap_or(IrExpr::Unit),
+                    }
+                } else {
+                    IrExpr::Unit
+                };
+                if label_text.contains("default") {
+                    sw_default = Some(Box::new(arm_expr));
+                } else if let Some(lbl) = label_node {
+                    for val_node in named_children(lbl) {
+                        if let Ok(e) = lower_expr(val_node, src) {
+                            arms.push((e, arm_expr.clone()));
+                        }
+                    }
+                }
+            }
+
+            Ok(IrExpr::SwitchExpr {
+                expr: Box::new(cond_node),
+                arms,
+                default: sw_default,
+                ty: IrType::Unknown,
+            })
         }
 
         // ── fallback ──────────────────────────────────────────────────────

@@ -135,17 +135,20 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
         })
         .collect();
 
-    let interface_map: std::collections::HashMap<String, &IrInterface> = module
-        .decls
-        .iter()
-        .filter_map(|d| {
+    let interface_map: std::collections::HashMap<String, &IrInterface> = {
+        let mut map = std::collections::HashMap::new();
+        for d in &module.decls {
             if let IrDecl::Interface(i) = d {
-                Some((i.name.clone(), i))
-            } else {
-                None
+                // Full mangled name: "Outer$Greeter"
+                map.insert(i.name.clone(), i);
+                // Simple-name alias for inner interfaces: "Greeter" → same entry.
+                if let Some(simple) = i.name.rfind('$').map(|idx| &i.name[idx + 1..]) {
+                    map.entry(simple.to_owned()).or_insert(i);
+                }
             }
-        })
-        .collect();
+        }
+        map
+    };
 
     let enum_map: std::collections::HashMap<String, &IrEnum> = module
         .decls
@@ -321,13 +324,25 @@ fn emit_interface(iface: &IrInterface) -> Result<TokenStream, CodegenError> {
             let mname = ident(&m.name);
             let params = emit_params_sig(&m.params);
             let ret_ty = emit_type(&m.return_ty);
-            if m.return_ty == IrType::Void {
-                quote! { fn #mname(&mut self, #(#params),*); }
+            if m.is_default {
+                // Java 8+ default method: emit as a Rust trait method with a body.
+                let body = m
+                    .body
+                    .as_deref()
+                    .map(emit_stmts)
+                    .unwrap_or_else(|| Ok(vec![]))?;
+                if m.return_ty == IrType::Void {
+                    Ok(quote! { fn #mname(&mut self, #(#params),*) { #(#body)* } })
+                } else {
+                    Ok(quote! { fn #mname(&mut self, #(#params),*) -> #ret_ty { #(#body)* } })
+                }
+            } else if m.return_ty == IrType::Void {
+                Ok(quote! { fn #mname(&mut self, #(#params),*); })
             } else {
-                quote! { fn #mname(&mut self, #(#params),*) -> #ret_ty; }
+                Ok(quote! { fn #mname(&mut self, #(#params),*) -> #ret_ty; })
             }
         })
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(quote! {
         pub trait #name {
             #(#method_sigs)*
@@ -567,7 +582,7 @@ fn emit_enum(
     let mut trait_impls: Vec<TokenStream> = Vec::new();
     for iface_name in &enm.interfaces {
         if let Some(iface) = interface_map.get(iface_name.as_str()) {
-            let iface_ident = ident(iface_name);
+            let iface_ident = ident(&iface.name);
             let impl_methods_ts: Vec<TokenStream> = iface
                 .methods
                 .iter()
@@ -958,7 +973,9 @@ fn emit_class(
     let mut trait_impls: Vec<TokenStream> = Vec::new();
     for iface_name in &cls.interfaces {
         if let Some(iface) = interface_map.get(iface_name) {
-            let iface_ident = ident(iface_name);
+            // Use the canonical (potentially mangled) name from the IrInterface,
+            // since that is what emit_interface used to declare the trait.
+            let iface_ident = ident(&iface.name);
             let impl_methods: Vec<TokenStream> = iface
                 .methods
                 .iter()
@@ -969,22 +986,27 @@ fn emit_class(
                     match body_method {
                         Some(m) => emit_trait_method(m),
                         None => {
-                            // Provide a panic stub for unimplemented methods
-                            let mname = ident(&iface_method.name);
-                            let params = emit_params(&iface_method.params);
-                            let ret_ty = emit_type(&iface_method.return_ty);
-                            if iface_method.return_ty == IrType::Void {
-                                Ok(quote! {
-                                    fn #mname(&mut self, #(#params),*) {
-                                        unimplemented!()
-                                    }
-                                })
+                            if iface_method.is_default {
+                                // Use the default method body from the interface.
+                                emit_trait_method(iface_method)
                             } else {
-                                Ok(quote! {
-                                    fn #mname(&mut self, #(#params),*) -> #ret_ty {
-                                        unimplemented!()
-                                    }
-                                })
+                                // Provide a panic stub for unimplemented methods
+                                let mname = ident(&iface_method.name);
+                                let params = emit_params(&iface_method.params);
+                                let ret_ty = emit_type(&iface_method.return_ty);
+                                if iface_method.return_ty == IrType::Void {
+                                    Ok(quote! {
+                                        fn #mname(&mut self, #(#params),*) {
+                                            unimplemented!()
+                                        }
+                                    })
+                                } else {
+                                    Ok(quote! {
+                                        fn #mname(&mut self, #(#params),*) -> #ret_ty {
+                                            unimplemented!()
+                                        }
+                                    })
+                                }
                             }
                         }
                     }
@@ -3836,6 +3858,53 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
         }
 
         IrExpr::ClassLiteral { class_name } => Ok(quote! { JClass::new(#class_name) }),
+
+        IrExpr::MethodRef {
+            class_name,
+            target,
+            method_name,
+            ..
+        } => {
+            let mident = ident(method_name);
+            if method_name == "new" {
+                let cident = ident(class_name.as_deref().unwrap_or("Unknown"));
+                Ok(quote! { |__x0| #cident::new(__x0) })
+            } else if let Some(cls) = class_name {
+                let cident = ident(cls);
+                Ok(quote! { |__x0| #cident::#mident(__x0) })
+            } else if let Some(recv) = target {
+                let recv_ts = emit_expr(recv)?;
+                Ok(quote! { { let __ref = #recv_ts.clone(); move |__x0| __ref.#mident(__x0) } })
+            } else {
+                Err(CodegenError::Unsupported(
+                    "method reference without class or target".into(),
+                ))
+            }
+        }
+
+        IrExpr::SwitchExpr {
+            expr,
+            arms,
+            default,
+            ..
+        } => {
+            let scrutinee = emit_expr(expr)?;
+            let arm_tokens = arms
+                .iter()
+                .map(|(pat, body)| {
+                    let p = emit_expr(pat)?;
+                    let b = emit_expr(body)?;
+                    Ok(quote! { #p => #b, })
+                })
+                .collect::<Result<Vec<_>, CodegenError>>()?;
+            let default_arm = if let Some(d) = default {
+                let d = emit_expr(d)?;
+                quote! { _ => #d, }
+            } else {
+                quote! { _ => unreachable!(), }
+            };
+            Ok(quote! { match #scrutinee { #(#arm_tokens)* #default_arm } })
+        }
     }
 }
 
@@ -4373,6 +4442,7 @@ mod tests {
                 return_ty: IrType::Void,
                 body: Some(body),
                 throws: vec![],
+                is_default: false,
             }],
             constructors: vec![],
             is_record: false,
@@ -4870,6 +4940,7 @@ mod tests {
             return_ty: IrType::Void,
             body: Some(vec![]),
             throws: vec![],
+            is_default: false,
         }];
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
@@ -4899,6 +4970,7 @@ mod tests {
                 return_ty: IrType::String,
                 body: None,
                 throws: vec![],
+                is_default: false,
             }],
         }));
         let code = gen(&module);
@@ -5387,6 +5459,7 @@ mod tests {
             return_ty: IrType::Void,
             body: Some(vec![]),
             throws: vec![],
+            is_default: false,
         });
         // Make the main method call helper()
         cls.methods[0].body = Some(vec![IrStmt::Expr(IrExpr::MethodCall {
@@ -5438,6 +5511,7 @@ mod tests {
                 return_ty: IrType::String,
                 body: Some(vec![IrStmt::Return(Some(IrExpr::LitString("...".into())))]),
                 throws: vec![],
+                is_default: false,
             }],
             constructors: vec![],
             is_record: false,
@@ -5468,6 +5542,7 @@ mod tests {
                 return_ty: IrType::Void,
                 body: Some(vec![]),
                 throws: vec![],
+                is_default: false,
             }],
             constructors: vec![],
             is_record: false,
@@ -5533,6 +5608,7 @@ mod tests {
                 return_ty: IrType::String,
                 body: None,
                 throws: vec![],
+                is_default: false,
             }],
         }));
         let cls = IrClass {
@@ -5557,6 +5633,7 @@ mod tests {
                     return_ty: IrType::String,
                     body: Some(vec![IrStmt::Return(Some(IrExpr::LitString("hi".into())))]),
                     throws: vec![],
+                    is_default: false,
                 },
                 IrMethod {
                     name: "main".into(),
@@ -5574,6 +5651,7 @@ mod tests {
                     return_ty: IrType::Void,
                     body: Some(vec![]),
                     throws: vec![],
+                    is_default: false,
                 },
             ],
             constructors: vec![],
@@ -5828,6 +5906,7 @@ mod tests {
                 ty: IrType::Int,
             })]),
             throws: vec![],
+            is_default: false,
         });
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
@@ -5857,6 +5936,7 @@ mod tests {
                 "Point".into(),
             )))]),
             throws: vec![],
+            is_default: false,
         }];
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
@@ -6022,6 +6102,7 @@ mod tests {
                 return_ty: IrType::Void,
                 body: Some(vec![]),
                 throws: vec![],
+                is_default: false,
             }],
             is_record: false,
             constructors: vec![IrConstructor {
@@ -7490,6 +7571,7 @@ mod tests {
                 return_ty: IrType::String,
                 body: Some(vec![IrStmt::Return(Some(IrExpr::LitString("hi".into())))]),
                 throws: vec![],
+                is_default: false,
             }],
             constructors: vec![],
             is_record: false,
@@ -7719,6 +7801,7 @@ mod tests {
                     ty: IrType::Atomic(Box::new(IrType::Int)),
                 }))]),
                 throws: vec![],
+                is_default: false,
             }],
             constructors: vec![],
             is_record: false,
@@ -7754,6 +7837,7 @@ mod tests {
                     return_ty: IrType::Int,
                     body: None,
                     throws: vec![],
+                    is_default: false,
                 },
                 ir::decl::IrMethod {
                     name: "reset".into(),
@@ -7767,6 +7851,7 @@ mod tests {
                     return_ty: IrType::Void,
                     body: None,
                     throws: vec![],
+                    is_default: false,
                 },
             ],
         };
@@ -7808,6 +7893,7 @@ mod tests {
                 return_ty: IrType::Void,
                 body: None,
                 throws: vec![],
+                is_default: false,
             }],
             constructors: vec![],
             is_record: false,
