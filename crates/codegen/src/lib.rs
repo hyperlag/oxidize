@@ -3874,7 +3874,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 Ok(quote! { |__x0| #cident::#mident(__x0) })
             } else if let Some(recv) = target {
                 let recv_ts = emit_expr(recv)?;
-                Ok(quote! { { let __ref = #recv_ts.clone(); move |__x0| __ref.#mident(__x0) } })
+                Ok(quote! { { let mut __ref = #recv_ts; move |__x0| __ref.#mident(__x0) } })
             } else {
                 Err(CodegenError::Unsupported(
                     "method reference without class or target".into(),

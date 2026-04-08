@@ -236,10 +236,11 @@ Switch expressions with patterns (Java 21) are not yet supported.
 
 ### Method References (Java 8+)
 
-Static method references (`ClassName::method`), instance method references
-(`obj::method`), and constructor references (`ClassName::new`) are supported.
-They lower to single-argument Rust closures. Multi-argument method references
-are not yet supported.
+Static method references (`ClassName::method`) and constructor references
+(`ClassName::new`) are supported. Bound instance method references
+(`obj::method`) are not yet supported. Supported method references lower to
+single-argument Rust closures. Multi-argument method references are not yet
+supported.
 
 ### Interface Default Methods (Java 8+)
 

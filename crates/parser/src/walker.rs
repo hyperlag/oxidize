@@ -537,9 +537,22 @@ fn lower_interface(node: Node<'_>, src: &[u8]) -> Result<IrInterface, ParseError
         for child in body.named_children(&mut cur) {
             if child.kind() == "method_declaration" {
                 let mut m = lower_method(child, src)?;
-                // Java 8+ default methods have a body; mark them so codegen
-                // can emit them as provided Rust trait methods.
-                if m.body.is_some() {
+                // Only true Java default methods should be marked as inheritable
+                // default trait methods. Interface methods with bodies can also
+                // be `static` (and are therefore not defaults).
+                let modifiers_text = named_children(child)
+                    .iter()
+                    .filter(|n| n.kind() == "modifiers")
+                    .map(|n| text(*n, src))
+                    .next()
+                    .unwrap_or("");
+                let has_default_modifier = modifiers_text
+                    .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                    .any(|part| part == "default");
+                let has_static_modifier = modifiers_text
+                    .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                    .any(|part| part == "static");
+                if m.body.is_some() && has_default_modifier && !has_static_modifier {
                     m.is_default = true;
                 }
                 methods.push(m);
@@ -1243,8 +1256,8 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                             // Each case value in the label becomes its own arm.
                             let case_vals: Vec<IrExpr> = named_children(lbl)
                                 .into_iter()
-                                .filter_map(|vn| lower_expr(vn, src).ok())
-                                .collect();
+                                .map(|vn| lower_expr(vn, src))
+                                .collect::<Result<Vec<_>, _>>()?;
                             for val in case_vals {
                                 cases.push(SwitchCase {
                                     value: val,
@@ -2132,7 +2145,8 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                 (None, None)
             };
 
-            Ok(IrExpr::MethodRef {                class_name,
+            Ok(IrExpr::MethodRef {
+                class_name,
                 target,
                 method_name,
                 ty: IrType::Unknown,
@@ -2177,7 +2191,12 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                             .map(|e| lower_expr(e, src))
                             .transpose()?
                             .unwrap_or(IrExpr::Unit),
-                        "block" => IrExpr::Unit,
+                        "block" => {
+                            return Err(ParseError::Unsupported(
+                                "switch expression block arms require `yield` and are not yet supported"
+                                    .into(),
+                            ))
+                        }
                         _ => lower_expr(bc, src).unwrap_or(IrExpr::Unit),
                     }
                 } else {
@@ -2187,9 +2206,8 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                     sw_default = Some(Box::new(arm_expr));
                 } else if let Some(lbl) = label_node {
                     for val_node in named_children(lbl) {
-                        if let Ok(e) = lower_expr(val_node, src) {
-                            arms.push((e, arm_expr.clone()));
-                        }
+                        let e = lower_expr(val_node, src)?;
+                        arms.push((e, arm_expr.clone()));
                     }
                 }
             }
