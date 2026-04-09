@@ -256,6 +256,7 @@ fn arb_ir_method() -> impl Strategy<Value = decl::IrMethod> {
                 return_ty,
                 body: Some(body),
                 throws: vec![],
+                is_default: false,
             },
         )
 }

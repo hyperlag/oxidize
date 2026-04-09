@@ -760,6 +760,55 @@ fn check_expr(
         }
 
         IrExpr::ClassLiteral { class_name } => Ok(IrExpr::ClassLiteral { class_name }),
+
+        IrExpr::MethodRef {
+            class_name,
+            target,
+            method_name,
+            ..
+        } => {
+            let checked_target = target
+                .map(|t| check_expr(*t, cls, class_map, enum_map, env).map(Box::new))
+                .transpose()?;
+            Ok(IrExpr::MethodRef {
+                class_name,
+                target: checked_target,
+                method_name,
+                ty: IrType::Unknown,
+            })
+        }
+
+        IrExpr::SwitchExpr {
+            expr,
+            arms,
+            default,
+            ..
+        } => {
+            let checked_expr = check_expr(*expr, cls, class_map, enum_map, env)?;
+            let checked_arms = arms
+                .into_iter()
+                .map(|(pat, body)| {
+                    let p = check_expr(pat, cls, class_map, enum_map, env)?;
+                    let b = check_expr(body, cls, class_map, enum_map, env)?;
+                    Ok::<_, TypeckError>((p, b))
+                })
+                .collect::<Result<Vec<_>, TypeckError>>()?;
+            let checked_default = default
+                .map(|d| check_expr(*d, cls, class_map, enum_map, env).map(Box::new))
+                .transpose()?;
+            // Determine result type from the first arm or default.
+            let ty = checked_arms
+                .first()
+                .map(|(_, b)| b.ty().clone())
+                .or_else(|| checked_default.as_deref().map(|d: &IrExpr| d.ty().clone()))
+                .unwrap_or(IrType::Unknown);
+            Ok(IrExpr::SwitchExpr {
+                expr: Box::new(checked_expr),
+                arms: checked_arms,
+                default: checked_default,
+                ty,
+            })
+        }
     }
 }
 
@@ -1223,6 +1272,7 @@ mod tests {
                 return_ty: IrType::Void,
                 body: Some(body),
                 throws: vec![],
+                is_default: false,
             }],
             constructors: vec![],
             is_record: false,
@@ -1530,6 +1580,7 @@ mod tests {
                 ty: IrType::Unknown,
             }))]),
             throws: vec![],
+            is_default: false,
         });
         module.decls.push(IrDecl::Class(cls));
         tc(module);
@@ -1886,6 +1937,7 @@ mod tests {
                 return_ty: IrType::Void,
                 body: None,
                 throws: vec![],
+                is_default: false,
             }],
         }));
         tc(module);
@@ -3310,6 +3362,7 @@ mod tests {
                     ty: IrType::Unknown,
                 }))]),
                 throws: vec![],
+                is_default: false,
             }],
             constructors: vec![],
             is_record: false,
@@ -3352,6 +3405,7 @@ mod tests {
                 return_ty: IrType::String,
                 body: Some(vec![IrStmt::Return(Some(IrExpr::LitString("...".into())))]),
                 throws: vec![],
+                is_default: false,
             }],
             constructors: vec![],
             is_record: false,
@@ -3382,6 +3436,7 @@ mod tests {
                     ty: IrType::Unknown,
                 }))]),
                 throws: vec![],
+                is_default: false,
             }],
             constructors: vec![],
             is_record: false,
@@ -3447,6 +3502,7 @@ mod tests {
                     }),
                 }]),
                 throws: vec![],
+                is_default: false,
             }],
             constructors: vec![],
             is_record: false,
@@ -3494,6 +3550,7 @@ mod tests {
                     return_ty: IrType::Int,
                     body: Some(vec![IrStmt::Return(Some(IrExpr::LitInt(42)))]),
                     throws: vec![],
+                    is_default: false,
                 },
                 IrMethod {
                     name: "test".into(),
@@ -3526,6 +3583,7 @@ mod tests {
                         },
                     ]),
                     throws: vec![],
+                    is_default: false,
                 },
             ],
             constructors: vec![],
@@ -3595,6 +3653,7 @@ mod tests {
                     }),
                 }]),
                 throws: vec![],
+                is_default: false,
             }],
             constructors: vec![],
             is_record: false,

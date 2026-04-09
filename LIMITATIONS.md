@@ -220,6 +220,33 @@ Sealed class/interface hierarchies are supported. The `sealed` modifier and
 `permits` clause are accepted by the parser (the constraint is enforced
 only at the Java level; no Rust-level restriction is emitted).
 
+### `var` Keyword (Java 10+)
+
+`var` in local variable declarations and for-each loops is supported.
+The declared type is inferred from the initializer expression (mapped to
+`IrType::Unknown`, which Rust infers automatically).
+
+### Switch Expressions (Java 14+)
+
+Arrow-form switch expressions (`int x = switch(y) { case A -> 1; default -> 0; }`)
+are supported and lowered to Rust `match` expressions. Arrow-form switch statements
+(`switch (x) { case A -> stmt; }`) are also supported.
+
+Switch expressions with patterns (Java 21) are not yet supported.
+
+### Method References (Java 8+)
+
+Static method references (`ClassName::method`) and constructor references
+(`ClassName::new`) are supported. Bound instance method references
+(`obj::method`) are not yet supported. Supported method references lower to
+single-argument Rust closures. Multi-argument method references are not yet
+supported.
+
+### Interface Default Methods (Java 8+)
+
+`default` methods in interface bodies are supported. A class that does not
+override a default method automatically inherits the interface's implementation.
+
 ### Pattern Matching (Java 16+)
 
 - `instanceof` with a single binding variable is supported:
