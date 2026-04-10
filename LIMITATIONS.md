@@ -122,6 +122,19 @@ with `LinkedList`, `ArrayDeque`, `PriorityQueue`, `TreeMap`, `TreeSet`,
   `swap()`, `disjoint()`, `binarySearch()`. `shuffle()` is currently a
   deterministic stub/no-op and should not be relied on for randomization.
 
+**Stage 11 additions:**
+- `Collectors`: `toList()`, `toSet()`, `toUnmodifiableList()`, `counting()`,
+  `joining()`, `joining(sep)`, `joining(sep, prefix, suffix)`,
+  `toMap(keyFn, valFn)`, `groupingBy(classifier)`.
+- `Stream` static factories: `Stream.of(...)`, `IntStream.range(a,b)`,
+  `IntStream.rangeClosed(a,b)`.
+- Stream terminal ops: `anyMatch()`, `allMatch()`, `noneMatch()`, `peek()`,
+  `IntStream.sum()`.
+- `StringBuilder`: added `replace(start, end, str)`, `lastIndexOf(s)` (in
+  addition to previously supported `append`, `toString`, `length`, `charAt`,
+  `reverse`, `insert`, `delete`, `deleteCharAt`, `indexOf`, `setCharAt`,
+  `substring`).
+
 Map `keySet()`/`values()`/`entrySet()` iteration is supported on `HashMap`,
 `TreeMap`, and `LinkedHashMap` via `JMapEntry<K,V>` for entry pairs.
 `Spliterator` has a minimal stub (`trySplit`, `estimateSize`,
