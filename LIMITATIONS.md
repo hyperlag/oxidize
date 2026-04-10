@@ -125,7 +125,9 @@ with `LinkedList`, `ArrayDeque`, `PriorityQueue`, `TreeMap`, `TreeSet`,
 **Stage 11 additions:**
 - `Collectors`: `toList()`, `toSet()`, `toUnmodifiableList()`, `counting()`,
   `joining()`, `joining(sep)`, `joining(sep, prefix, suffix)`,
-  `toMap(keyFn, valFn)`, `groupingBy(classifier)`.
+  `toMap(keyFn, valFn)` (duplicate keys currently overwrite earlier values
+  instead of throwing `IllegalStateException` as in Java),
+  `groupingBy(classifier)`.
 - `Stream` static factories: `Stream.of(...)`, `IntStream.range(a,b)`,
   `IntStream.rangeClosed(a,b)`.
 - Stream terminal ops: `anyMatch()`, `allMatch()`, `noneMatch()`, `peek()`,

@@ -1484,6 +1484,11 @@ Expression calculator tests complete",
     }
 
     #[test]
+    fn test_collectors_to_map_and_grouping_by() {
+        check("CollectorsToMapGroupingBy.java", "3\n1\n1\n3");
+    }
+
+    #[test]
     fn test_int_stream_range() {
         check("IntStreamRange.java", "15\n15\n10\n25");
     }

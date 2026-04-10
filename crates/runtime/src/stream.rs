@@ -239,15 +239,9 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
         let mut map = JMap::new();
         for item in self.data {
             let key = classifier(item.clone());
-            if map.containsKey(key.clone()) {
-                let mut group: JList<T> = map.get(key.clone());
-                group.add(item);
-                map.put(key, group);
-            } else {
-                let mut group = JList::new();
-                group.add(item);
-                map.put(key, group);
-            }
+            let mut group: JList<T> = map.getOrDefault(key.clone(), JList::new());
+            group.add(item);
+            map.put(key, group);
         }
         map
     }

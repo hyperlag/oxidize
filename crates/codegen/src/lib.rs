@@ -3619,7 +3619,8 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             return Ok(quote! { (#recv_ts).count() });
                         }
                         // Collectors.joining() variants
-                        if let Some(join_args) = collectors_joining_args(arg) {
+                        if let Some(join_args_result) = collectors_joining_args(arg) {
+                            let join_args = join_args_result?;
                             match join_args.len() {
                                 0 => {
                                     return Ok(
@@ -3630,7 +3631,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                     let sep = &join_args[0];
                                     return Ok(quote! { (#recv_ts).collect_joining(#sep) });
                                 }
-                                _ => {
+                                3 => {
                                     let sep = &join_args[0];
                                     let pre = &join_args[1];
                                     let suf = &join_args[2];
@@ -3638,16 +3639,23 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                         quote! { (#recv_ts).collect_joining_full(#sep, #pre, #suf) },
                                     );
                                 }
+                                n => {
+                                    return Err(CodegenError::Unsupported(format!(
+                                        "Collectors.joining() with {n} arguments is not supported; expected 0, 1, or 3"
+                                    )));
+                                }
                             }
                         }
                         // Collectors.toMap(keyFn, valFn)
-                        if let Some(map_args) = collectors_two_fn_args(arg, "toMap") {
+                        if let Some(map_args_result) = collectors_two_fn_args(arg, "toMap") {
+                            let map_args = map_args_result?;
                             let kf = &map_args[0];
                             let vf = &map_args[1];
                             return Ok(quote! { (#recv_ts).collect_to_map(#kf, #vf) });
                         }
                         // Collectors.groupingBy(classifier)
-                        if let Some(gb_args) = collectors_one_fn_arg(arg, "groupingBy") {
+                        if let Some(gb_args_result) = collectors_one_fn_arg(arg, "groupingBy") {
+                            let gb_args = gb_args_result?;
                             let clf = &gb_args[0];
                             return Ok(quote! { (#recv_ts).collect_grouping_by(#clf) });
                         }
@@ -5056,7 +5064,7 @@ fn is_collectors_method(expr: &IrExpr, target: &str) -> bool {
 }
 
 /// If `expr` is `Collectors.joining(...)`, return the (already-emitted) arg token streams.
-fn collectors_joining_args(expr: &IrExpr) -> Option<Vec<TokenStream>> {
+fn collectors_joining_args(expr: &IrExpr) -> Option<Result<Vec<TokenStream>, CodegenError>> {
     if let IrExpr::MethodCall {
         receiver: Some(recv),
         method_name,
@@ -5067,11 +5075,7 @@ fn collectors_joining_args(expr: &IrExpr) -> Option<Vec<TokenStream>> {
         if method_name == "joining" {
             if let IrExpr::Var { name, .. } = recv.as_ref() {
                 if name == "Collectors" {
-                    return Some(
-                        args.iter()
-                            .map(|a| emit_expr(a).unwrap_or_else(|_| quote! { () }))
-                            .collect(),
-                    );
+                    return Some(args.iter().map(emit_expr).collect::<Result<Vec<_>, _>>());
                 }
             }
         }
@@ -5080,7 +5084,10 @@ fn collectors_joining_args(expr: &IrExpr) -> Option<Vec<TokenStream>> {
 }
 
 /// If `expr` is `Collectors.<method>(fn1, fn2)`, return emitted arg token streams.
-fn collectors_two_fn_args(expr: &IrExpr, method: &str) -> Option<Vec<TokenStream>> {
+fn collectors_two_fn_args(
+    expr: &IrExpr,
+    method: &str,
+) -> Option<Result<Vec<TokenStream>, CodegenError>> {
     if let IrExpr::MethodCall {
         receiver: Some(recv),
         method_name,
@@ -5088,15 +5095,10 @@ fn collectors_two_fn_args(expr: &IrExpr, method: &str) -> Option<Vec<TokenStream
         ..
     } = expr
     {
-        if method_name == method && args.len() >= 2 {
+        if method_name == method && args.len() == 2 {
             if let IrExpr::Var { name, .. } = recv.as_ref() {
                 if name == "Collectors" {
-                    return Some(
-                        args.iter()
-                            .take(2)
-                            .map(|a| emit_expr(a).unwrap_or_else(|_| quote! { () }))
-                            .collect(),
-                    );
+                    return Some(args.iter().map(emit_expr).collect::<Result<Vec<_>, _>>());
                 }
             }
         }
@@ -5105,7 +5107,10 @@ fn collectors_two_fn_args(expr: &IrExpr, method: &str) -> Option<Vec<TokenStream
 }
 
 /// If `expr` is `Collectors.<method>(fn1)`, return emitted arg token streams.
-fn collectors_one_fn_arg(expr: &IrExpr, method: &str) -> Option<Vec<TokenStream>> {
+fn collectors_one_fn_arg(
+    expr: &IrExpr,
+    method: &str,
+) -> Option<Result<Vec<TokenStream>, CodegenError>> {
     if let IrExpr::MethodCall {
         receiver: Some(recv),
         method_name,
@@ -5113,15 +5118,10 @@ fn collectors_one_fn_arg(expr: &IrExpr, method: &str) -> Option<Vec<TokenStream>
         ..
     } = expr
     {
-        if method_name == method && !args.is_empty() {
+        if method_name == method && args.len() == 1 {
             if let IrExpr::Var { name, .. } = recv.as_ref() {
                 if name == "Collectors" {
-                    return Some(
-                        args.iter()
-                            .take(1)
-                            .map(|a| emit_expr(a).unwrap_or_else(|_| quote! { () }))
-                            .collect(),
-                    );
+                    return Some(args.iter().map(emit_expr).collect::<Result<Vec<_>, _>>());
                 }
             }
         }
