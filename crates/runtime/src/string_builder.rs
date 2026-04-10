@@ -132,13 +132,13 @@ impl JStringBuilder {
 
     /// Java `sb.replace(start, end, str)` — replaces chars [start, end) with str.
     pub fn replace(&mut self, start: i32, end: i32, s: JString) -> &mut Self {
-        let chars: Vec<char> = self.buf.chars().collect();
-        let len = chars.len();
+        let len = self.buf.chars().count();
 
         if start < 0 || start as usize > len || start > end {
             panic!("String index out of range");
         }
 
+        let chars: Vec<char> = self.buf.chars().collect();
         let start = start as usize;
         let end = if end as usize > len {
             len

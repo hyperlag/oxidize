@@ -3641,7 +3641,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                 }
                                 n => {
                                     return Err(CodegenError::Unsupported(format!(
-                                        "Collectors.joining() with {n} arguments is not supported; expected 0, 1, or 3"
+                                        "Collectors.joining() does not support {n} arguments; only 0, 1, or 3 arguments are supported"
                                     )));
                                 }
                             }
