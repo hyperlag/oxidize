@@ -1418,4 +1418,50 @@ Expression calculator tests complete",
     fn test_method_reference() {
         check("MethodReference.java", "alpha\nbeta\ngamma");
     }
+
+    // ── Stage 10 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_arrays_sort() {
+        check("ArraysSort.java", "1\n5\ntrue\n2\n2");
+    }
+
+    #[test]
+    fn test_arrays_fill() {
+        check("ArraysFill.java", "7\n7\n7\n0\n6");
+    }
+
+    #[test]
+    fn test_modern_string() {
+        check(
+            "ModernString.java",
+            "hello\nhello  \n  hello\ntrue\nfalse\nababab",
+        );
+    }
+
+    #[test]
+    fn test_character_methods() {
+        check(
+            "CharacterMethods.java",
+            "true\nfalse\ntrue\nfalse\ntrue\ntrue\ntrue\nB\nb",
+        );
+    }
+
+    #[test]
+    fn test_boxed_constants() {
+        check(
+            "BoxedConstants.java",
+            "2147483647\n-2147483648\n9223372036854775807\n-9223372036854775808\n1010\nff\n3\n42\ntrue",
+        );
+    }
+
+    #[test]
+    fn test_objects_util() {
+        check("ObjectsUtil.java", "hello\nfalse\ntrue\ntrue\nfalse");
+    }
+
+    #[test]
+    fn test_collections_extra() {
+        check("CollectionsExtra.java", "1\n5\n2\n3\n9");
+    }
 }

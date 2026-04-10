@@ -19,6 +19,11 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
         Self { data }
     }
 
+    /// Java `Arrays.stream(arr)` — creates a stream from a `JArray<T>`.
+    pub fn from_array(arr: crate::array::JArray<T>) -> Self {
+        Self::new(arr.iter())
+    }
+
     /// Java `stream.filter(predicate)`.
     pub fn filter<F: Fn(T) -> bool>(self, pred: F) -> Self {
         Self {

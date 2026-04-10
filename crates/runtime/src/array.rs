@@ -82,6 +82,70 @@ impl<T: Clone + std::fmt::Debug> JArray<T> {
     }
 }
 
+impl<T: Clone + std::fmt::Debug> JArray<T> {
+    /// Java `Arrays.fill(arr, val)` — sets every element to `val`.
+    pub fn fill(&self, val: T) {
+        let mut guard = self.0.write().unwrap();
+        for elem in guard.iter_mut() {
+            *elem = val.clone();
+        }
+    }
+
+    /// Java `Arrays.copyOfRange(arr, from, to)` — returns a new array with
+    /// elements at indices `[from, to)`.
+    pub fn copy_of_range(&self, from: i32, to: i32) -> Self {
+        let guard = self.0.read().unwrap();
+        let from = from as usize;
+        let to = (to as usize).min(guard.len());
+        JArray(Arc::new(RwLock::new(guard[from..to].to_vec())))
+    }
+}
+
+impl<T: Default + Clone + std::fmt::Debug> JArray<T> {
+    /// Java `Arrays.copyOf(arr, newLen)` — returns a copy of the array
+    /// truncated or zero-extended to `new_len`.
+    pub fn copy_of_length(&self, new_len: i32) -> Self {
+        let guard = self.0.read().unwrap();
+        let n = new_len as usize;
+        let mut v = vec![T::default(); n];
+        let copy = n.min(guard.len());
+        v[..copy].clone_from_slice(&guard[..copy]);
+        JArray(Arc::new(RwLock::new(v)))
+    }
+}
+
+impl<T: Clone + std::fmt::Debug + Ord> JArray<T> {
+    /// Java `Arrays.sort(arr)` — sorts in-place.
+    pub fn sort_in_place(&self) {
+        self.0.write().unwrap().sort();
+    }
+
+    /// Java `Arrays.binarySearch(arr, key)` — binary searches a sorted array.
+    /// Returns the index of the key, or a negative value if not found.
+    pub fn binary_search_val(&self, key: T) -> i32 {
+        match self.0.read().unwrap().binary_search(&key) {
+            Ok(i) => i as i32,
+            Err(i) => -(i as i32) - 1,
+        }
+    }
+}
+
+impl<T: Clone + std::fmt::Debug + std::fmt::Display> JArray<T> {
+    /// Java `Arrays.toString(arr)` — returns a display string like `[1, 2, 3]`.
+    pub fn to_display_string(&self) -> crate::string::JString {
+        let guard = self.0.read().unwrap();
+        let inner: Vec<String> = guard.iter().map(|v| format!("{v}")).collect();
+        crate::string::JString::from(format!("[{}]", inner.join(", ")).as_str())
+    }
+}
+
+impl<T: Clone + std::fmt::Debug + PartialEq> JArray<T> {
+    /// Java `Arrays.equals(a, b)` — element-wise equality.
+    pub fn elements_equal(&self, other: &Self) -> bool {
+        *self.0.read().unwrap() == *other.0.read().unwrap()
+    }
+}
+
 impl<T: Clone + std::fmt::Debug> PartialEq for JArray<T>
 where
     T: PartialEq,
