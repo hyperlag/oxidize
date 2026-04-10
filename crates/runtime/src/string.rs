@@ -142,7 +142,10 @@ impl JString {
 
     /// Java `String.repeat(int count)`.
     pub fn repeat(&self, n: i32) -> JString {
-        JString::from(self.0.repeat(n.max(0) as usize).as_str())
+        if n < 0 {
+            panic!("count is negative: {n}");
+        }
+        JString::from(self.0.repeat(n as usize).as_str())
     }
 
     /// Java `String.lines()` — returns a stream of lines.
@@ -421,5 +424,11 @@ mod tests {
             super::jformat(JString::from("line1%nline2"), &[]).as_str(),
             "line1\nline2"
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "count is negative")]
+    fn repeat_negative_panics() {
+        let _ = JString::from("ab").repeat(-1);
     }
 }

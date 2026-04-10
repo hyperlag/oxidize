@@ -90,21 +90,37 @@ impl<T: Clone + std::fmt::Debug> JArray<T> {
             *elem = val.clone();
         }
     }
-
-    /// Java `Arrays.copyOfRange(arr, from, to)` — returns a new array with
-    /// elements at indices `[from, to)`.
-    pub fn copy_of_range(&self, from: i32, to: i32) -> Self {
-        let guard = self.0.read().unwrap();
-        let from = from as usize;
-        let to = (to as usize).min(guard.len());
-        JArray(Arc::new(RwLock::new(guard[from..to].to_vec())))
-    }
 }
 
 impl<T: Default + Clone + std::fmt::Debug> JArray<T> {
+    /// Java `Arrays.copyOfRange(arr, from, to)` — returns a new array with
+    /// elements at indices `[from, to)`.
+    pub fn copy_of_range(&self, from: i32, to: i32) -> Self {
+        if to < from {
+            panic!("IllegalArgumentException: from({from}) > to({to})");
+        }
+        let guard = self.0.read().unwrap();
+        let len = guard.len() as i32;
+        if from < 0 || from > len {
+            panic!("ArrayIndexOutOfBoundsException: {from}");
+        }
+
+        let from_usize = from as usize;
+        let result_len = (to - from) as usize;
+        let available = guard.len().saturating_sub(from_usize).min(result_len);
+        let mut v = vec![T::default(); result_len];
+        if available > 0 {
+            v[..available].clone_from_slice(&guard[from_usize..from_usize + available]);
+        }
+        JArray(Arc::new(RwLock::new(v)))
+    }
+
     /// Java `Arrays.copyOf(arr, newLen)` — returns a copy of the array
     /// truncated or zero-extended to `new_len`.
     pub fn copy_of_length(&self, new_len: i32) -> Self {
+        if new_len < 0 {
+            panic!("NegativeArraySizeException: {new_len}");
+        }
         let guard = self.0.read().unwrap();
         let n = new_len as usize;
         let mut v = vec![T::default(); n];
@@ -187,5 +203,19 @@ mod tests {
     fn out_of_bounds_panics() {
         let arr = JArray::from_vec(vec![1_i32]);
         arr.get(5);
+    }
+
+    #[test]
+    fn copy_of_range_zero_extends() {
+        let arr = JArray::from_vec(vec![1_i32, 2, 3]);
+        let out = arr.copy_of_range(1, 5);
+        assert_eq!(out.iter(), vec![2, 3, 0, 0]);
+    }
+
+    #[test]
+    #[should_panic(expected = "NegativeArraySizeException")]
+    fn copy_of_length_negative_panics() {
+        let arr = JArray::from_vec(vec![1_i32, 2, 3]);
+        let _ = arr.copy_of_length(-1);
     }
 }

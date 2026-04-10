@@ -1443,7 +1443,7 @@ Expression calculator tests complete",
     fn test_character_methods() {
         check(
             "CharacterMethods.java",
-            "true\nfalse\ntrue\nfalse\ntrue\ntrue\ntrue\nB\nb",
+            "true\nfalse\ntrue\ntrue\nfalse\ntrue\ntrue\ntrue\nB\nb",
         );
     }
 
@@ -1451,13 +1451,16 @@ Expression calculator tests complete",
     fn test_boxed_constants() {
         check(
             "BoxedConstants.java",
-            "2147483647\n-2147483648\n9223372036854775807\n-9223372036854775808\n1010\nff\n3\n42\ntrue",
+            "2147483647\n-2147483648\n9223372036854775807\n-9223372036854775808\n1010\nff\n3\n-1\n0\n1\n-1\n42\ntrue",
         );
     }
 
     #[test]
     fn test_objects_util() {
-        check("ObjectsUtil.java", "hello\nfalse\ntrue\ntrue\nfalse");
+        check(
+            "ObjectsUtil.java",
+            "hello\nfalse\ntrue\ntrue\nfalse\nfallback\nempty\ntrue\nfalse",
+        );
     }
 
     #[test]

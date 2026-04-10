@@ -150,8 +150,11 @@ impl<T: Clone> JList<T> {
 
     /// Java `Collections.nCopies(n, val)` — list of n copies of val.
     pub fn n_copies(n: i32, val: T) -> Self {
+        if n < 0 {
+            panic!("IllegalArgumentException: List length = {n}");
+        }
         JList {
-            inner: vec![val; n.max(0) as usize],
+            inner: vec![val; n as usize],
         }
     }
 
@@ -164,6 +167,10 @@ impl<T: Clone> JList<T> {
 
     /// Java `Collections.swap(list, i, j)` — swaps two elements.
     pub fn swap(&mut self, i: i32, j: i32) {
+        let len = self.inner.len();
+        if i < 0 || j < 0 || i as usize >= len || j as usize >= len {
+            panic!("java.lang.IndexOutOfBoundsException");
+        }
         self.inner.swap(i as usize, j as usize);
     }
 }
@@ -275,5 +282,18 @@ mod tests {
         assert!(sp.tryAdvance(|v| seen.push(v)));
         assert!(!sp.tryAdvance(|v| seen.push(v)));
         assert_eq!(seen, vec![10, 20, 30]);
+    }
+
+    #[test]
+    #[should_panic(expected = "IllegalArgumentException")]
+    fn n_copies_negative_panics() {
+        let _ = JList::n_copies(-1, 7);
+    }
+
+    #[test]
+    #[should_panic(expected = "java.lang.IndexOutOfBoundsException")]
+    fn swap_invalid_index_panics() {
+        let mut list: JList<i32> = JList::from_vec(vec![1, 2, 3]);
+        list.swap(-1, 2);
     }
 }

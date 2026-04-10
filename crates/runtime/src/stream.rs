@@ -20,7 +20,7 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
     }
 
     /// Java `Arrays.stream(arr)` — creates a stream from a `JArray<T>`.
-    pub fn from_array(arr: crate::array::JArray<T>) -> Self {
+    pub fn from_array(arr: &crate::array::JArray<T>) -> Self {
         Self::new(arr.iter())
     }
 

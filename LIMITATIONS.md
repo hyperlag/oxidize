@@ -119,7 +119,8 @@ with `LinkedList`, `ArrayDeque`, `PriorityQueue`, `TreeMap`, `TreeSet`,
 - `Arrays`: `sort()`, `fill()`, `copyOf()`, `copyOfRange()`, `binarySearch()`,
   `toString()`, `equals()`, `stream()`, `asList()`.
 - `Collections`: added `min()`, `max()`, `frequency()`, `nCopies()`, `fill()`,
-  `swap()`, `disjoint()`, `binarySearch()`, `shuffle()`.
+  `swap()`, `disjoint()`, `binarySearch()`. `shuffle()` is currently a
+  deterministic stub/no-op and should not be relied on for randomization.
 
 Map `keySet()`/`values()`/`entrySet()` iteration is supported on `HashMap`,
 `TreeMap`, and `LinkedHashMap` via `JMapEntry<K,V>` for entry pairs.
