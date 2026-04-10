@@ -2025,6 +2025,59 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             }
                         };
                     }
+                    // Integer / Long / Double / Float static constants.
+                    "Integer" => {
+                        return match field_name.as_str() {
+                            "MAX_VALUE" => Ok(quote! { i32::MAX }),
+                            "MIN_VALUE" => Ok(quote! { i32::MIN }),
+                            "SIZE" => Ok(quote! { 32i32 }),
+                            "BYTES" => Ok(quote! { 4i32 }),
+                            _ => Err(CodegenError::Unsupported(format!(
+                                "Unsupported Integer static field: {field_name}"
+                            ))),
+                        };
+                    }
+                    "Long" => {
+                        return match field_name.as_str() {
+                            "MAX_VALUE" => Ok(quote! { i64::MAX }),
+                            "MIN_VALUE" => Ok(quote! { i64::MIN }),
+                            _ => Err(CodegenError::Unsupported(format!(
+                                "Unsupported Long static field: {field_name}"
+                            ))),
+                        };
+                    }
+                    "Double" => {
+                        return match field_name.as_str() {
+                            "MAX_VALUE" => Ok(quote! { f64::MAX }),
+                            "MIN_VALUE" => Ok(quote! { f64::MIN_POSITIVE }),
+                            "NaN" => Ok(quote! { f64::NAN }),
+                            "POSITIVE_INFINITY" => Ok(quote! { f64::INFINITY }),
+                            "NEGATIVE_INFINITY" => Ok(quote! { f64::NEG_INFINITY }),
+                            _ => Err(CodegenError::Unsupported(format!(
+                                "Unsupported Double static field: {field_name}"
+                            ))),
+                        };
+                    }
+                    "Float" => {
+                        return match field_name.as_str() {
+                            "MAX_VALUE" => Ok(quote! { f32::MAX }),
+                            "MIN_VALUE" => Ok(quote! { f32::MIN_POSITIVE }),
+                            _ => Err(CodegenError::Unsupported(format!(
+                                "Unsupported Float static field: {field_name}"
+                            ))),
+                        };
+                    }
+                    // Math constants accessed as field accesses.
+                    "Math" => {
+                        return match field_name.as_str() {
+                            "PI" => Ok(quote! { std::f64::consts::PI }),
+                            "E" => Ok(quote! { std::f64::consts::E }),
+                            "TAU" => Ok(quote! { std::f64::consts::TAU }),
+                            _ => Err(CodegenError::Unsupported(format!(
+                                "Unsupported Math static field: {field_name}"
+                            ))),
+                        };
+                    }
                     _ => {}
                 }
             }
@@ -2452,6 +2505,62 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             }
                             "random" => Ok(quote! { 0.0_f64 }),
                             "PI" => Ok(quote! { std::f64::consts::PI }),
+                            "E" => Ok(quote! { std::f64::consts::E }),
+                            "signum" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).signum() })
+                            }
+                            "hypot" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { (#a as f64).hypot(#b as f64) })
+                            }
+                            "atan2" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { (#a as f64).atan2(#b as f64) })
+                            }
+                            "asin" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).asin() })
+                            }
+                            "acos" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).acos() })
+                            }
+                            "atan" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).atan() })
+                            }
+                            "sinh" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).sinh() })
+                            }
+                            "cosh" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).cosh() })
+                            }
+                            "tanh" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).tanh() })
+                            }
+                            "toDegrees" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).to_degrees() })
+                            }
+                            "toRadians" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).to_radians() })
+                            }
+                            "cbrt" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).cbrt() })
+                            }
+                            "copySign" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { (#a as f64).copysign(#b as f64) })
+                            }
                             _ => Err(CodegenError::Unsupported(format!(
                                 "unsupported Math method: {}",
                                 method_name
@@ -2737,18 +2846,431 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             }
                         };
                     }
-                    // Integer.parseInt / Integer.valueOf
+                    // Integer.parseInt / Integer.valueOf / Integer.toBinaryString / etc.
                     if name == "Integer" {
                         return match method_name.as_str() {
                             "parseInt" | "valueOf" => {
-                                let a = &args_ts[0];
-                                Ok(quote! { (#a).as_str().parse::<i32>().unwrap() })
+                                if args_ts.len() == 2 {
+                                    // parseInt(s, radix)
+                                    let a = &args_ts[0];
+                                    let b = &args_ts[1];
+                                    Ok(quote! {{
+                                        let __s_owned = format!("{}", #a);
+                                        let __s = __s_owned.as_str();
+                                        let __radix_i32 = #b as i32;
+                                        if !(2..=36).contains(&__radix_i32) {
+                                            panic!(
+                                                "java.lang.NumberFormatException: For input string: \"{}\" under radix {}",
+                                                __s,
+                                                __radix_i32
+                                            );
+                                        }
+                                        let __radix = __radix_i32 as u32;
+                                        i32::from_str_radix(__s, __radix).unwrap_or_else(|_| {
+                                            panic!(
+                                                "java.lang.NumberFormatException: For input string: \"{}\" under radix {}",
+                                                __s,
+                                                __radix_i32
+                                            )
+                                        })
+                                    }})
+                                } else {
+                                    let a = &args_ts[0];
+                                    Ok(quote! {{
+                                        let __s_owned = format!("{}", #a);
+                                        let __s = __s_owned.as_str();
+                                        __s.parse::<i32>().unwrap_or_else(|_| {
+                                            panic!(
+                                                "java.lang.NumberFormatException: For input string: \"{}\"",
+                                                __s
+                                            )
+                                        })
+                                    }})
+                                }
                             }
                             "toString" => {
                                 let a = &args_ts[0];
-                                Ok(quote! { JString::from(format!("{}", #a).as_str()) })
+                                Ok(quote! { JString::from(format!("{}", #a as i32).as_str()) })
+                            }
+                            "toBinaryString" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JString::from(format!("{:b}", #a as i32).as_str()) })
+                            }
+                            "toHexString" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JString::from(format!("{:x}", #a as i32).as_str()) })
+                            }
+                            "toOctalString" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JString::from(format!("{:o}", #a as i32).as_str()) })
+                            }
+                            "bitCount" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as i32).count_ones() as i32 })
+                            }
+                            "highestOneBit" => {
+                                let a = &args_ts[0];
+                                Ok(
+                                    quote! { { let __n = #a as i32; if __n == 0 { 0i32 } else { 1i32 << (31 - __n.leading_zeros()) } } },
+                                )
+                            }
+                            "numberOfLeadingZeros" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as i32).leading_zeros() as i32 })
+                            }
+                            "numberOfTrailingZeros" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as i32).trailing_zeros() as i32 })
+                            }
+                            "compare" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! {
+                                    match (#a as i32).cmp(&(#b as i32)) {
+                                        std::cmp::Ordering::Less => -1i32,
+                                        std::cmp::Ordering::Equal => 0i32,
+                                        std::cmp::Ordering::Greater => 1i32,
+                                    }
+                                })
+                            }
+                            "signum" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as i32).signum() })
+                            }
+                            "max" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { (#a as i32).max(#b as i32) })
+                            }
+                            "min" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { (#a as i32).min(#b as i32) })
+                            }
+                            "sum" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { (#a as i32).wrapping_add(#b as i32) })
                             }
                             _ => Ok(quote! { 0i32 }),
+                        };
+                    }
+                    // Long.parseLong / Long.toBinaryString / etc.
+                    if name == "Long" {
+                        return match method_name.as_str() {
+                            "parseLong" | "valueOf" => {
+                                let a = &args_ts[0];
+                                Ok(quote! {{
+                                    let __s_owned = format!("{}", #a);
+                                    let __s = __s_owned.as_str();
+                                    __s.parse::<i64>().unwrap_or_else(|_| {
+                                        panic!(
+                                            "java.lang.NumberFormatException: For input string: \"{}\"",
+                                            __s
+                                        )
+                                    })
+                                }})
+                            }
+                            "toString" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JString::from(format!("{}", #a as i64).as_str()) })
+                            }
+                            "toBinaryString" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JString::from(format!("{:b}", #a as i64).as_str()) })
+                            }
+                            "toHexString" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JString::from(format!("{:x}", #a as i64).as_str()) })
+                            }
+                            "toOctalString" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JString::from(format!("{:o}", #a as i64).as_str()) })
+                            }
+                            "bitCount" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as i64).count_ones() as i32 })
+                            }
+                            "compare" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! {
+                                    match (#a as i64).cmp(&(#b as i64)) {
+                                        std::cmp::Ordering::Less => -1i32,
+                                        std::cmp::Ordering::Equal => 0i32,
+                                        std::cmp::Ordering::Greater => 1i32,
+                                    }
+                                })
+                            }
+                            "max" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { (#a as i64).max(#b as i64) })
+                            }
+                            "min" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { (#a as i64).min(#b as i64) })
+                            }
+                            _ => Ok(quote! { 0i64 }),
+                        };
+                    }
+                    // Double.parseDouble / Double.isNaN / etc.
+                    if name == "Double" {
+                        return match method_name.as_str() {
+                            "parseDouble" | "valueOf" => {
+                                let a = &args_ts[0];
+                                Ok(quote! {{
+                                    let __s_owned = format!("{}", #a);
+                                    let __s = __s_owned.as_str();
+                                    __s.parse::<f64>().unwrap_or_else(|_| {
+                                        panic!(
+                                            "java.lang.NumberFormatException: For input string: \"{}\"",
+                                            __s
+                                        )
+                                    })
+                                }})
+                            }
+                            "toString" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JString::from(format!("{}", #a as f64).as_str()) })
+                            }
+                            "isNaN" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).is_nan() })
+                            }
+                            "isInfinite" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a as f64).is_infinite() })
+                            }
+                            "compare" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! {{
+                                    let __a = #a as f64;
+                                    let __b = #b as f64;
+                                    if __a < __b {
+                                        -1i32
+                                    } else if __a > __b {
+                                        1i32
+                                    } else if __a.is_nan() {
+                                        if __b.is_nan() { 0i32 } else { 1i32 }
+                                    } else if __b.is_nan() {
+                                        -1i32
+                                    } else if __a == 0.0f64 && __b == 0.0f64 {
+                                        if __a.is_sign_negative() == __b.is_sign_negative() {
+                                            0i32
+                                        } else if __a.is_sign_negative() {
+                                            -1i32
+                                        } else {
+                                            1i32
+                                        }
+                                    } else {
+                                        0i32
+                                    }
+                                }})
+                            }
+                            "max" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { (#a as f64).max(#b as f64) })
+                            }
+                            "min" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { (#a as f64).min(#b as f64) })
+                            }
+                            _ => Ok(quote! { 0.0f64 }),
+                        };
+                    }
+                    // Character.isDigit / Character.isLetter / etc.
+                    if name == "Character" {
+                        return match method_name.as_str() {
+                            "isDigit" => {
+                                let c = &args_ts[0];
+                                Ok(quote! { (#c).is_numeric() })
+                            }
+                            "isLetter" | "isAlphabetic" => {
+                                let c = &args_ts[0];
+                                Ok(quote! { (#c).is_alphabetic() })
+                            }
+                            "isLetterOrDigit" => {
+                                let c = &args_ts[0];
+                                Ok(quote! { (#c).is_alphanumeric() })
+                            }
+                            "isWhitespace" | "isSpaceChar" => {
+                                let c = &args_ts[0];
+                                Ok(quote! { (#c).is_whitespace() })
+                            }
+                            "isUpperCase" => {
+                                let c = &args_ts[0];
+                                Ok(quote! { (#c).is_uppercase() })
+                            }
+                            "isLowerCase" => {
+                                let c = &args_ts[0];
+                                Ok(quote! { (#c).is_lowercase() })
+                            }
+                            "toUpperCase" => {
+                                let c = &args_ts[0];
+                                Ok(quote! { (#c).to_uppercase().next().unwrap_or(#c) })
+                            }
+                            "toLowerCase" => {
+                                let c = &args_ts[0];
+                                Ok(quote! { (#c).to_lowercase().next().unwrap_or(#c) })
+                            }
+                            "getNumericValue" => {
+                                let c = &args_ts[0];
+                                Ok(quote! { (#c).to_digit(10).map(|d| d as i32).unwrap_or(-1) })
+                            }
+                            "digit" => {
+                                let c = &args_ts[0];
+                                let radix = &args_ts[1];
+                                Ok(
+                                    quote! { (#c).to_digit(#radix as u32).map(|d| d as i32).unwrap_or(-1) },
+                                )
+                            }
+                            "forDigit" => {
+                                let d = &args_ts[0];
+                                let radix = &args_ts[1];
+                                Ok(
+                                    quote! { char::from_digit(#d as u32, #radix as u32).unwrap_or('\0') },
+                                )
+                            }
+                            "toString" => {
+                                let c = &args_ts[0];
+                                Ok(quote! { JString::from(format!("{}", #c).as_str()) })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { #m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // Objects.requireNonNull / Objects.isNull / Objects.equals / etc.
+                    if name == "Objects" {
+                        let a_is_null_literal = args
+                            .first()
+                            .map(|arg| matches!(arg.ty(), IrType::Null))
+                            .unwrap_or(false);
+                        let a_is_nullable = args
+                            .first()
+                            .map(|arg| matches!(arg.ty(), IrType::Nullable(_) | IrType::Null))
+                            .unwrap_or(false);
+                        let b_is_nullable = args
+                            .get(1)
+                            .map(|arg| matches!(arg.ty(), IrType::Nullable(_) | IrType::Null))
+                            .unwrap_or(false);
+                        return match method_name.as_str() {
+                            "requireNonNull" => {
+                                let a = &args_ts[0];
+                                if a_is_null_literal {
+                                    Ok(quote! { panic!("java.lang.NullPointerException") })
+                                } else if a_is_nullable {
+                                    Ok(quote! {
+                                        (#a).unwrap_or_else(|| panic!("java.lang.NullPointerException"))
+                                    })
+                                } else {
+                                    Ok(quote! { #a })
+                                }
+                            }
+                            "requireNonNullElse" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                if a_is_null_literal && b_is_nullable {
+                                    Ok(quote! {
+                                        (#b).unwrap_or_else(|| panic!("java.lang.NullPointerException"))
+                                    })
+                                } else if a_is_null_literal {
+                                    Ok(quote! { #b })
+                                } else if a_is_nullable && b_is_nullable {
+                                    Ok(quote! {
+                                        (#a).or(#b).unwrap_or_else(|| panic!("java.lang.NullPointerException"))
+                                    })
+                                } else if a_is_nullable {
+                                    Ok(quote! { (#a).unwrap_or(#b) })
+                                } else {
+                                    Ok(quote! { #a })
+                                }
+                            }
+                            "isNull" => {
+                                let a = &args_ts[0];
+                                if a_is_null_literal {
+                                    Ok(quote! { true })
+                                } else if a_is_nullable {
+                                    Ok(quote! { (#a).is_none() })
+                                } else {
+                                    Ok(quote! { false })
+                                }
+                            }
+                            "nonNull" => {
+                                let a = &args_ts[0];
+                                if a_is_null_literal {
+                                    Ok(quote! { false })
+                                } else if a_is_nullable {
+                                    Ok(quote! { (#a).is_some() })
+                                } else {
+                                    Ok(quote! { true })
+                                }
+                            }
+                            "equals" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { (#a == #b) })
+                            }
+                            "deepEquals" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { (#a == #b) })
+                            }
+                            "hash" | "hashCode" => {
+                                // Simplified: hash all args together naively.
+                                Ok(quote! { {
+                                    let mut __h = 1i32;
+                                    #(let __h = __h.wrapping_mul(31).wrapping_add(format!("{:?}", &#args_ts).len() as i32);)*
+                                    __h
+                                } })
+                            }
+                            "toString" if args_ts.len() == 1 => {
+                                let a = &args_ts[0];
+                                if a_is_null_literal {
+                                    Ok(quote! { JString::from("null") })
+                                } else if a_is_nullable {
+                                    Ok(quote! {
+                                        match #a {
+                                            Some(__v) => JString::from(format!("{}", __v).as_str()),
+                                            None => JString::from("null"),
+                                        }
+                                    })
+                                } else {
+                                    Ok(quote! { JString::from(format!("{}", #a).as_str()) })
+                                }
+                            }
+                            "toString" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                if a_is_null_literal {
+                                    Ok(quote! { JString::from(format!("{}", #b).as_str()) })
+                                } else if a_is_nullable {
+                                    Ok(quote! {
+                                        match #a {
+                                            Some(__v) => JString::from(format!("{}", __v).as_str()),
+                                            None => JString::from(format!("{}", #b).as_str()),
+                                        }
+                                    })
+                                } else {
+                                    Ok(quote! { JString::from(format!("{}", #a).as_str()) })
+                                }
+                            }
+                            "compare" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                let cmp = &args_ts[2];
+                                Ok(quote! { #cmp(&#a, &#b) })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { #m(#(#args_ts),*) })
+                            }
                         };
                     }
                     // String.valueOf
@@ -2791,7 +3313,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             _ => Ok(quote! { JString::from("") }),
                         };
                     }
-                    // Collections.sort / Collections.reverse / Collections.unmodifiable* / etc.
+                    // Collections.sort / Collections.reverse / Collections.min / etc.
                     if name == "Collections" {
                         return match method_name.as_str() {
                             "sort" => {
@@ -2819,19 +3341,107 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                 let a = &args_ts[0];
                                 Ok(quote! { JList::singleton(#a) })
                             }
+                            "min" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a).min_element() })
+                            }
+                            "max" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a).max_element() })
+                            }
+                            "frequency" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { (#a).frequency(#b) })
+                            }
+                            "nCopies" => {
+                                let n = &args_ts[0];
+                                let v = &args_ts[1];
+                                Ok(quote! { JList::n_copies(#n, #v) })
+                            }
+                            "fill" => {
+                                let a = &args_ts[0];
+                                let v = &args_ts[1];
+                                Ok(quote! { (#a).fill_all(#v) })
+                            }
+                            "swap" => {
+                                let a = &args_ts[0];
+                                let i = &args_ts[1];
+                                let j = &args_ts[2];
+                                Ok(quote! { (#a).swap(#i, #j) })
+                            }
+                            "disjoint" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { (#a).disjoint(&#b) })
+                            }
+                            "binarySearch" => {
+                                let a = &args_ts[0];
+                                let k = &args_ts[1];
+                                Ok(quote! { (#a).binary_search_val(#k) })
+                            }
+                            "shuffle" => {
+                                // shuffle is a no-op in deterministic translation
+                                let a = &args_ts[0];
+                                Ok(quote! { { let _ = &#a; } })
+                            }
                             _ => {
                                 let m = ident(method_name);
                                 Ok(quote! { java_compat::collections_util::#m(#(#args_ts),*) })
                             }
                         };
                     }
-                    // Arrays.asList(...)
-                    if name == "Arrays" && method_name == "asList" {
-                        return Ok(quote! { {
-                            let mut __list = JList::new();
-                            #( __list.add(#args_ts); )*
-                            __list
-                        } });
+                    // Arrays.asList / Arrays.sort / Arrays.fill / etc.
+                    if name == "Arrays" {
+                        return match method_name.as_str() {
+                            "asList" => Ok(quote! { {
+                                let mut __list = JList::new();
+                                #( __list.add(#args_ts); )*
+                                __list
+                            } }),
+                            "sort" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a).sort_in_place() })
+                            }
+                            "fill" => {
+                                let a = &args_ts[0];
+                                let v = &args_ts[1];
+                                Ok(quote! { (#a).fill(#v) })
+                            }
+                            "stream" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JStream::from_array(&#a) })
+                            }
+                            "toString" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { (#a).to_display_string() })
+                            }
+                            "copyOfRange" => {
+                                let a = &args_ts[0];
+                                let from = &args_ts[1];
+                                let to = &args_ts[2];
+                                Ok(quote! { (#a).copy_of_range(#from, #to) })
+                            }
+                            "copyOf" => {
+                                let a = &args_ts[0];
+                                let n = &args_ts[1];
+                                Ok(quote! { (#a).copy_of_length(#n) })
+                            }
+                            "binarySearch" => {
+                                let a = &args_ts[0];
+                                let k = &args_ts[1];
+                                Ok(quote! { (#a).binary_search_val(#k) })
+                            }
+                            "equals" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { (#a).elements_equal(&#b) })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { #m(#(#args_ts),*) })
+                            }
+                        };
                     }
                     // EnumSet.noneOf(...) / EnumSet.of(...) / EnumSet.allOf(...)
                     // Class-literal args (e.g. Color.class) are filtered out by the
@@ -3274,6 +3884,10 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     "charAt" => ident("char_at"),
                     "indexOf" => ident("index_of"),
                     "isEmpty" => ident("isEmpty"),
+                    // Modern String API: map Java names to runtime method names.
+                    "lines" => ident("lines_stream"),
+                    "chars" => ident("chars_stream"),
+                    "toCharArray" => ident("to_char_array"),
                     _ => ident(method_name),
                 };
                 return Ok(quote! { (#recv_ts).#method(#(#args_ts),*) });

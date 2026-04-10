@@ -114,6 +114,58 @@ impl JString {
     pub fn equals(&self, other: &JString) -> bool {
         *self.0 == *other.0
     }
+
+    // ── Java 11+ String methods ───────────────────────────────────────────
+
+    /// Java `String.strip()` — Unicode-aware whitespace trimming.
+    pub fn strip(&self) -> JString {
+        JString::from(self.0.trim())
+    }
+
+    /// Java `String.stripLeading()`.
+    #[allow(non_snake_case)]
+    pub fn stripLeading(&self) -> JString {
+        JString::from(self.0.trim_start())
+    }
+
+    /// Java `String.stripTrailing()`.
+    #[allow(non_snake_case)]
+    pub fn stripTrailing(&self) -> JString {
+        JString::from(self.0.trim_end())
+    }
+
+    /// Java `String.isBlank()` — true if empty or contains only whitespace.
+    #[allow(non_snake_case)]
+    pub fn isBlank(&self) -> bool {
+        self.0.chars().all(|c| c.is_whitespace())
+    }
+
+    /// Java `String.repeat(int count)`.
+    pub fn repeat(&self, n: i32) -> JString {
+        if n < 0 {
+            panic!("count is negative: {n}");
+        }
+        JString::from(self.0.repeat(n as usize).as_str())
+    }
+
+    /// Java `String.lines()` — returns a stream of lines.
+    ///
+    /// Named `lines_stream` internally; codegen maps `lines` → `lines_stream`.
+    pub fn lines_stream(&self) -> crate::stream::JStream<JString> {
+        crate::stream::JStream::new(self.0.lines().map(JString::from).collect())
+    }
+
+    /// Java `String.chars()` — returns a stream of chars.
+    ///
+    /// Named `chars_stream` internally; codegen maps `chars` → `chars_stream`.
+    pub fn chars_stream(&self) -> crate::stream::JStream<char> {
+        crate::stream::JStream::new(self.0.chars().collect())
+    }
+
+    /// Java `String.toCharArray()`.
+    pub fn to_char_array(&self) -> crate::array::JArray<char> {
+        crate::array::JArray::from_vec(self.0.chars().collect())
+    }
 }
 
 impl From<&str> for JString {
@@ -372,5 +424,11 @@ mod tests {
             super::jformat(JString::from("line1%nline2"), &[]).as_str(),
             "line1\nline2"
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "count is negative")]
+    fn repeat_negative_panics() {
+        let _ = JString::from("ab").repeat(-1);
     }
 }

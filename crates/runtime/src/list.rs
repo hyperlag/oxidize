@@ -89,6 +89,32 @@ impl<T: Clone + Ord> JList<T> {
     pub fn sort(&mut self) {
         self.inner.sort();
     }
+
+    /// Java `Collections.min(list)`.
+    pub fn min_element(&self) -> T {
+        self.inner
+            .iter()
+            .min()
+            .cloned()
+            .expect("NoSuchElementException: empty list")
+    }
+
+    /// Java `Collections.max(list)`.
+    pub fn max_element(&self) -> T {
+        self.inner
+            .iter()
+            .max()
+            .cloned()
+            .expect("NoSuchElementException: empty list")
+    }
+
+    /// Java `Collections.binarySearch(list, key)`.
+    pub fn binary_search_val(&self, key: T) -> i32 {
+        match self.inner.binary_search(&key) {
+            Ok(i) => i as i32,
+            Err(i) => -(i as i32) - 1,
+        }
+    }
 }
 
 impl<T: Clone> JList<T> {
@@ -121,6 +147,32 @@ impl<T: Clone> JList<T> {
     pub fn retain(&mut self, f: impl Fn(&T) -> bool) {
         self.inner.retain(|item| f(item));
     }
+
+    /// Java `Collections.nCopies(n, val)` — list of n copies of val.
+    pub fn n_copies(n: i32, val: T) -> Self {
+        if n < 0 {
+            panic!("IllegalArgumentException: List length = {n}");
+        }
+        JList {
+            inner: vec![val; n as usize],
+        }
+    }
+
+    /// Java `Collections.fill(list, val)` — replaces every element with val.
+    pub fn fill_all(&mut self, val: T) {
+        for elem in self.inner.iter_mut() {
+            *elem = val.clone();
+        }
+    }
+
+    /// Java `Collections.swap(list, i, j)` — swaps two elements.
+    pub fn swap(&mut self, i: i32, j: i32) {
+        let len = self.inner.len();
+        if i < 0 || j < 0 || i as usize >= len || j as usize >= len {
+            panic!("java.lang.IndexOutOfBoundsException");
+        }
+        self.inner.swap(i as usize, j as usize);
+    }
 }
 
 impl<T: Clone + PartialEq> JList<T> {
@@ -137,6 +189,16 @@ impl<T: Clone + PartialEq> JList<T> {
             .position(|x| x == &item)
             .map(|i| i as i32)
             .unwrap_or(-1)
+    }
+
+    /// Java `Collections.frequency(list, elem)` — count occurrences.
+    pub fn frequency(&self, item: T) -> i32 {
+        self.inner.iter().filter(|x| *x == &item).count() as i32
+    }
+
+    /// Java `Collections.disjoint(a, b)` — true if the lists share no elements.
+    pub fn disjoint(&self, other: &JList<T>) -> bool {
+        self.inner.iter().all(|x| !other.inner.contains(x))
     }
 }
 
@@ -220,5 +282,18 @@ mod tests {
         assert!(sp.tryAdvance(|v| seen.push(v)));
         assert!(!sp.tryAdvance(|v| seen.push(v)));
         assert_eq!(seen, vec![10, 20, 30]);
+    }
+
+    #[test]
+    #[should_panic(expected = "IllegalArgumentException")]
+    fn n_copies_negative_panics() {
+        let _ = JList::n_copies(-1, 7);
+    }
+
+    #[test]
+    #[should_panic(expected = "java.lang.IndexOutOfBoundsException")]
+    fn swap_invalid_index_panics() {
+        let mut list: JList<i32> = JList::from_vec(vec![1, 2, 3]);
+        list.swap(-1, 2);
     }
 }

@@ -115,10 +115,24 @@ with `LinkedList`, `ArrayDeque`, `PriorityQueue`, `TreeMap`, `TreeSet`,
 `Collections.singletonList()`, `Arrays.asList()`, and `Iterator` with
 `hasNext()`/`next()`/`remove()`.
 
+**Stage 10 additions:**
+- `Arrays`: `sort()`, `fill()`, `copyOf()`, `copyOfRange()`, `binarySearch()`,
+  `toString()`, `equals()`, `stream()`, `asList()`.
+- `Collections`: added `min()`, `max()`, `frequency()`, `nCopies()`, `fill()`,
+  `swap()`, `disjoint()`, `binarySearch()`. `shuffle()` is currently a
+  deterministic stub/no-op and should not be relied on for randomization.
+
 Map `keySet()`/`values()`/`entrySet()` iteration is supported on `HashMap`,
 `TreeMap`, and `LinkedHashMap` via `JMapEntry<K,V>` for entry pairs.
 `Spliterator` has a minimal stub (`trySplit`, `estimateSize`,
 `characteristics`, `forEachRemaining`, `tryAdvance`).
+
+**Modern String API (Stage 10):** `strip()`, `stripLeading()`, `stripTrailing()`,
+`isBlank()`, `repeat(n)`, `lines()` (returns `Stream<String>`), `chars()` (returns
+`Stream<Character>`), `toCharArray()` are now supported in addition to the
+previously supported `trim()`, `substring()`, `contains()`, `startsWith()`,
+`endsWith()`, `indexOf()`, `replace()`, `split()`, `toUpperCase()`,
+`toLowerCase()`, `charAt()`, `length()`, `isEmpty()`, `getBytes()`.
 
 ### Standard Library Gaps
 
@@ -136,6 +150,31 @@ code, working-directory override; `Runtime.getRuntime().exec(String)` is a
 convenience alias). Class literals (`Foo.class`) produce a `JClass` descriptor
 with `getSimpleName()`, `getName()`, and `getCanonicalName()` methods;
 `getClass()` is also supported on all generated classes.
+
+**Boxed types and `Objects` utility (Stage 10):**
+- `Integer`: `MAX_VALUE`, `MIN_VALUE`, `SIZE`, `BYTES` constants; `parseInt(s)`,
+  `parseInt(s, radix)`, `valueOf()`, `toString()`, `toBinaryString()`,
+  `toHexString()`, `toOctalString()`, `bitCount()`, `highestOneBit()`,
+  `numberOfLeadingZeros()`, `numberOfTrailingZeros()`, `compare()`, `signum()`,
+  `max()`, `min()`, `sum()`.
+- `Long`: `MAX_VALUE`, `MIN_VALUE` constants; `parseLong()`, `valueOf()`,
+  `toString()`, `toBinaryString()`, `toHexString()`, `toOctalString()`,
+  `bitCount()`, `compare()`, `max()`, `min()`.
+- `Double`: `MAX_VALUE`, `MIN_VALUE`, `NaN`, `POSITIVE_INFINITY`,
+  `NEGATIVE_INFINITY` constants; `parseDouble()`, `valueOf()`, `toString()`,
+  `isNaN()`, `isInfinite()`, `compare()`, `max()`, `min()`.
+- `Float`: `MAX_VALUE`, `MIN_VALUE` constants.
+- `Character`: `isDigit()`, `isLetter()`, `isAlphabetic()`, `isLetterOrDigit()`,
+  `isWhitespace()`, `isSpaceChar()`, `isUpperCase()`, `isLowerCase()`,
+  `toUpperCase()`, `toLowerCase()`, `getNumericValue()`, `digit()`, `forDigit()`,
+  `toString()`.
+- `Objects`: `requireNonNull()`, `requireNonNullElse()`, `isNull()`, `nonNull()`,
+  `equals()`, `deepEquals()`, `hash()`, `hashCode()`, `toString()`, `compare()`.
+- `Math`: `PI`, `E`, `TAU` constants; added `signum()`, `hypot()`, `atan2()`,
+  `asin()`, `acos()`, `atan()`, `sinh()`, `cosh()`, `tanh()`, `toDegrees()`,
+  `toRadians()`, `cbrt()`, `copySign()` (in addition to the previously supported
+  `abs`, `ceil`, `floor`, `pow`, `sqrt`, `log`, `log10`, `round`, `max`, `min`,
+  `random`).
 
 ### java.io / java.nio
 
