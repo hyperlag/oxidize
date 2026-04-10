@@ -54,6 +54,11 @@ impl JStringBuilder {
         self.buf.chars().nth(target).unwrap()
     }
 
+    /// Alias used by codegen's `charAt` → `char_at` rename.
+    pub fn char_at(&self, i: i32) -> char {
+        self.charAt(i)
+    }
+
     /// Java `sb.reverse()`.
     pub fn reverse(&mut self) -> &mut Self {
         let r: String = self.buf.chars().rev().collect();
@@ -108,6 +113,42 @@ impl JStringBuilder {
             .find(s.as_str())
             .map(|b| self.buf[..b].chars().count() as i32)
             .unwrap_or(-1)
+    }
+
+    /// Alias used by codegen's `indexOf` → `index_of` rename.
+    pub fn index_of(&self, s: JString) -> i32 {
+        self.indexOf(s)
+    }
+
+    /// Java `sb.lastIndexOf(s)`.
+    pub fn lastIndexOf(&self, s: JString) -> i32 {
+        let needle = s.as_str();
+        self.buf
+            .rmatch_indices(needle)
+            .next()
+            .map(|(b, _)| self.buf[..b].chars().count() as i32)
+            .unwrap_or(-1)
+    }
+
+    /// Java `sb.replace(start, end, str)` — replaces chars [start, end) with str.
+    pub fn replace(&mut self, start: i32, end: i32, s: JString) -> &mut Self {
+        let len = self.buf.chars().count();
+
+        if start < 0 || start as usize > len || start > end {
+            panic!("String index out of range");
+        }
+
+        let chars: Vec<char> = self.buf.chars().collect();
+        let start = start as usize;
+        let end = if end as usize > len {
+            len
+        } else {
+            end as usize
+        };
+        let before: String = chars[..start].iter().collect();
+        let after: String = chars[end..].iter().collect();
+        self.buf = format!("{}{}{}", before, s.as_str(), after);
+        self
     }
 
     /// Java `sb.setCharAt(i, c)`.

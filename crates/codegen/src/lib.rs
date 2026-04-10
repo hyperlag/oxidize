@@ -3443,8 +3443,38 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             }
                         };
                     }
+                    // Stream.of(...) / Stream.empty()
+                    if name == "Stream" {
+                        return match method_name.as_str() {
+                            "of" => Ok(quote! { JStream::new(vec![#(#args_ts),*]) }),
+                            "empty" => Ok(quote! { JStream::new(vec![]) }),
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JStream::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // IntStream.range / IntStream.rangeClosed / IntStream.of
+                    if name == "IntStream" {
+                        return match method_name.as_str() {
+                            "range" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { JStream::<i32>::int_range(#a, #b) })
+                            }
+                            "rangeClosed" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { JStream::<i32>::int_range_closed(#a, #b) })
+                            }
+                            "of" => Ok(quote! { JStream::new(vec![#(#args_ts),*]) }),
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JStream::<i32>::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
                     // EnumSet.noneOf(...) / EnumSet.of(...) / EnumSet.allOf(...)
-                    // Class-literal args (e.g. Color.class) are filtered out by the
                     // walker, so args_ts is empty for noneOf/allOf.
                     if name == "EnumSet" {
                         return match method_name.as_str() {
@@ -3572,12 +3602,62 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     }
                 }
 
-                // `.collect(Collectors.toList())` → `.collect_to_list()`
+                // `.collect(Collectors.*)` dispatch
                 if method_name == "collect" {
                     if let Some(arg) = args.first() {
+                        let recv_ts = emit_expr(recv)?;
                         if is_collectors_to_list(arg) {
-                            let recv_ts = emit_expr(recv)?;
                             return Ok(quote! { (#recv_ts).collect_to_list() });
+                        }
+                        if is_collectors_method(arg, "toSet") {
+                            return Ok(quote! { (#recv_ts).collect_to_set() });
+                        }
+                        if is_collectors_method(arg, "toUnmodifiableList") {
+                            return Ok(quote! { (#recv_ts).collect_to_list() });
+                        }
+                        if is_collectors_method(arg, "counting") {
+                            return Ok(quote! { (#recv_ts).count() });
+                        }
+                        // Collectors.joining() variants
+                        if let Some(join_args_result) = collectors_joining_args(arg) {
+                            let join_args = join_args_result?;
+                            match join_args.len() {
+                                0 => {
+                                    return Ok(
+                                        quote! { (#recv_ts).collect_joining(JString::from("")) },
+                                    );
+                                }
+                                1 => {
+                                    let sep = &join_args[0];
+                                    return Ok(quote! { (#recv_ts).collect_joining(#sep) });
+                                }
+                                3 => {
+                                    let sep = &join_args[0];
+                                    let pre = &join_args[1];
+                                    let suf = &join_args[2];
+                                    return Ok(
+                                        quote! { (#recv_ts).collect_joining_full(#sep, #pre, #suf) },
+                                    );
+                                }
+                                n => {
+                                    return Err(CodegenError::Unsupported(format!(
+                                        "Collectors.joining() does not support {n} arguments; only 0, 1, or 3 arguments are supported"
+                                    )));
+                                }
+                            }
+                        }
+                        // Collectors.toMap(keyFn, valFn)
+                        if let Some(map_args_result) = collectors_two_fn_args(arg, "toMap") {
+                            let map_args = map_args_result?;
+                            let kf = &map_args[0];
+                            let vf = &map_args[1];
+                            return Ok(quote! { (#recv_ts).collect_to_map(#kf, #vf) });
+                        }
+                        // Collectors.groupingBy(classifier)
+                        if let Some(gb_args_result) = collectors_one_fn_arg(arg, "groupingBy") {
+                            let gb_args = gb_args_result?;
+                            let clf = &gb_args[0];
+                            return Ok(quote! { (#recv_ts).collect_grouping_by(#clf) });
                         }
                     }
                 }
@@ -3888,6 +3968,9 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     "lines" => ident("lines_stream"),
                     "chars" => ident("chars_stream"),
                     "toCharArray" => ident("to_char_array"),
+                    // Stream terminal ops with alternate Rust names (none needed — pass through).
+                    // mapToInt/mapToLong/mapToDouble are type-changing maps; alias to map().
+                    "mapToInt" | "mapToLong" | "mapToDouble" => ident("map"),
                     _ => ident(method_name),
                 };
                 return Ok(quote! { (#recv_ts).#method(#(#args_ts),*) });
@@ -4960,19 +5043,90 @@ fn label_lifetime(lbl: &str) -> syn::Lifetime {
 
 /// Check if an expression is `Collectors.toList()` (a MethodCall on `Collectors` with name `toList`).
 fn is_collectors_to_list(expr: &IrExpr) -> bool {
+    is_collectors_method(expr, "toList")
+}
+
+/// Check if an expression is `Collectors.<method_name>(...)`.
+fn is_collectors_method(expr: &IrExpr, target: &str) -> bool {
     if let IrExpr::MethodCall {
         receiver: Some(recv),
         method_name,
         ..
     } = expr
     {
-        if method_name == "toList" {
+        if method_name == target {
             if let IrExpr::Var { name, .. } = recv.as_ref() {
                 return name == "Collectors";
             }
         }
     }
     false
+}
+
+/// If `expr` is `Collectors.joining(...)`, return the (already-emitted) arg token streams.
+fn collectors_joining_args(expr: &IrExpr) -> Option<Result<Vec<TokenStream>, CodegenError>> {
+    if let IrExpr::MethodCall {
+        receiver: Some(recv),
+        method_name,
+        args,
+        ..
+    } = expr
+    {
+        if method_name == "joining" {
+            if let IrExpr::Var { name, .. } = recv.as_ref() {
+                if name == "Collectors" {
+                    return Some(args.iter().map(emit_expr).collect::<Result<Vec<_>, _>>());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// If `expr` is `Collectors.<method>(fn1, fn2)`, return emitted arg token streams.
+fn collectors_two_fn_args(
+    expr: &IrExpr,
+    method: &str,
+) -> Option<Result<Vec<TokenStream>, CodegenError>> {
+    if let IrExpr::MethodCall {
+        receiver: Some(recv),
+        method_name,
+        args,
+        ..
+    } = expr
+    {
+        if method_name == method && args.len() == 2 {
+            if let IrExpr::Var { name, .. } = recv.as_ref() {
+                if name == "Collectors" {
+                    return Some(args.iter().map(emit_expr).collect::<Result<Vec<_>, _>>());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// If `expr` is `Collectors.<method>(fn1)`, return emitted arg token streams.
+fn collectors_one_fn_arg(
+    expr: &IrExpr,
+    method: &str,
+) -> Option<Result<Vec<TokenStream>, CodegenError>> {
+    if let IrExpr::MethodCall {
+        receiver: Some(recv),
+        method_name,
+        args,
+        ..
+    } = expr
+    {
+        if method_name == method && args.len() == 1 {
+            if let IrExpr::Var { name, .. } = recv.as_ref() {
+                if name == "Collectors" {
+                    return Some(args.iter().map(emit_expr).collect::<Result<Vec<_>, _>>());
+                }
+            }
+        }
+    }
+    None
 }
 
 fn as_const_literal(expr: &IrExpr) -> Option<TokenStream> {

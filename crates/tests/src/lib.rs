@@ -1467,4 +1467,37 @@ Expression calculator tests complete",
     fn test_collections_extra() {
         check("CollectionsExtra.java", "1\n5\n2\n3\n9");
     }
+
+    // ── Stage 11 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_collectors_variants() {
+        check(
+            "CollectorsVariants.java",
+            "3\nabc\na, b, c\n[a, b, c]\n3\n3",
+        );
+    }
+
+    #[test]
+    fn test_stream_extras() {
+        check("StreamExtras.java", "true\ntrue\ntrue\n3\n3");
+    }
+
+    #[test]
+    fn test_collectors_to_map_and_grouping_by() {
+        check("CollectorsToMapGroupingBy.java", "3\n1\n1\n3");
+    }
+
+    #[test]
+    fn test_int_stream_range() {
+        check("IntStreamRange.java", "15\n15\n10\n25");
+    }
+
+    #[test]
+    fn test_string_builder_advanced() {
+        check(
+            "StringBuilderAdvanced.java",
+            "dlroW olleH\nHello!!! World\nHello\nHello Java\n6\n4",
+        );
+    }
 }
