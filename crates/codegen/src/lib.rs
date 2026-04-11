@@ -1084,10 +1084,10 @@ fn emit_class(
                         current = map.get(&cur_name).cloned();
                     }
                     // Always include the standard base names.
-                    if !names.contains(&"Exception".to_owned()) {
+                    if !names.iter().any(|n| n == "Exception") {
                         names.push("Exception".to_owned());
                     }
-                    if !names.contains(&"Throwable".to_owned()) {
+                    if !names.iter().any(|n| n == "Throwable") {
                         names.push("Throwable".to_owned());
                     }
                     names
@@ -2156,7 +2156,7 @@ fn emit_catch_chain(
         // Always include the standard base names.
         set.insert("Exception".to_owned());
         set.insert("Throwable".to_owned());
-        if has_runtime_exception || cur == "RuntimeException" {
+        if has_runtime_exception {
             set.insert("RuntimeException".to_owned());
         }
         set
