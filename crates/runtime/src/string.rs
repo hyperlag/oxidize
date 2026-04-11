@@ -166,6 +166,16 @@ impl JString {
     pub fn to_char_array(&self) -> crate::array::JArray<char> {
         crate::array::JArray::from_vec(self.0.chars().collect())
     }
+
+    /// Java `String.compareTo(other)` — returns negative, zero, or positive.
+    #[allow(non_snake_case)]
+    pub fn compareTo(&self, other: JString) -> i32 {
+        match self.cmp(&other) {
+            std::cmp::Ordering::Less => -1,
+            std::cmp::Ordering::Equal => 0,
+            std::cmp::Ordering::Greater => 1,
+        }
+    }
 }
 
 impl From<&str> for JString {

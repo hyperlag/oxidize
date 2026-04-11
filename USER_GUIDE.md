@@ -645,6 +645,7 @@ You have two options:
 - Raw types (bare `List`, `Map`, `Set`)
 - Records (Java 16+), sealed classes (Java 17+)
 - Non-static inner classes, anonymous inner classes (with limitations)
+  — including `OuterClass.this.field` / `OuterClass.this.method()` access
 - `instanceof` pattern matching with binding variable (Java 16+)
 
 ### Enums
@@ -721,7 +722,7 @@ lambda expressions, text blocks (Java 13+).
 |---|---|
 | Generic method type inference across call chains | May require explicit type annotations |
 | Anonymous inner classes | Interface implementations only; no outer-variable capture |
-| Non-static inner classes | Hoisted to top-level; no implicit outer `this` reference |
+| Non-static inner classes | Outer reference is a snapshot clone taken at construction; mutations via inner class not reflected in original outer | 
 | `@Override`, `@Deprecated` | Tolerated syntactically; no code generation effect |
 | Switch expressions with patterns (Java 21) | Not yet supported |
 | Advanced enum features | Anonymous constant subclasses with fields not supported |

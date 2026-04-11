@@ -327,8 +327,10 @@ supported with the following limitations:
 - **Anonymous inner classes:** supported when implementing an interface with
   method overrides; outer-scope variable capture is not supported.
 - **Non-static inner classes:** hoisted to top-level structs with a mangled
-  name (`Outer$Inner`); implicit `this` reference to the outer instance is not
-  supported — inner class methods cannot access outer fields.
+  name (`Outer$Inner`); outer field and method access via `OuterClass.this.field`
+  and `OuterClass.this.method()` is supported. The outer reference is a snapshot
+  clone taken at construction time, so mutations to outer state made via the inner
+  class reference are not reflected back in the original outer object.
 - **Local classes:** classes declared inside a method body are hoisted to
   top-level structs using a mangled name (`Outer__loc__Local`); outer-scope
   variable capture is not supported.

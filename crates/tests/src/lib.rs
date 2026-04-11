@@ -1500,4 +1500,32 @@ Expression calculator tests complete",
             "dlroW olleH\nHello!!! World\nHello\nHello Java\n6\n4",
         );
     }
+
+    // ── Stage 12 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_generic_method() {
+        check("GenericMethod.java", "banana\nzebra\nhello\n42");
+    }
+
+    #[test]
+    fn test_custom_exception() {
+        check(
+            "CustomException.java",
+            "ok: 5\ncaught: negative value: -3\ndetail ok\ndetail caught: empty string",
+        );
+    }
+
+    #[test]
+    fn test_comparable_impl() {
+        check(
+            "ComparableImpl.java",
+            "Alice(92)\nBob(78)\nCharlie(85)\nAdam\nMaya\nZara",
+        );
+    }
+
+    #[test]
+    fn test_inner_class_outer() {
+        check("InnerClassOuter.java", "data=5\nhelper called\ndoubled=10");
+    }
 }
