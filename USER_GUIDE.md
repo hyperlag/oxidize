@@ -722,7 +722,7 @@ lambda expressions, text blocks (Java 13+).
 |---|---|
 | Generic method type inference across call chains | May require explicit type annotations |
 | Anonymous inner classes | Interface implementations only; no outer-variable capture |
-| Non-static inner classes | Outer reference is a snapshot clone taken at construction; mutations via inner class not reflected in original outer | 
+| Non-static inner classes | Outer reference is a snapshot clone taken at construction; mutations via inner class not reflected in original outer |
 | `@Override`, `@Deprecated` | Tolerated syntactically; no code generation effect |
 | Switch expressions with patterns (Java 21) | Not yet supported |
 | Advanced enum features | Anonymous constant subclasses with fields not supported |

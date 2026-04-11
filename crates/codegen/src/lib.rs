@@ -1073,13 +1073,27 @@ fn emit_class(
             .collect();
         let super_check = if let Some(parent_name) = &cls.superclass {
             if is_exception_class(parent_name) {
-                // For exception subclasses, chain exception base names instead of
+                // For exception subclasses, walk the exception hierarchy instead of
                 // delegating to self._super (which doesn't exist for exception types).
-                let parent_str = parent_name.as_str();
+                let ancestor_names: Vec<String> = EXCEPTION_HIERARCHY.with(|eh| {
+                    let map = eh.borrow();
+                    let mut names = Vec::new();
+                    let mut current = Some(parent_name.as_str().to_owned());
+                    while let Some(cur_name) = current {
+                        names.push(cur_name.clone());
+                        current = map.get(&cur_name).cloned();
+                    }
+                    // Always include the standard base names.
+                    if !names.contains(&"Exception".to_owned()) {
+                        names.push("Exception".to_owned());
+                    }
+                    if !names.contains(&"Throwable".to_owned()) {
+                        names.push("Throwable".to_owned());
+                    }
+                    names
+                });
                 quote! {
-                    || type_name == #parent_str
-                    || type_name == "Exception"
-                    || type_name == "Throwable"
+                    #(|| type_name == #ancestor_names)*
                 }
             } else {
                 quote! { || self._super._instanceof(type_name) }
@@ -1515,7 +1529,7 @@ fn emit_method_with_pub(method: &IrMethod, pub_vis: bool) -> Result<TokenStream,
             .map(|tp| {
                 let id = ident(&tp.name);
                 let extra = extra_bounds_for_type_param(tp);
-                quote! { #id: Clone + ::std::fmt::Debug #extra }
+                quote! { #id: Clone + ::std::default::Default + ::std::fmt::Debug #extra }
             })
             .collect();
         quote! { <#(#bounds),*> }
@@ -2131,14 +2145,18 @@ fn emit_catch_chain(
         let mut set = std::collections::HashSet::new();
         set.insert(name.to_owned());
         let mut cur = name.to_owned();
+        let mut has_runtime_exception = name == "RuntimeException";
         while let Some(parent) = exception_hierarchy.get(&cur) {
+            if parent == "RuntimeException" {
+                has_runtime_exception = true;
+            }
             set.insert(parent.clone());
             cur = parent.clone();
         }
         // Always include the standard base names.
         set.insert("Exception".to_owned());
         set.insert("Throwable".to_owned());
-        if is_exception_base(&cur) && cur != "IOException" {
+        if has_runtime_exception || cur == "RuntimeException" {
             set.insert("RuntimeException".to_owned());
         }
         set
@@ -2320,7 +2338,17 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             INNER_CLASS_OUTERS.with(|m| m.borrow().get(&current).cloned());
                         if our_outer.as_deref() == Some(outer_class_name.as_str()) {
                             let fname = ident(field_name);
-                            return Ok(quote! { self.__outer.borrow().#fname });
+                            let outer_field = match ty {
+                                IrType::String
+                                | IrType::Class(_)
+                                | IrType::TypeVar(_)
+                                | IrType::Generic { .. }
+                                | IrType::Array(_) => {
+                                    quote! { self.__outer.borrow().#fname.clone() }
+                                }
+                                _ => quote! { self.__outer.borrow().#fname },
+                            };
+                            return Ok(outer_field);
                         }
                     }
                 }
@@ -4383,7 +4411,13 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     };
                     if recv_is_type_param {
                         let arg = &args_ts[0];
-                        return Ok(quote! { (#recv_ts).cmp(&(#arg)) as i32 });
+                        return Ok(quote! {
+                            match (#recv_ts).cmp(&(#arg)) {
+                                ::std::cmp::Ordering::Less => -1_i32,
+                                ::std::cmp::Ordering::Equal => 0_i32,
+                                ::std::cmp::Ordering::Greater => 1_i32,
+                            }
+                        });
                     }
                 }
 
