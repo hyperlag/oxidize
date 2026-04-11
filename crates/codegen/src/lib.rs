@@ -71,6 +71,57 @@ thread_local! {
     /// Populated per-class before emit_class; cleared afterwards.
     static INNER_CLASS_MAP: std::cell::RefCell<std::collections::HashMap<String, String>> =
         std::cell::RefCell::new(std::collections::HashMap::new());
+    /// User-defined exception classes (extends RuntimeException / Exception / etc.).
+    /// Populated in one pre-scan pass before code generation starts.
+    static EXCEPTION_CLASSES: std::cell::RefCell<std::collections::HashSet<String>> =
+        std::cell::RefCell::new(std::collections::HashSet::new());
+    /// Type parameter names for the class currently being emitted
+    /// (e.g. `{"T", "K", "V"}`).  Used so compareTo on T dispatches to cmp.
+    static CLASS_TYPE_PARAMS: std::cell::RefCell<std::collections::HashSet<String>> =
+        std::cell::RefCell::new(std::collections::HashSet::new());
+    /// Type parameter names for the method currently being emitted.
+    /// Cleared and re-populated at the start of each method body emission.
+    static METHOD_TYPE_PARAMS: std::cell::RefCell<std::collections::HashSet<String>> =
+        std::cell::RefCell::new(std::collections::HashSet::new());
+    /// User-defined exception class hierarchy: child → direct parent.
+    /// Used by the catch chain emitter to match subtypes.
+    static EXCEPTION_HIERARCHY: std::cell::RefCell<std::collections::HashMap<String, String>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+    /// Non-static inner class → direct outer class name.
+    /// e.g. `"Outer$Inner"` → `"Outer"`.  Populated in one pre-scan pass.
+    static INNER_CLASS_OUTERS: std::cell::RefCell<std::collections::HashMap<String, String>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Returns `true` if `name` is a well-known Java exception base class.
+fn is_exception_base(name: &str) -> bool {
+    matches!(
+        name,
+        "Exception"
+            | "RuntimeException"
+            | "Throwable"
+            | "Error"
+            | "IOException"
+            | "IllegalArgumentException"
+            | "IllegalStateException"
+            | "NullPointerException"
+            | "IndexOutOfBoundsException"
+            | "ArrayIndexOutOfBoundsException"
+            | "StringIndexOutOfBoundsException"
+            | "ClassCastException"
+            | "ArithmeticException"
+            | "NumberFormatException"
+            | "UnsupportedOperationException"
+            | "StackOverflowError"
+            | "ConcurrentModificationException"
+            | "CloneNotSupportedException"
+    )
+}
+
+/// Returns `true` if `name` is a built-in Java exception base class or a
+/// user-defined class whose superclass is one.
+fn is_exception_class(name: &str) -> bool {
+    is_exception_base(name) || EXCEPTION_CLASSES.with(|ec| ec.borrow().contains(name))
 }
 
 /// Errors produced during code-generation.
@@ -238,6 +289,65 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             }
         }
     }
+
+    // Pre-scan: discover user-defined exception classes (classes that extend a
+    // built-in or user-defined exception type).  Repeat until stable so that
+    // multi-level hierarchies (A extends B extends RuntimeException) resolve.
+    EXCEPTION_CLASSES.with(|ec| ec.borrow_mut().clear());
+    loop {
+        let mut changed = false;
+        for decl in &module.decls {
+            if let IrDecl::Class(cls) = decl {
+                if !EXCEPTION_CLASSES.with(|ec| ec.borrow().contains(&cls.name)) {
+                    if let Some(parent) = &cls.superclass {
+                        if is_exception_class(parent) {
+                            EXCEPTION_CLASSES.with(|ec| {
+                                ec.borrow_mut().insert(cls.name.clone());
+                            });
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    // Build the exception hierarchy map: child → direct parent (for user exceptions only).
+    EXCEPTION_HIERARCHY.with(|eh| {
+        let mut map = eh.borrow_mut();
+        map.clear();
+        for decl in &module.decls {
+            if let IrDecl::Class(cls) = decl {
+                if is_exception_class(&cls.name) {
+                    if let Some(parent) = &cls.superclass {
+                        map.insert(cls.name.clone(), parent.clone());
+                    }
+                }
+            }
+        }
+    });
+
+    // Pre-scan: build inner-class → outer-class map.
+    // Only `$`-prefixed classes are non-static inner classes; `__loc__` classes
+    // are local (method-body) classes and don't need the __outer back-reference.
+    INNER_CLASS_OUTERS.with(|m| {
+        let mut map = m.borrow_mut();
+        map.clear();
+        for decl in &module.decls {
+            if let IrDecl::Class(cls) = decl {
+                if cls.name.contains('$') {
+                    // Split at the LAST `$` to get the direct outer class.
+                    if let Some(dollar_pos) = cls.name.rfind('$') {
+                        let outer = cls.name[..dollar_pos].to_owned();
+                        map.insert(cls.name.clone(), outer);
+                    }
+                }
+            }
+        }
+    });
 
     // Collect class names so we know what to emit a main() for
     let mut main_class: Option<String> = None;
@@ -720,10 +830,26 @@ fn emit_class(
 
     // Struct fields = optional parent struct + own instance fields
     let mut struct_fields: Vec<TokenStream> = Vec::new();
+
+    // Detect whether this is a non-static inner class (name contains '$').
+    // If so, it needs a hidden `__outer: Rc<RefCell<Outer>>` reference field.
+    let inner_outer_name: Option<String> =
+        INNER_CLASS_OUTERS.with(|m| m.borrow().get(&cls.name).cloned());
+    if let Some(ref outer_name) = inner_outer_name {
+        let outer_ident = ident(outer_name);
+        struct_fields
+            .push(quote! { pub __outer: ::std::rc::Rc<::std::cell::RefCell<#outer_ident>>, });
+    }
+
     if let Some(parent_name) = &cls.superclass {
-        // Use emit_type to map known Java parent names (e.g. TimerTask → JTimerTask).
-        let parent_ty = emit_type(&IrType::Class(parent_name.clone()));
-        struct_fields.push(quote! { pub _super: #parent_ty, });
+        if is_exception_class(parent_name) {
+            // Exception subclasses store a message string instead of a parent struct.
+            struct_fields.push(quote! { pub message: JString, });
+        } else {
+            // Use emit_type to map known Java parent names (e.g. TimerTask → JTimerTask).
+            let parent_ty = emit_type(&IrType::Class(parent_name.clone()));
+            struct_fields.push(quote! { pub _super: #parent_ty, });
+        }
     }
     for f in &own_instance_fields {
         let fname = ident(&f.name);
@@ -751,6 +877,14 @@ fn emit_class(
     CURRENT_CLASS_NAME.with(|cn| *cn.borrow_mut() = cls_name_str.clone());
     STATIC_ATOMIC_FIELDS.with(|sf| sf.borrow_mut().clear());
     STATIC_ONCE_LOCK_FIELDS.with(|sf| sf.borrow_mut().clear());
+    // Populate class-level type parameter names for compareTo dispatch.
+    CLASS_TYPE_PARAMS.with(|ctp| {
+        let mut set = ctp.borrow_mut();
+        set.clear();
+        for tp in &cls.type_params {
+            set.insert(tp.name.clone());
+        }
+    });
 
     // Static fields → const items (for static final with literal value)
     //               → module-level Rust statics (for mutable primitive statics)
@@ -872,11 +1006,23 @@ fn emit_class(
     // Always emit a `pub fn new() -> Self` even when no explicit constructor
     // exists, so that `new Foo()` calls in the generated code compile.
     if cls.constructors.is_empty() {
-        method_tokens.push(quote! {
-            pub fn new() -> Self {
-                Self::default()
-            }
-        });
+        if let Some(ref outer_name) = inner_outer_name {
+            // Inner class: new() requires the outer reference as first arg.
+            let outer_ident = ident(outer_name);
+            method_tokens.push(quote! {
+                pub fn new(
+                    __outer: ::std::rc::Rc<::std::cell::RefCell<#outer_ident>>,
+                ) -> Self {
+                    Self { __outer, ..Default::default() }
+                }
+            });
+        } else {
+            method_tokens.push(quote! {
+                pub fn new() -> Self {
+                    Self::default()
+                }
+            });
+        }
     }
     for ctor in &cls.constructors {
         method_tokens.push(emit_constructor(ctor, cls)?);
@@ -925,8 +1071,33 @@ fn emit_class(
             .iter()
             .map(|iname| quote! { || type_name == #iname })
             .collect();
-        let super_check = if cls.superclass.is_some() {
-            quote! { || self._super._instanceof(type_name) }
+        let super_check = if let Some(parent_name) = &cls.superclass {
+            if is_exception_class(parent_name) {
+                // For exception subclasses, walk the exception hierarchy instead of
+                // delegating to self._super (which doesn't exist for exception types).
+                let ancestor_names: Vec<String> = EXCEPTION_HIERARCHY.with(|eh| {
+                    let map = eh.borrow();
+                    let mut names = Vec::new();
+                    let mut current = Some(parent_name.as_str().to_owned());
+                    while let Some(cur_name) = current {
+                        names.push(cur_name.clone());
+                        current = map.get(&cur_name).cloned();
+                    }
+                    // Always include the standard base names.
+                    if !names.iter().any(|n| n == "Exception") {
+                        names.push("Exception".to_owned());
+                    }
+                    if !names.iter().any(|n| n == "Throwable") {
+                        names.push("Throwable".to_owned());
+                    }
+                    names
+                });
+                quote! {
+                    #(|| type_name == #ancestor_names)*
+                }
+            } else {
+                quote! { || self._super._instanceof(type_name) }
+            }
         } else {
             quote! {}
         };
@@ -957,6 +1128,20 @@ fn emit_class(
                 }
             });
         }
+    }
+
+    // For exception classes: add `getMessage()` if not already defined.
+    if is_exception_class(&cls.name)
+        && !cls
+            .methods
+            .iter()
+            .any(|m| m.name == "getMessage" && !m.is_static)
+    {
+        method_tokens.push(quote! {
+            pub fn getMessage(&self) -> JString {
+                self.message.clone()
+            }
+        });
     }
 
     let impl_block = if !method_tokens.is_empty() {
@@ -1021,7 +1206,7 @@ fn emit_class(
     }
 
     // `impl Display` — auto-generated for records (Java-format) and for classes
-    // that define a `toString()` method.
+    // that define a `toString()` method.  Exception classes get their own Display.
     let display_impl = if cls.is_record {
         // Records emit: "ClassName[field1=VALUE1, field2=VALUE2]"
         let instance_fields: Vec<&ir::decl::IrField> =
@@ -1045,6 +1230,16 @@ fn emit_class(
                 }
             }
         }
+    } else if is_exception_class(&cls.name) {
+        // Exception classes: Display shows "ClassName: message".
+        let class_name_str = &cls.name;
+        quote! {
+            impl #impl_generics ::std::fmt::Display for #name #struct_generics {
+                fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                    write!(f, "{}: {}", #class_name_str, self.message)
+                }
+            }
+        }
     } else if cls
         .methods
         .iter()
@@ -1064,11 +1259,64 @@ fn emit_class(
         quote! {}
     };
 
+    // For exception classes, emit `std::error::Error`.
+    let exception_error_impl = if is_exception_class(&cls.name) {
+        quote! {
+            impl #impl_generics ::std::error::Error for #name #struct_generics {}
+        }
+    } else {
+        quote! {}
+    };
+
+    // If the class implements `Comparable<T>` and has a `compareTo` method,
+    // emit PartialEq, Eq, PartialOrd, Ord delegating to compareTo.
+    let comparable_impls = {
+        let has_comparable = cls
+            .interfaces
+            .iter()
+            .any(|iname| iname == "Comparable" || iname.starts_with("Comparable<"));
+        let has_compare_to = cls
+            .methods
+            .iter()
+            .any(|m| m.name == "compareTo" && !m.is_static);
+        if has_comparable && has_compare_to {
+            quote! {
+                impl #impl_generics PartialEq for #name #struct_generics {
+                    fn eq(&self, other: &Self) -> bool {
+                        self.clone().compareTo(other.clone()) == 0
+                    }
+                }
+                impl #impl_generics Eq for #name #struct_generics {}
+                impl #impl_generics PartialOrd for #name #struct_generics {
+                    fn partial_cmp(&self, other: &Self) -> Option<::std::cmp::Ordering> {
+                        Some(self.cmp(other))
+                    }
+                }
+                impl #impl_generics Ord for #name #struct_generics {
+                    fn cmp(&self, other: &Self) -> ::std::cmp::Ordering {
+                        let n = self.clone().compareTo(other.clone());
+                        if n < 0 {
+                            ::std::cmp::Ordering::Less
+                        } else if n == 0 {
+                            ::std::cmp::Ordering::Equal
+                        } else {
+                            ::std::cmp::Ordering::Greater
+                        }
+                    }
+                }
+            }
+        } else {
+            quote! {}
+        }
+    };
+
     Ok(quote! {
         #struct_def
         #(#static_items)*
         #impl_block
         #display_impl
+        #exception_error_impl
+        #comparable_impls
         #(#trait_impls)*
     })
 }
@@ -1134,16 +1382,43 @@ fn emit_constructor(ctor: &IrConstructor, cls: &IrClass) -> Result<TokenStream, 
     // Split body into: optional super() call, then remaining statements.
     let (super_args, rest_stmts): (Option<Vec<IrExpr>>, Vec<IrStmt>) = split_super_call(&ctor.body);
 
+    // If this is a non-static inner class, prepend the `__outer` param and
+    // include it in the struct initializer.
+    let inner_outer_name: Option<String> =
+        INNER_CLASS_OUTERS.with(|m| m.borrow().get(&cls.name).cloned());
+    let outer_param: TokenStream = if let Some(ref outer_name) = inner_outer_name {
+        let outer_ident = ident(outer_name);
+        quote! { __outer: ::std::rc::Rc<::std::cell::RefCell<#outer_ident>>, }
+    } else {
+        quote! {}
+    };
+    let outer_field_init: TokenStream = if inner_outer_name.is_some() {
+        quote! { __outer, }
+    } else {
+        quote! {}
+    };
+
     // Build the struct initializer.
     let super_field_init: Option<TokenStream> = if let Some(parent_name) = &cls.superclass {
-        // Use emit_type to handle mapped parent types (e.g. TimerTask → JTimerTask).
-        let parent_ty = emit_type(&IrType::Class(parent_name.clone()));
-        let super_arg_ts: Vec<TokenStream> = super_args
-            .as_ref()
-            .map(|args| args.iter().map(emit_expr).collect::<Result<Vec<_>, _>>())
-            .transpose()?
-            .unwrap_or_default();
-        Some(quote! { _super: #parent_ty::new(#(#super_arg_ts),*), })
+        if is_exception_class(parent_name) {
+            // Exception parent: map super(msg) call to the `message` field.
+            let msg_ts = super_args
+                .as_ref()
+                .and_then(|a| a.first())
+                .map(emit_expr)
+                .transpose()?
+                .unwrap_or_else(|| quote! { JString::from("") });
+            Some(quote! { message: #msg_ts, })
+        } else {
+            // Use emit_type to handle mapped parent types (e.g. TimerTask → JTimerTask).
+            let parent_ty = emit_type(&IrType::Class(parent_name.clone()));
+            let super_arg_ts: Vec<TokenStream> = super_args
+                .as_ref()
+                .map(|args| args.iter().map(emit_expr).collect::<Result<Vec<_>, _>>())
+                .transpose()?
+                .unwrap_or_default();
+            Some(quote! { _super: #parent_ty::new(#(#super_arg_ts),*), })
+        }
     } else {
         None
     };
@@ -1164,6 +1439,7 @@ fn emit_constructor(ctor: &IrConstructor, cls: &IrClass) -> Result<TokenStream, 
     // Use `Self` so this works for both plain and generic structs.
     let struct_init = quote! {
         let mut __self__: Self = Self {
+            #outer_field_init
             #super_field_init
             #(#own_field_inits)*
         };
@@ -1181,7 +1457,7 @@ fn emit_constructor(ctor: &IrConstructor, cls: &IrClass) -> Result<TokenStream, 
     };
 
     Ok(quote! {
-        pub fn new(#(#params),*) -> Self {
+        pub fn new(#outer_param #(#params),*) -> Self {
             #static_init_preamble
             #struct_init
             #(#body)*
@@ -1243,7 +1519,29 @@ fn emit_method_with_pub(method: &IrMethod, pub_vis: bool) -> Result<TokenStream,
         quote! { &mut self, }
     };
 
-    // Set the static-context flag so emit_expr can distinguish Self:: vs self.
+    // Method-level generic type parameters: `fn foo<T: Clone + Debug + PartialOrd + Ord>(...)`.
+    let method_type_params = if method.type_params.is_empty() {
+        quote! {}
+    } else {
+        let bounds: Vec<_> = method
+            .type_params
+            .iter()
+            .map(|tp| {
+                let id = ident(&tp.name);
+                let extra = extra_bounds_for_type_param(tp);
+                quote! { #id: Clone + ::std::default::Default + ::std::fmt::Debug #extra }
+            })
+            .collect();
+        quote! { <#(#bounds),*> }
+    };
+    // Populate method-level type param names so compareTo can dispatch to cmp.
+    METHOD_TYPE_PARAMS.with(|mtp| {
+        let mut set = mtp.borrow_mut();
+        set.clear();
+        for tp in &method.type_params {
+            set.insert(tp.name.clone());
+        }
+    });
     let prev = IN_STATIC_METHOD.with(|c| c.replace(method.is_static));
     let body = match &method.body {
         Some(stmts) => emit_stmts(stmts),
@@ -1283,7 +1581,7 @@ fn emit_method_with_pub(method: &IrMethod, pub_vis: bool) -> Result<TokenStream,
 
     if pub_vis {
         Ok(quote! {
-            pub fn #name(#self_param #(#params),*) #ret_clause {
+            pub fn #name #method_type_params(#self_param #(#params),*) #ret_clause {
                 #sync_preamble
                 #static_init_preamble
                 #(#body)*
@@ -1291,7 +1589,7 @@ fn emit_method_with_pub(method: &IrMethod, pub_vis: bool) -> Result<TokenStream,
         })
     } else {
         Ok(quote! {
-            fn #name(#self_param #(#params),*) #ret_clause {
+            fn #name #method_type_params(#self_param #(#params),*) #ret_clause {
                 #sync_preamble
                 #static_init_preamble
                 #(#body)*
@@ -1718,7 +2016,10 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
             finally,
         } => {
             let body_stmts = emit_stmts(body)?;
-            let catch_chain = emit_catch_chain(catches)?;
+            let catch_chain = {
+                let hierarchy = EXCEPTION_HIERARCHY.with(|eh| eh.borrow().clone());
+                emit_catch_chain(catches, &hierarchy)?
+            };
             let finally_block = if let Some(fin) = finally {
                 let fs = emit_stmts(fin)?;
                 quote! { #(#fs)* }
@@ -1830,7 +2131,37 @@ fn emit_throw(e: &IrExpr) -> Result<TokenStream, CodegenError> {
 
 /// Build a nested if-else chain that matches a `JException` against catch
 /// clauses, returning `None` if handled or `Some(__panic_val)` to rethrow.
-fn emit_catch_chain(catches: &[ir::stmt::CatchClause]) -> Result<TokenStream, CodegenError> {
+///
+/// The `exception_hierarchy` map provides `child → parent` info for user-defined
+/// exception classes so that `catch (AppException e)` catches `DetailedException`
+/// (which extends AppException).
+fn emit_catch_chain(
+    catches: &[ir::stmt::CatchClause],
+    exception_hierarchy: &std::collections::HashMap<String, String>,
+) -> Result<TokenStream, CodegenError> {
+    // Build a helper: given a class name, return all ancestor exception names
+    // (including the class itself) that would satisfy `class instanceof check`.
+    let ancestors_of = |name: &str| -> std::collections::HashSet<String> {
+        let mut set = std::collections::HashSet::new();
+        set.insert(name.to_owned());
+        let mut cur = name.to_owned();
+        let mut has_runtime_exception = name == "RuntimeException";
+        while let Some(parent) = exception_hierarchy.get(&cur) {
+            if parent == "RuntimeException" {
+                has_runtime_exception = true;
+            }
+            set.insert(parent.clone());
+            cur = parent.clone();
+        }
+        // Always include the standard base names.
+        set.insert("Exception".to_owned());
+        set.insert("Throwable".to_owned());
+        if has_runtime_exception {
+            set.insert("RuntimeException".to_owned());
+        }
+        set
+    };
+
     // Start with the "no match → rethrow" base case.
     let mut chain = quote! { Some(__panic_val) };
 
@@ -1846,10 +2177,29 @@ fn emit_catch_chain(catches: &[ir::stmt::CatchClause]) -> Result<TokenStream, Co
             // Catch-all
             quote! { true }
         } else {
+            // For each catch type, build a check that also matches user exception subclasses.
+            // If ExType is a user-defined exception, we also check all its subtypes
+            // (i.e. any ex class whose ancestor chain includes ExType).
             let checks: Vec<TokenStream> = catch
                 .exception_types
                 .iter()
-                .map(|t| quote! { __ex.is_instance_of(#t) })
+                .flat_map(|t| {
+                    // Collect all user-defined exception classes that are subtypes of t.
+                    let subtypes: Vec<String> = exception_hierarchy
+                        .iter()
+                        .filter(|(child, _)| ancestors_of(child.as_str()).contains(t.as_str()))
+                        .map(|(child, _)| child.clone())
+                        .collect();
+                    let mut all_names = vec![t.clone()];
+                    all_names.extend(subtypes);
+                    all_names
+                        .into_iter()
+                        .map(|name| {
+                            let name_str = name.as_str().to_owned();
+                            quote! { __ex.is_instance_of(#name_str) }
+                        })
+                        .collect::<Vec<_>>()
+                })
                 .collect();
             quote! { #(#checks)||* }
         };
@@ -1878,6 +2228,29 @@ fn emit_place(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             field_name,
             ..
         } => {
+            // OuterClass.this.field = x → self.__outer.borrow_mut().field = x
+            if let IrExpr::FieldAccess {
+                receiver: deep_recv,
+                field_name: this_kw,
+                ..
+            } = receiver.as_ref()
+            {
+                if this_kw == "this" {
+                    if let IrExpr::Var {
+                        name: outer_class_name,
+                        ..
+                    } = deep_recv.as_ref()
+                    {
+                        let current = CURRENT_CLASS_NAME.with(|c| c.borrow().clone());
+                        let our_outer =
+                            INNER_CLASS_OUTERS.with(|m| m.borrow().get(&current).cloned());
+                        if our_outer.as_deref() == Some(outer_class_name.as_str()) {
+                            let fname = ident(field_name);
+                            return Ok(quote! { self.__outer.borrow_mut().#fname });
+                        }
+                    }
+                }
+            }
             if let IrExpr::Var { name, .. } = receiver.as_ref() {
                 if name == "System" {
                     let stream = ident(field_name);
@@ -1945,6 +2318,42 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             field_name,
             ty,
         } => {
+            // OuterClass.this.field → self.__outer.borrow().field
+            // Detect the nested FieldAccess pattern: receiver is itself a
+            // FieldAccess with field_name == "this" whose receiver is Var(outer_name).
+            if let IrExpr::FieldAccess {
+                receiver: deep_recv,
+                field_name: this_kw,
+                ..
+            } = receiver.as_ref()
+            {
+                if this_kw == "this" {
+                    if let IrExpr::Var {
+                        name: outer_class_name,
+                        ..
+                    } = deep_recv.as_ref()
+                    {
+                        let current = CURRENT_CLASS_NAME.with(|c| c.borrow().clone());
+                        let our_outer =
+                            INNER_CLASS_OUTERS.with(|m| m.borrow().get(&current).cloned());
+                        if our_outer.as_deref() == Some(outer_class_name.as_str()) {
+                            let fname = ident(field_name);
+                            let outer_field = match ty {
+                                IrType::String
+                                | IrType::Class(_)
+                                | IrType::TypeVar(_)
+                                | IrType::Generic { .. }
+                                | IrType::Array(_) => {
+                                    quote! { self.__outer.borrow().#fname.clone() }
+                                }
+                                _ => quote! { self.__outer.borrow().#fname },
+                            };
+                            return Ok(outer_field);
+                        }
+                    }
+                }
+            }
+
             // Enum constant access: Color.RED → Color::RED
             // Resolve through the alias map so mangled names work too.
             if let IrExpr::Var { name, .. } = receiver.as_ref() {
@@ -2144,6 +2553,35 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
         } => {
             let mut args_ts: Vec<TokenStream> =
                 args.iter().map(emit_expr).collect::<Result<_, _>>()?;
+
+            // OuterClass.this.method(args) → self.__outer.borrow_mut().method(args)
+            // Detect: receiver == Some(FieldAccess { receiver: Var(outer_name), field_name: "this" })
+            if let Some(recv_expr) = receiver {
+                if let IrExpr::FieldAccess {
+                    receiver: deep_recv,
+                    field_name: this_kw,
+                    ..
+                } = recv_expr.as_ref()
+                {
+                    if this_kw == "this" {
+                        if let IrExpr::Var {
+                            name: outer_class_name,
+                            ..
+                        } = deep_recv.as_ref()
+                        {
+                            let current = CURRENT_CLASS_NAME.with(|c| c.borrow().clone());
+                            let our_outer =
+                                INNER_CLASS_OUTERS.with(|m| m.borrow().get(&current).cloned());
+                            if our_outer.as_deref() == Some(outer_class_name.as_str()) {
+                                let mname = ident(method_name);
+                                return Ok(
+                                    quote! { self.__outer.borrow_mut().#mname(#(#args_ts),*) },
+                                );
+                            }
+                        }
+                    }
+                }
+            }
 
             // Varargs wrapping: if this method has a varargs parameter, bundle
             // the trailing arguments on the call site into a JArray::from_vec.
@@ -3957,6 +4395,32 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     return Ok(quote! { JProcessBuilder::exec_string(#cmd) });
                 }
 
+                // `compareTo` on a generic type variable (T: PartialOrd + Ord) →
+                // delegate to Rust's `Ord::cmp()`, casting the Ordering to i32.
+                // The receiver type is IrType::Class("T") (parser uses Class for all
+                // non-primitive names), so we check against active type param names.
+                if method_name == "compareTo" && args_ts.len() == 1 {
+                    let recv_is_type_param = match recv.ty() {
+                        IrType::Class(name) => {
+                            CLASS_TYPE_PARAMS.with(|ctp| ctp.borrow().contains(name.as_str()))
+                                || METHOD_TYPE_PARAMS
+                                    .with(|mtp| mtp.borrow().contains(name.as_str()))
+                        }
+                        IrType::TypeVar(_) => true,
+                        _ => false,
+                    };
+                    if recv_is_type_param {
+                        let arg = &args_ts[0];
+                        return Ok(quote! {
+                            match (#recv_ts).cmp(&(#arg)) {
+                                ::std::cmp::Ordering::Less => -1_i32,
+                                ::std::cmp::Ordering::Equal => 0_i32,
+                                ::std::cmp::Ordering::Greater => 1_i32,
+                            }
+                        });
+                    }
+                }
+
                 // Rename Java method names to their Rust runtime equivalents.
                 let method = match method_name.as_str() {
                     "await" => ident("await_"),
@@ -4262,8 +4726,28 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     let mangled = INNER_CLASS_MAP
                         .with(|m| m.borrow().get(class.as_str()).cloned())
                         .unwrap_or_else(|| class.clone());
-                    let cls = ident(&mangled);
-                    Ok(quote! { #cls::new(#(#args_ts),*) })
+                    let cls_ident = ident(&mangled);
+                    // For non-static inner classes inject the outer back-reference.
+                    let is_inner = INNER_CLASS_OUTERS.with(|m| m.borrow().contains_key(&mangled));
+                    if is_inner && !IN_STATIC_METHOD.with(|c| c.get()) {
+                        Ok(quote! {
+                            #cls_ident::new(
+                                ::std::rc::Rc::new(::std::cell::RefCell::new(self.clone())),
+                                #(#args_ts),*
+                            )
+                        })
+                    } else if is_inner {
+                        // Static context (shouldn't happen in valid Java, but
+                        // fall back to a default outer to keep code compiling).
+                        Ok(quote! {
+                            #cls_ident::new(
+                                ::std::rc::Rc::new(::std::cell::RefCell::new(Default::default())),
+                                #(#args_ts),*
+                            )
+                        })
+                    } else {
+                        Ok(quote! { #cls_ident::new(#(#args_ts),*) })
+                    }
                 }
             }
         }
