@@ -811,16 +811,38 @@ Each class with synchronized methods gets a per-class
 
 ### synchronized Blocks
 
+`synchronized (this)` and `synchronized (obj)` are both supported.  Each user
+class is injected with a `pub __monitor: JMonitor` field that provides its own
+independent `(Mutex, Condvar)` pair.
+
 ```java
 synchronized (this) { ... }
 ```
 ```rust
 {
-    let (__lock, __cvar) = &*java_compat::__sync_block_monitor();
-    let mut __guard = __lock.lock().unwrap();
+    let __sync_arc = (self).__monitor.pair();
+    let (__sync_lock, __sync_cond) = &*__sync_arc;
+    let mut __sync_guard = __sync_lock.lock().unwrap();
     ...
+    drop(__sync_guard);
 }
 ```
+
+```java
+synchronized (someObj) { ... }
+```
+```rust
+{
+    let __sync_arc = (someObj).__monitor.pair();
+    let (__sync_lock, __sync_cond) = &*__sync_arc;
+    let mut __sync_guard = __sync_lock.lock().unwrap();
+    ...
+    drop(__sync_guard);
+}
+```
+
+Nested `synchronized` blocks on **different** objects work correctly because
+each object owns its own mutex.
 
 ### volatile Fields
 
@@ -948,6 +970,52 @@ waits for a `signal`/`signalAll`, and re-acquires the lock before returning.
 | `TimeUnit.SECONDS`          | `JTimeUnit::SECONDS`                 |
 | `TimeUnit.MILLISECONDS`     | `JTimeUnit::MILLISECONDS`            |
 | `unit.toMillis(n)`          | `unit.toMillis(n)`                   |
+
+### StampedLock
+
+| Java                              | Rust                                  |
+|-----------------------------------|---------------------------------------|
+| `new StampedLock()`              | `JStampedLock::new()`                 |
+| `sl.writeLock()`                 | `sl.writeLock()` → `i64` stamp        |
+| `sl.unlockWrite(stamp)`          | `sl.unlockWrite(stamp)`               |
+| `sl.readLock()`                  | `sl.readLock()` → `i64` stamp         |
+| `sl.unlockRead(stamp)`           | `sl.unlockRead(stamp)`                |
+| `sl.tryOptimisticRead()`         | `sl.tryOptimisticRead()` → `i64`      |
+| `sl.validate(stamp)`             | `sl.validate(stamp)` → `bool`         |
+
+`StampedLock` is backed by a `Mutex<StampedLockState>` + `Condvar`.
+`writeLock()` blocks until no readers or writers hold the lock and
+increments an internal stamp counter on acquisition.  `tryOptimisticRead()`
+returns `0` if a write lock is currently held.
+
+> **Limitation:** `return` inside a `try { ... } finally { sl.unlockWrite(stamp); }`
+> block does not work because codegen wraps the body in a `catch_unwind` closure.
+> Place `unlockWrite`/`unlockRead` after the try-block instead.
+
+### ForkJoinPool / RecursiveTask
+
+```java
+class SumTask extends RecursiveTask<Integer> {
+    protected Integer compute() { ... }
+}
+ForkJoinPool pool = new ForkJoinPool();
+int result = pool.invoke(new SumTask(...));
+```
+```rust
+// codegen injects fork()/join() and __fork_handle into SumTask;
+// pool.invoke(task) becomes { let mut __fjp_t = task; __fjp_t.compute() }
+```
+
+| Java                              | Rust                                  |
+|-----------------------------------|---------------------------------------|
+| `new ForkJoinPool()`             | `JForkJoinPool::new()`                |
+| `ForkJoinPool.commonPool()`      | `JForkJoinPool::commonPool()`         |
+| `pool.invoke(task)`              | `task.compute()` (inlined by codegen) |
+| `task.fork()`                    | spawns a thread; stores handle        |
+| `task.join()`                    | blocks until forked result available  |
+
+`RecursiveAction` (void compute) is also supported; `fork()`/`join()` omit
+the result-carrying handle.
 
 ## Standard Library
 
