@@ -1068,3 +1068,206 @@ impl std::fmt::Display for JTimeUnit {
         }
     }
 }
+
+// ─── StampedLock ─────────────────────────────────────────────────────────────
+
+struct StampedLockState {
+    stamp: u64,
+    writers: u32,
+    readers: u32,
+}
+
+/// Mirrors `java.util.concurrent.locks.StampedLock`.
+pub struct JStampedLock {
+    state: Arc<Mutex<StampedLockState>>,
+    cvar: Arc<Condvar>,
+}
+
+impl Clone for JStampedLock {
+    fn clone(&self) -> Self {
+        Self {
+            state: Arc::clone(&self.state),
+            cvar: Arc::clone(&self.cvar),
+        }
+    }
+}
+
+impl std::fmt::Debug for JStampedLock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "JStampedLock")
+    }
+}
+
+impl Default for JStampedLock {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[allow(non_snake_case)]
+impl JStampedLock {
+    pub fn new() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(StampedLockState {
+                stamp: 1,
+                writers: 0,
+                readers: 0,
+            })),
+            cvar: Arc::new(Condvar::new()),
+        }
+    }
+
+    /// Acquire the write lock, blocking until no readers or writers hold it.
+    /// Returns an opaque stamp that must be passed to `unlockWrite`.
+    pub fn writeLock(&self) -> i64 {
+        let mut st = self.state.lock().unwrap();
+        while st.writers > 0 || st.readers > 0 {
+            st = self.cvar.wait(st).unwrap();
+        }
+        st.writers = 1;
+        st.stamp += 1;
+        st.stamp as i64
+    }
+
+    /// Release the write lock obtained via `writeLock`.
+    pub fn unlockWrite(&self, _stamp: i64) {
+        let mut st = self.state.lock().unwrap();
+        st.writers = 0;
+        self.cvar.notify_all();
+    }
+
+    /// Acquire the read lock, blocking until no writer holds it.
+    /// Returns an opaque stamp.
+    pub fn readLock(&self) -> i64 {
+        let mut st = self.state.lock().unwrap();
+        while st.writers > 0 {
+            st = self.cvar.wait(st).unwrap();
+        }
+        st.readers += 1;
+        st.stamp as i64
+    }
+
+    /// Release the read lock obtained via `readLock`.
+    pub fn unlockRead(&self, _stamp: i64) {
+        let mut st = self.state.lock().unwrap();
+        assert!(st.readers > 0, "unlockRead called with no active read lock");
+        st.readers -= 1;
+        if st.readers == 0 {
+            self.cvar.notify_all();
+        }
+    }
+
+    /// Try to obtain an optimistic read stamp.  Returns `0` if a write lock
+    /// is currently held (indicating that an optimistic read is not safe).
+    pub fn tryOptimisticRead(&self) -> i64 {
+        let st = self.state.lock().unwrap();
+        if st.writers > 0 {
+            0
+        } else {
+            st.stamp as i64
+        }
+    }
+
+    /// Validate that the given optimistic-read stamp is still current (no
+    /// write has occurred since the stamp was obtained).
+    pub fn validate(&self, stamp: i64) -> bool {
+        let st = self.state.lock().unwrap();
+        st.writers == 0 && st.stamp as i64 == stamp
+    }
+}
+
+// ─── ForkJoinPool / RecursiveTask ────────────────────────────────────────────
+
+/// Mirrors `java.util.concurrent.ForkJoinPool`.
+///
+/// For oxidize's purposes, `invoke(task)` is rewritten by codegen to call
+/// `task.compute()` directly.  The pool itself is a zero-size token.
+#[derive(Clone, Debug, Default)]
+pub struct JForkJoinPool;
+
+#[allow(non_snake_case)]
+impl JForkJoinPool {
+    pub fn new() -> Self {
+        JForkJoinPool
+    }
+
+    pub fn commonPool() -> Self {
+        JForkJoinPool
+    }
+}
+
+/// A lightweight handle that carries the result of a `fork()`ed RecursiveTask.
+///
+/// Injected into RecursiveTask subclasses by codegen as `__fork_handle`.
+#[derive(Clone, Debug)]
+pub struct JForkJoinHandle<T: Clone + Send + 'static>(Arc<(Mutex<Option<T>>, Condvar)>);
+
+impl<T: Clone + Send + 'static> Default for JForkJoinHandle<T> {
+    fn default() -> Self {
+        JForkJoinHandle(Arc::new((Mutex::new(None), Condvar::new())))
+    }
+}
+
+impl<T: Clone + Send + 'static> JForkJoinHandle<T> {
+    /// Create a new, empty handle.
+    pub fn __new() -> Self {
+        JForkJoinHandle(Arc::new((Mutex::new(None), Condvar::new())))
+    }
+
+    /// Store the result and wake any waiting `__get` caller.
+    pub fn __set(&self, val: T) {
+        let (lock, cvar) = &*self.0;
+        *lock.lock().unwrap() = Some(val);
+        cvar.notify_all();
+    }
+
+    /// Block until the result is available, then return it.
+    pub fn __get(&self) -> T {
+        let (lock, cvar) = &*self.0;
+        let mut guard = lock.lock().unwrap();
+        while guard.is_none() {
+            guard = cvar.wait(guard).unwrap();
+        }
+        guard.as_ref().unwrap().clone()
+    }
+}
+
+// ─── Per-object monitor ──────────────────────────────────────────────────────
+
+/// Provides the monitor semantics (`wait` / `notify` / `notifyAll`) for
+/// arbitrary Java `synchronized(obj)` blocks.
+///
+/// Injected by codegen as `pub __monitor: JMonitor` into every user class so
+/// that `synchronized(obj)` can lock the *object's own* mutex rather than the
+/// process-global fallback.
+pub struct JMonitor(Arc<(Mutex<()>, Condvar)>);
+
+impl JMonitor {
+    pub fn new() -> Self {
+        JMonitor(Arc::new((Mutex::new(()), Condvar::new())))
+    }
+
+    /// Return a cloned `Arc` to the underlying `(Mutex, Condvar)` pair so that
+    /// codegen-emitted synchronized blocks can bind `__sync_lock`/`__sync_cond`.
+    pub fn pair(&self) -> Arc<(Mutex<()>, Condvar)> {
+        Arc::clone(&self.0)
+    }
+}
+
+impl Default for JMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Clone for JMonitor {
+    fn clone(&self) -> Self {
+        JMonitor(Arc::clone(&self.0))
+    }
+}
+
+impl std::fmt::Debug for JMonitor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "JMonitor")
+    }
+}

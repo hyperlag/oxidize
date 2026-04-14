@@ -95,15 +95,23 @@ concurrency utilities are also supported:
 - `CompletableFuture` (supplyAsync, runAsync, completedFuture, get, join,
   isDone, thenApply, thenAccept, thenCompose)
 - `TimeUnit` (NANOSECONDS through DAYS, conversion methods)
+- `ForkJoinPool` / `RecursiveTask<T>` / `RecursiveAction` (fork, join,
+  compute, invoke, commonPool)
+- `StampedLock` (writeLock, unlockWrite, readLock, unlockRead,
+  tryOptimisticRead, validate)
+- `synchronized(obj)` blocks on arbitrary objects (each user class gets a
+  per-object `JMonitor`; nested synchronized blocks on distinct objects work)
+- `obj.wait()` / `obj.notify()` / `obj.notifyAll()` when `obj` is the exact
+  variable used as the monitor in the enclosing `synchronized(obj)` block
 
 The following are **not** supported:
 
-- `ForkJoinPool`
-- `java.util.concurrent.locks.StampedLock`
 - Lambda-based closures capturing shared mutable state across multiple
   executor tasks (use `Runnable` implementations instead)
-- `wait()` / `notify()` on arbitrary objects (only supported inside
-  `synchronized` blocks on `this`)
+- `this.wait()` / `this.notify()` inside a `synchronized(this)` block
+  (unqualified `wait()`/`notify()` inside a `synchronized` instance method do work)
+- `wait()`/`notify()` when the receiver is a non-variable expression or when
+  the monitor is a built-in type (String, collection, array)
 
 ## Collections (Advanced)
 

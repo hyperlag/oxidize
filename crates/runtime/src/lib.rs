@@ -46,8 +46,9 @@ pub use bigdecimal::{JBigDecimal, JMathContext, JRoundingMode};
 pub use bigint::JBigInteger;
 pub use concurrent::{
     JCompletableFuture, JConcurrentHashMap, JCondition, JCopyOnWriteArrayList, JCountDownLatch,
-    JExecutorService, JExecutors, JFuture, JReadLock, JReentrantLock, JReentrantReadWriteLock,
-    JSemaphore, JThreadLocal, JTimeUnit, JWriteLock, __sync_block_monitor,
+    JExecutorService, JExecutors, JForkJoinHandle, JForkJoinPool, JFuture, JMonitor, JReadLock,
+    JReentrantLock, JReentrantReadWriteLock, JSemaphore, JStampedLock, JThreadLocal, JTimeUnit,
+    JWriteLock, __sync_block_monitor,
 };
 pub use enum_map::JEnumMap;
 pub use enum_set::JEnumSet;

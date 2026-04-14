@@ -1528,4 +1528,22 @@ Expression calculator tests complete",
     fn test_inner_class_outer() {
         check("InnerClassOuter.java", "data=5\nhelper called\ndoubled=10");
     }
+
+    // ── Stage 13 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_fork_join() {
+        // sum 0+1+2+...+9 = 45
+        check("ForkJoinTest.java", "45");
+    }
+
+    #[test]
+    fn test_stamped_lock() {
+        check("StampedLockTest.java", "42\n42\n100");
+    }
+
+    #[test]
+    fn test_arbitrary_monitor() {
+        check("ArbitraryMonitor.java", "1\n2");
+    }
 }
