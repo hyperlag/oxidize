@@ -1150,7 +1150,8 @@ impl JStampedLock {
     /// Release the read lock obtained via `readLock`.
     pub fn unlockRead(&self, _stamp: i64) {
         let mut st = self.state.lock().unwrap();
-        st.readers = st.readers.saturating_sub(1);
+        assert!(st.readers > 0, "unlockRead called with no active read lock");
+        st.readers -= 1;
         if st.readers == 0 {
             self.cvar.notify_all();
         }

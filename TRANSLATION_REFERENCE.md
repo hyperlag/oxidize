@@ -813,14 +813,18 @@ Each class with synchronized methods gets a per-class
 
 `synchronized (this)` and `synchronized (obj)` are both supported.  Each user
 class is injected with a `pub __monitor: JMonitor` field that provides its own
-independent `(Mutex, Condvar)` pair.
+`(Mutex, Condvar)` pair.  Subclasses share the same underlying `Arc` as their
+`_super` so all composition levels use a single per-object monitor.
+
+`synchronized (obj)` on a non-user-defined type (e.g. `String`, a collection,
+or an array) falls back to the process-global `__sync_block_monitor()`.
 
 ```java
 synchronized (this) { ... }
 ```
 ```rust
 {
-    let __sync_arc = (self).__monitor.pair();
+    let __sync_arc = self.__monitor.pair();
     let (__sync_lock, __sync_cond) = &*__sync_arc;
     let mut __sync_guard = __sync_lock.lock().unwrap();
     ...

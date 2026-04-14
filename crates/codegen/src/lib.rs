@@ -95,6 +95,11 @@ thread_local! {
     /// Populated in one pre-scan pass before code generation starts.
     static RECURSIVE_TASK_CLASSES: std::cell::RefCell<std::collections::HashSet<String>> =
         std::cell::RefCell::new(std::collections::HashSet::new());
+    /// All user-defined class names in the current module (populated in
+    /// pre-scan).  Used to determine whether a `synchronized(obj)` monitor
+    /// expression has an injected `__monitor` field.
+    static USER_CLASSES: std::cell::RefCell<std::collections::HashSet<String>> =
+        std::cell::RefCell::new(std::collections::HashSet::new());
     /// Name of the current `synchronized(expr)` monitor variable (if the
     /// monitor is a simple variable reference, not `this`).  Set while
     /// emitting the body of an arbitrary-object synchronized block so that
@@ -150,6 +155,14 @@ fn is_recursive_task_base(name: &str) -> bool {
 /// `RecursiveTask` or `RecursiveAction` (directly or transitively).
 fn is_recursive_task_class(name: &str) -> bool {
     RECURSIVE_TASK_CLASSES.with(|rc| rc.borrow().contains(name))
+}
+
+/// Returns `true` if `name` is a user-defined class present in the current
+/// module (and therefore has an injected `__monitor` field).  Used to choose
+/// between per-object locking and the global fallback in `synchronized(obj)`
+/// blocks.
+fn is_user_class(name: &str) -> bool {
+    USER_CLASSES.with(|uc| uc.borrow().contains(name))
 }
 
 /// Errors produced during code-generation.
@@ -361,6 +374,9 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
 
     // Pre-scan: discover user-defined RecursiveTask / RecursiveAction subclasses.
     // Repeat until stable so that multi-level hierarchies resolve.
+    // Normalize superclass names by stripping generic type arguments (e.g.
+    // `"MyTask<Integer>"` → `"MyTask"`) before lookup so that transitive
+    // subclasses of generic RecursiveTask subclasses are detected correctly.
     RECURSIVE_TASK_CLASSES.with(|rc| rc.borrow_mut().clear());
     loop {
         let mut changed = false;
@@ -368,7 +384,8 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             if let IrDecl::Class(cls) = decl {
                 if !RECURSIVE_TASK_CLASSES.with(|rc| rc.borrow().contains(&cls.name)) {
                     if let Some(parent) = &cls.superclass {
-                        if is_recursive_task_base(parent) || is_recursive_task_class(parent) {
+                        let parent_base = parent.split('<').next().unwrap_or(parent);
+                        if is_recursive_task_base(parent) || is_recursive_task_class(parent_base) {
                             RECURSIVE_TASK_CLASSES.with(|rc| {
                                 rc.borrow_mut().insert(cls.name.clone());
                             });
@@ -382,6 +399,19 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             break;
         }
     }
+
+    // Pre-scan: collect all user-defined class names.  Used to determine
+    // whether a `synchronized(obj)` monitor expression has an injected
+    // `__monitor` field (user classes do; runtime/built-in types don't).
+    USER_CLASSES.with(|uc| {
+        let mut set = uc.borrow_mut();
+        set.clear();
+        for decl in &module.decls {
+            if let IrDecl::Class(cls) = decl {
+                set.insert(cls.name.clone());
+            }
+        }
+    });
 
     // Pre-scan: build inner-class → outer-class map.
     // Only `$`-prefixed classes are non-static inner classes; `__loc__` classes
@@ -1104,6 +1134,31 @@ fn emit_class(
                     Self { __outer, ..Default::default() }
                 }
             });
+        } else if let Some(parent_name) = &cls.superclass {
+            // Subclass with a user-class parent and no explicit constructor:
+            // pre-create _super so we can share its __monitor with this class.
+            // Only user-defined parent classes have an injected __monitor field;
+            // built-in/runtime parents (e.g. TimerTask → JTimerTask) do not.
+            if !is_exception_class(parent_name)
+                && !is_recursive_task_base(parent_name)
+                && !is_recursive_task_class(parent_name)
+                && is_user_class(parent_name)
+            {
+                let parent_ty = emit_type(&IrType::Class(parent_name.clone()));
+                method_tokens.push(quote! {
+                    pub fn new() -> Self {
+                        let __self_super = #parent_ty::new();
+                        let __self_monitor = __self_super.__monitor.clone();
+                        Self { _super: __self_super, __monitor: __self_monitor, ..Default::default() }
+                    }
+                });
+            } else {
+                method_tokens.push(quote! {
+                    pub fn new() -> Self {
+                        Self::default()
+                    }
+                });
+            }
         } else {
             method_tokens.push(quote! {
                 pub fn new() -> Self {
@@ -1541,42 +1596,67 @@ fn emit_constructor(ctor: &IrConstructor, cls: &IrClass) -> Result<TokenStream, 
     };
 
     // Build the struct initializer.
-    let super_field_init: Option<TokenStream> = if let Some(parent_name) = &cls.superclass {
-        if is_exception_class(parent_name) {
-            // Exception parent: map super(msg) call to the `message` field.
-            let msg_ts = super_args
-                .as_ref()
-                .and_then(|a| a.first())
-                .map(emit_expr)
-                .transpose()?
-                .unwrap_or_else(|| quote! { JString::from("") });
-            Some(quote! { message: #msg_ts, })
-        } else if is_recursive_task_base(parent_name) || is_recursive_task_class(parent_name) {
-            // RecursiveTask/RecursiveAction: inject a None handle; no _super field.
-            let compute_ret = cls
-                .methods
-                .iter()
-                .find(|m| m.name == "compute")
-                .map(|m| m.return_ty.clone())
-                .unwrap_or(IrType::Void);
-            if compute_ret != IrType::Void {
-                Some(quote! { __fork_handle: None, })
+    // For user-class parents, pre-create the `_super` value so we can clone
+    // its `__monitor` into this class's `__monitor`.  Both levels then share
+    // the same underlying Arc<(Mutex, Condvar)>, preserving Java's single
+    // per-object monitor regardless of the composition depth.
+    let (super_pre_stmt, super_field_init): (TokenStream, Option<TokenStream>) =
+        if let Some(parent_name) = &cls.superclass {
+            if is_exception_class(parent_name) {
+                // Exception parent: map super(msg) call to the `message` field.
+                let msg_ts = super_args
+                    .as_ref()
+                    .and_then(|a| a.first())
+                    .map(emit_expr)
+                    .transpose()?
+                    .unwrap_or_else(|| quote! { JString::from("") });
+                (quote! {}, Some(quote! { message: #msg_ts, }))
+            } else if is_recursive_task_base(parent_name) || is_recursive_task_class(parent_name) {
+                // RecursiveTask/RecursiveAction: inject a None handle; no _super field.
+                let compute_ret = cls
+                    .methods
+                    .iter()
+                    .find(|m| m.name == "compute")
+                    .map(|m| m.return_ty.clone())
+                    .unwrap_or(IrType::Void);
+                let field_init = if compute_ret != IrType::Void {
+                    Some(quote! { __fork_handle: None, })
+                } else {
+                    None
+                };
+                (quote! {}, field_init)
+            } else if is_user_class(parent_name) {
+                // User-defined parent: pre-create _super so we can share its
+                // __monitor with this class (Java objects have a single monitor).
+                let parent_ty = emit_type(&IrType::Class(parent_name.clone()));
+                let super_arg_ts: Vec<TokenStream> = super_args
+                    .as_ref()
+                    .map(|args| args.iter().map(emit_expr).collect::<Result<Vec<_>, _>>())
+                    .transpose()?
+                    .unwrap_or_default();
+                let pre = quote! {
+                    let __self_super = #parent_ty::new(#(#super_arg_ts),*);
+                    let __self_monitor = __self_super.__monitor.clone();
+                };
+                let fields = quote! { _super: __self_super, __monitor: __self_monitor, };
+                (pre, Some(fields))
             } else {
-                None
+                // Built-in/runtime parent (e.g. TimerTask → JTimerTask): no
+                // __monitor field on the parent, so emit the _super init normally.
+                let parent_ty = emit_type(&IrType::Class(parent_name.clone()));
+                let super_arg_ts: Vec<TokenStream> = super_args
+                    .as_ref()
+                    .map(|args| args.iter().map(emit_expr).collect::<Result<Vec<_>, _>>())
+                    .transpose()?
+                    .unwrap_or_default();
+                (
+                    quote! {},
+                    Some(quote! { _super: #parent_ty::new(#(#super_arg_ts),*), }),
+                )
             }
         } else {
-            // Use emit_type to handle mapped parent types (e.g. TimerTask → JTimerTask).
-            let parent_ty = emit_type(&IrType::Class(parent_name.clone()));
-            let super_arg_ts: Vec<TokenStream> = super_args
-                .as_ref()
-                .map(|args| args.iter().map(emit_expr).collect::<Result<Vec<_>, _>>())
-                .transpose()?
-                .unwrap_or_default();
-            Some(quote! { _super: #parent_ty::new(#(#super_arg_ts),*), })
-        }
-    } else {
-        None
-    };
+            (quote! {}, None)
+        };
 
     // Own field initializers (zero/default values — the constructor body will
     // overwrite them via `__self__.field = ...` assignments below).
@@ -1595,6 +1675,7 @@ fn emit_constructor(ctor: &IrConstructor, cls: &IrClass) -> Result<TokenStream, 
     // `..Default::default()` fills in any injected fields (e.g. `__monitor`)
     // that are not listed explicitly.
     let struct_init = quote! {
+        #super_pre_stmt
         let mut __self__: Self = Self {
             #outer_field_init
             #super_field_init
@@ -2212,21 +2293,30 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
             Ok(quote! { { #(#ts)* } })
         }
         IrStmt::Synchronized { monitor, body } => {
-            // Determine whether the monitor is `this` / `self` (use the per-class
-            // or global lock) or an arbitrary user object (use obj.__monitor).
+            // Determine whether the monitor is `this` / `self` (per-object lock)
+            // or an arbitrary object.
             let is_self_monitor = matches!(
                 monitor,
                 IrExpr::Var { name, .. } if name == "this" || name == "self"
             );
             if is_self_monitor {
-                // Route to the per-class lock (same as synchronized methods).
+                // `synchronized(this)` → use the per-object __monitor field,
+                // consistent with Java's single per-object monitor semantics.
+                // Extract the exact variable name ("this" or "self") so that
+                // `this.wait()` / `this.notify()` inside the body route through
+                // the block's __sync_cond rather than calling a nonexistent method.
+                let monitor_var_name: Option<String> = if let IrExpr::Var { name, .. } = monitor {
+                    Some(name.clone())
+                } else {
+                    None
+                };
+                SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = monitor_var_name);
                 let body_ts = emit_stmts(body)?;
-                // Clear any leftover monitor-var so inner method calls don't
-                // accidentally use a stale name.
                 SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = None);
                 Ok(quote! {
                     {
-                        let (__sync_lock, __sync_cond) = java_compat::__sync_block_monitor();
+                        let __sync_arc = self.__monitor.pair();
+                        let (__sync_lock, __sync_cond) = &*__sync_arc;
                         let mut __sync_guard = __sync_lock.lock().unwrap();
                         let _ = &__sync_guard;
                         { #(#body_ts)* }
@@ -2234,7 +2324,7 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
                     }
                 })
             } else {
-                // Arbitrary-object monitor: lock obj.__monitor.
+                // Arbitrary-object monitor.
                 // Track the monitor variable name so that `obj.wait()` /
                 // `obj.notify()` inside the body can route to the right condvar.
                 let monitor_var_name: Option<String> = if let IrExpr::Var { name, .. } = monitor {
@@ -2248,16 +2338,39 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
                 // Clear after body is emitted so the slot is not reused
                 // accidentally.
                 SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = None);
-                Ok(quote! {
-                    {
-                        let __sync_arc = (#mon_ts).__monitor.pair();
-                        let (__sync_lock, __sync_cond) = &*__sync_arc;
-                        let mut __sync_guard = __sync_lock.lock().unwrap();
-                        let _ = &__sync_guard;
-                        { #(#body_ts)* }
-                        drop(__sync_guard);
-                    }
-                })
+
+                // Use obj.__monitor when the monitor expression is a user-defined
+                // class (which has an injected __monitor field).  Fall back to the
+                // process-global __sync_block_monitor() for runtime/built-in types
+                // (String, collections, arrays, exceptions) that don't have that
+                // field.
+                let has_monitor_field = matches!(
+                    monitor.ty(),
+                    IrType::Class(name)
+                        if is_user_class(name) && !is_exception_class(name)
+                );
+                if has_monitor_field {
+                    Ok(quote! {
+                        {
+                            let __sync_arc = (#mon_ts).__monitor.pair();
+                            let (__sync_lock, __sync_cond) = &*__sync_arc;
+                            let mut __sync_guard = __sync_lock.lock().unwrap();
+                            let _ = &__sync_guard;
+                            { #(#body_ts)* }
+                            drop(__sync_guard);
+                        }
+                    })
+                } else {
+                    Ok(quote! {
+                        {
+                            let (__sync_lock, __sync_cond) = java_compat::__sync_block_monitor();
+                            let mut __sync_guard = __sync_lock.lock().unwrap();
+                            let _ = &__sync_guard;
+                            { #(#body_ts)* }
+                            drop(__sync_guard);
+                        }
+                    })
+                }
             }
         }
     }
@@ -2944,7 +3057,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     // ForkJoinPool.commonPool() static call
                     if name == "ForkJoinPool" {
                         return match method_name.as_str() {
-                            "commonPool" => Ok(quote! { JForkJoinPool::new() }),
+                            "commonPool" => Ok(quote! { JForkJoinPool::commonPool() }),
                             _ => {
                                 let m = ident(method_name);
                                 Ok(quote! { JForkJoinPool::#m(#(#args_ts),*) })
@@ -4306,11 +4419,18 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 let recv_ts = emit_expr(recv)?;
 
                 // ForkJoinPool.invoke(task) → (task).compute()
+                // When the argument is a simple variable reference, call compute()
+                // directly via auto-borrow (&mut self) to avoid consuming the task
+                // via a move.  For complex expressions a local binding is still
+                // needed.
                 if method_name == "invoke"
                     && args_ts.len() == 1
                     && type_name_matches(recv.ty(), "ForkJoinPool")
                 {
                     let task = &args_ts[0];
+                    if matches!(args.first(), Some(IrExpr::Var { .. })) {
+                        return Ok(quote! { (#task).compute() });
+                    }
                     return Ok(quote! { { let mut __fjp_t = #task; __fjp_t.compute() } });
                 }
 
