@@ -4,11 +4,11 @@ record Point(int x, int y) {
         return (x * x + y * y) == (other.x() * other.x() + other.y() * other.y());
     }
 
-    int hashCode() {
+    public int hashCode() {
         return x * x + y * y;
     }
 
-    String toString() {
+    public String toString() {
         return "(" + x + ", " + y + ")";
     }
 }

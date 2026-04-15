@@ -280,12 +280,14 @@ emitted as regular methods.
 
 ### Pattern Matching in Switch (Java 21)
 
-Type-pattern switches (`case String s -> ...`) are supported. The parser
-detects `pattern` nodes in switch labels and transforms the entire switch into
-a nested if-else chain using `instanceof` with binding variables. Cross-type
-pattern matching (e.g., `Object obj` switched on `String`, `Integer`) is
-limited by the current struct-based type system — same-type patterns work
-correctly.
+Arrow-form type-pattern **switch statements** (`case String s -> ...`) are
+supported. The parser transforms them into a nested if-else chain using
+`instanceof` with binding variables.
+
+The following are currently not supported:
+
+- Colon-form pattern labels in statements (`case String s:`)
+- Pattern switch expressions (`var x = switch (obj) { ... }`)
 
 ### Sealed Classes (Java 17+)
 

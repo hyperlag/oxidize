@@ -1477,6 +1477,7 @@ record Range(int lo, int hi) {
 ```rust
 impl Range {
     pub fn new(mut lo: i32, mut hi: i32) -> Self {
+        let mut __self__: Self = Self { lo: 0, hi: 0, ..Default::default() };
         // compact body runs first (validation)
         if lo > hi { panic!("JException:IllegalArgumentException:lo > hi") }
         // then implicit field assignments

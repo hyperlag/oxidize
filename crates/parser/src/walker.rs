@@ -252,18 +252,32 @@ fn lower_program(node: Node<'_>, src: &[u8]) -> Result<IrModule, ParseError> {
 
 // ─── pattern switch (Java 21+) ─────────────────────────────────────────────
 
-/// Check if any `switch_rule` among `flat_children` has a `pattern` label
-/// (Java 21+ type-pattern switch).
-fn has_pattern_labels(flat_children: &[(String, usize, Node<'_>)]) -> bool {
+fn label_has_pattern(label: Node<'_>) -> bool {
+    named_children(label).iter().any(|n| n.kind() == "pattern")
+}
+
+/// Check if any arrow-form `switch_rule` among `flat_children` has a `pattern`
+/// label (Java 21+ type-pattern switch).
+fn has_pattern_rule_labels(flat_children: &[(String, usize, Node<'_>)]) -> bool {
     flat_children.iter().any(|(kind, _, ch)| {
         if kind != "switch_rule" {
             return false;
         }
         if let Some(lbl) = ch.named_child(0) {
-            named_children(lbl).iter().any(|n| n.kind() == "pattern")
+            label_has_pattern(lbl)
         } else {
             false
         }
+    })
+}
+
+/// Detect colon-form switch labels that contain a pattern (`case T v:`).
+fn has_pattern_colon_labels(flat_children: &[(String, usize, Node<'_>)]) -> bool {
+    flat_children.iter().any(|(kind, _, ch)| {
+        if kind != "switch_label" {
+            return false;
+        }
+        label_has_pattern(*ch)
     })
 }
 
@@ -324,15 +338,14 @@ fn lower_pattern_switch(
                 // Expected structure: pattern > type_pattern > (type_identifier, identifier)
                 if let Some(type_pat) = pat.named_child(0) {
                     if type_pat.kind() == "type_pattern" {
-                        let type_name = type_pat
+                        let ir_type = type_pat
                             .named_child(0)
-                            .map(|n| text(n, src).to_owned())
-                            .unwrap_or_else(|| "Object".to_owned());
+                            .map(|n| lower_type(n, src))
+                            .unwrap_or_else(|| IrType::Class("Object".to_owned()));
                         let binding = type_pat
                             .named_child(1)
                             .map(|n| text(n, src).to_owned())
                             .unwrap_or_else(|| "_unused".to_owned());
-                        let ir_type = lower_type_from_name(&type_name);
                         arms.push((ir_type, binding, arm_stmts));
                     }
                 }
@@ -340,28 +353,21 @@ fn lower_pattern_switch(
         }
     }
 
-    // Build nested if-else chain.
-    Ok(vec![build_pattern_if_chain(
-        &scrutinee,
-        &arms,
-        default_body,
-    )])
-}
+    let tmp_name = "__pattern_switch_tmp__".to_owned();
+    let tmp_expr = IrExpr::Var {
+        name: tmp_name.clone(),
+        ty: IrType::Unknown,
+    };
 
-fn lower_type_from_name(name: &str) -> IrType {
-    match name {
-        "int" | "Integer" => IrType::Int,
-        "long" | "Long" => IrType::Long,
-        "double" | "Double" => IrType::Double,
-        "float" | "Float" => IrType::Float,
-        "boolean" | "Boolean" => IrType::Bool,
-        "byte" | "Byte" => IrType::Byte,
-        "short" | "Short" => IrType::Short,
-        "char" | "Character" => IrType::Char,
-        "String" => IrType::String,
-        "void" => IrType::Void,
-        other => IrType::Class(other.to_owned()),
-    }
+    // Evaluate scrutinee exactly once.
+    Ok(vec![
+        IrStmt::LocalVar {
+            name: tmp_name,
+            ty: IrType::Unknown,
+            init: Some(scrutinee),
+        },
+        build_pattern_if_chain(&tmp_expr, &arms, default_body),
+    ])
 }
 
 fn build_pattern_if_chain(
@@ -458,12 +464,13 @@ fn lower_record(node: Node<'_>, src: &[u8]) -> Result<IrClass, ParseError> {
         for child in body.named_children(&mut cur) {
             match child.kind() {
                 "compact_constructor_declaration" => {
+                    let mut child_cur = child.walk();
                     if let Some(block) = child_by_field(child, "body").or_else(|| {
                         child
-                            .named_children(&mut child.walk())
+                            .named_children(&mut child_cur)
                             .find(|n| n.kind() == "block")
                     }) {
-                        compact_body = lower_block(block, src).unwrap_or_default();
+                        compact_body = lower_block(block, src)?;
                     }
                 }
                 "method_declaration" => {
@@ -1346,8 +1353,15 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                 }
             }
 
-            // Java 21+ pattern-matching switch: transform to if-else chain.
-            if has_pattern_labels(&flat_children) {
+            if has_pattern_colon_labels(&flat_children) {
+                return Err(ParseError::Unsupported(
+                    "pattern matching in colon-form switch labels (`case T v:`) is not yet supported"
+                        .into(),
+                ));
+            }
+
+            // Java 21+ arrow-form pattern-matching switch: transform to if-else chain.
+            if has_pattern_rule_labels(&flat_children) {
                 return lower_pattern_switch(expr, &flat_children, src);
             }
 
@@ -2606,5 +2620,30 @@ mod tests {
         } else {
             panic!("expected a class declaration");
         }
+    }
+
+    #[test]
+    fn rejects_colon_form_pattern_switch_statement() {
+        let src = r#"
+            class Demo {
+                static void run(Object o) {
+                    switch (o) {
+                        case String s:
+                            System.out.println(s);
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+        "#;
+        let err = parse_to_ir(src).expect_err("colon-form pattern switch should be rejected");
+        assert!(
+            matches!(
+                err,
+                ParseError::Unsupported(ref msg) if msg.contains("colon-form switch labels")
+            ),
+            "expected unsupported colon-form pattern switch error, got: {err}"
+        );
     }
 }
