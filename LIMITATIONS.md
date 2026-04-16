@@ -273,8 +273,21 @@ The following advanced enum features are **not** supported:
 Basic `record` declarations are supported. The parser generates an `IrClass`
 with `is_record: true`, a canonical constructor, public final fields, and
 accessor methods (`x()`, `y()`, etc.). `Display` is implemented with the
-`Name[f1=V1, f2=V2]` format. Advanced record features (compact constructors,
-custom `equals`/`hashCode`) are not yet supported.
+`Name[f1=V1, f2=V2]` format. Compact constructors are supported — the compact
+body runs before the implicit field assignments, matching Java semantics.
+Custom `equals`/`hashCode`/`toString` methods in a record body are parsed and
+emitted as regular methods.
+
+### Pattern Matching in Switch (Java 21)
+
+Arrow-form type-pattern **switch statements** (`case String s -> ...`) are
+supported. The parser transforms them into a nested if-else chain using
+`instanceof` with binding variables.
+
+The following are currently not supported:
+
+- Colon-form pattern labels in statements (`case String s:`)
+- Pattern switch expressions (`var x = switch (obj) { ... }`)
 
 ### Sealed Classes (Java 17+)
 

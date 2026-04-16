@@ -250,6 +250,159 @@ fn lower_program(node: Node<'_>, src: &[u8]) -> Result<IrModule, ParseError> {
     Ok(module)
 }
 
+// ─── pattern switch (Java 21+) ─────────────────────────────────────────────
+
+fn label_has_pattern(label: Node<'_>) -> bool {
+    named_children(label).iter().any(|n| n.kind() == "pattern")
+}
+
+/// Check if any arrow-form `switch_rule` among `flat_children` has a `pattern`
+/// label (Java 21+ type-pattern switch).
+fn has_pattern_rule_labels(flat_children: &[(String, usize, Node<'_>)]) -> bool {
+    flat_children.iter().any(|(kind, _, ch)| {
+        if kind != "switch_rule" {
+            return false;
+        }
+        if let Some(lbl) = ch.named_child(0) {
+            label_has_pattern(lbl)
+        } else {
+            false
+        }
+    })
+}
+
+/// Detect colon-form switch labels that contain a pattern (`case T v:`).
+fn has_pattern_colon_labels(flat_children: &[(String, usize, Node<'_>)]) -> bool {
+    flat_children.iter().any(|(kind, _, ch)| {
+        if kind != "switch_label" {
+            return false;
+        }
+        label_has_pattern(*ch)
+    })
+}
+
+/// Transform a pattern-matching switch into an if-else chain using `instanceof`.
+///
+/// ```java
+/// switch (expr) {
+///     case String s -> body1;
+///     case Integer i -> body2;
+///     default -> body3;
+/// }
+/// ```
+/// becomes:
+/// ```text
+/// if (expr instanceof String s) { body1 }
+/// else if (expr instanceof Integer i) { body2 }
+/// else { body3 }
+/// ```
+fn lower_pattern_switch(
+    scrutinee: IrExpr,
+    flat_children: &[(String, usize, Node<'_>)],
+    src: &[u8],
+) -> Result<Vec<IrStmt>, ParseError> {
+    // Collect pattern arms: (check_type, binding_name, body)
+    let mut arms: Vec<(IrType, String, Vec<IrStmt>)> = Vec::new();
+    let mut default_body: Option<Vec<IrStmt>> = None;
+
+    for (kind, _, child) in flat_children {
+        if kind != "switch_rule" {
+            continue;
+        }
+        let label_node = child.named_child(0);
+        let body_count = child.named_child_count();
+        let body_child = if body_count > 1 {
+            child.named_child(body_count - 1)
+        } else {
+            None
+        };
+        let arm_stmts = if let Some(bc) = body_child {
+            match bc.kind() {
+                "block" => lower_block(bc, src)?,
+                _ => lower_stmt(bc, src)?,
+            }
+        } else {
+            vec![]
+        };
+
+        let label_text = label_node.map(|n| text(n, src)).unwrap_or_default();
+        if label_text.contains("default") {
+            default_body = Some(arm_stmts);
+        } else if let Some(lbl) = label_node {
+            // Find the pattern node inside the switch_label.
+            let pattern_node = named_children(lbl)
+                .into_iter()
+                .find(|n| n.kind() == "pattern");
+
+            if let Some(pat) = pattern_node {
+                // Expected structure: pattern > type_pattern > (type_identifier, identifier)
+                if let Some(type_pat) = pat.named_child(0) {
+                    if type_pat.kind() == "type_pattern" {
+                        let ir_type = type_pat
+                            .named_child(0)
+                            .map(|n| lower_type(n, src))
+                            .unwrap_or_else(|| IrType::Class("Object".to_owned()));
+                        let binding = type_pat
+                            .named_child(1)
+                            .map(|n| text(n, src).to_owned())
+                            .unwrap_or_else(|| "_unused".to_owned());
+                        arms.push((ir_type, binding, arm_stmts));
+                    }
+                }
+            }
+        }
+    }
+
+    let tmp_name = "__pattern_switch_tmp__".to_owned();
+    let tmp_expr = IrExpr::Var {
+        name: tmp_name.clone(),
+        ty: IrType::Unknown,
+    };
+
+    // Evaluate scrutinee exactly once.
+    Ok(vec![
+        IrStmt::LocalVar {
+            name: tmp_name,
+            ty: IrType::Unknown,
+            init: Some(scrutinee),
+        },
+        build_pattern_if_chain(&tmp_expr, &arms, default_body),
+    ])
+}
+
+fn build_pattern_if_chain(
+    scrutinee: &IrExpr,
+    arms: &[(IrType, String, Vec<IrStmt>)],
+    default_body: Option<Vec<IrStmt>>,
+) -> IrStmt {
+    if arms.is_empty() {
+        return IrStmt::Block(default_body.unwrap_or_default());
+    }
+
+    let (ref check_type, ref binding, ref body) = arms[0];
+    let remaining = &arms[1..];
+
+    let else_ = if remaining.is_empty() {
+        default_body
+    } else {
+        Some(vec![build_pattern_if_chain(
+            scrutinee,
+            remaining,
+            default_body,
+        )])
+    };
+
+    IrStmt::If {
+        cond: IrExpr::InstanceOf {
+            expr: Box::new(scrutinee.clone()),
+            check_type: check_type.clone(),
+            binding: Some(binding.clone()),
+        },
+        then_: body.clone(),
+        else_,
+    }
+}
+
 // ─── record ─────────────────────────────────────────────────────────────────
 
 fn lower_record(node: Node<'_>, src: &[u8]) -> Result<IrClass, ParseError> {
@@ -279,7 +432,7 @@ fn lower_record(node: Node<'_>, src: &[u8]) -> Result<IrClass, ParseError> {
         .collect();
 
     // Canonical constructor: assigns each component to the corresponding field.
-    let constructor_body: Vec<IrStmt> = params
+    let field_assignments: Vec<IrStmt> = params
         .iter()
         .map(|p| {
             IrStmt::Expr(IrExpr::Assign {
@@ -299,6 +452,40 @@ fn lower_record(node: Node<'_>, src: &[u8]) -> Result<IrClass, ParseError> {
             })
         })
         .collect();
+
+    // Look for a compact constructor in the record body.  Its body runs
+    // *before* the implicit field assignments (Java semantics).
+    let mut compact_body: Vec<IrStmt> = Vec::new();
+
+    // Extra methods declared in the record body.
+    let mut methods: Vec<IrMethod> = Vec::new();
+    if let Some(body) = child_by_field(node, "body") {
+        let mut cur = body.walk();
+        for child in body.named_children(&mut cur) {
+            match child.kind() {
+                "compact_constructor_declaration" => {
+                    let mut child_cur = child.walk();
+                    if let Some(block) = child_by_field(child, "body").or_else(|| {
+                        child
+                            .named_children(&mut child_cur)
+                            .find(|n| n.kind() == "block")
+                    }) {
+                        compact_body = lower_block(block, src)?;
+                    }
+                }
+                "method_declaration" => {
+                    if let Ok(m) = lower_method(child, src) {
+                        methods.push(m);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // Build constructor body: compact constructor body first, then field assignments.
+    let mut constructor_body = compact_body;
+    constructor_body.extend(field_assignments);
 
     let canonical_ctor = IrConstructor {
         visibility: Visibility::Public,
@@ -325,19 +512,6 @@ fn lower_record(node: Node<'_>, src: &[u8]) -> Result<IrClass, ParseError> {
                 .collect()
         })
         .unwrap_or_default();
-
-    // Extra methods declared in the record body.
-    let mut methods: Vec<IrMethod> = Vec::new();
-    if let Some(body) = child_by_field(node, "body") {
-        let mut cur = body.walk();
-        for child in body.named_children(&mut cur) {
-            if child.kind() == "method_declaration" {
-                if let Ok(m) = lower_method(child, src) {
-                    methods.push(m);
-                }
-            }
-        }
-    }
 
     Ok(IrClass {
         name,
@@ -1177,6 +1351,18 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                 } else {
                     flat_children.push((child.kind().to_owned(), child.id(), child));
                 }
+            }
+
+            if has_pattern_colon_labels(&flat_children) {
+                return Err(ParseError::Unsupported(
+                    "pattern matching in colon-form switch labels (`case T v:`) is not yet supported"
+                        .into(),
+                ));
+            }
+
+            // Java 21+ arrow-form pattern-matching switch: transform to if-else chain.
+            if has_pattern_rule_labels(&flat_children) {
+                return lower_pattern_switch(expr, &flat_children, src);
             }
 
             let mut current_values: Vec<IrExpr> = Vec::new();
@@ -2434,5 +2620,30 @@ mod tests {
         } else {
             panic!("expected a class declaration");
         }
+    }
+
+    #[test]
+    fn rejects_colon_form_pattern_switch_statement() {
+        let src = r#"
+            class Demo {
+                static void run(Object o) {
+                    switch (o) {
+                        case String s:
+                            System.out.println(s);
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+        "#;
+        let err = parse_to_ir(src).expect_err("colon-form pattern switch should be rejected");
+        assert!(
+            matches!(
+                err,
+                ParseError::Unsupported(ref msg) if msg.contains("colon-form switch labels")
+            ),
+            "expected unsupported colon-form pattern switch error, got: {err}"
+        );
     }
 }

@@ -254,6 +254,49 @@ match x {
 }
 ```
 
+### Multi-Label Switch (Java 14+)
+
+```java
+switch (day) {
+    case 1, 2, 3, 4, 5 -> "Weekday";
+    case 6, 7 -> "Weekend";
+    default -> "Unknown";
+}
+```
+```rust
+match day {
+    1 => JString::from("Weekday"),
+    2 => JString::from("Weekday"),
+    3 => JString::from("Weekday"),
+    4 => JString::from("Weekday"),
+    5 => JString::from("Weekday"),
+    6 => JString::from("Weekend"),
+    7 => JString::from("Weekend"),
+    _ => JString::from("Unknown"),
+}
+```
+
+### Pattern Switch (Java 21)
+
+```java
+switch (obj) {
+    case MyType x -> System.out.println(x.field);
+    default -> System.out.println("other");
+}
+```
+```rust
+// Transformed to if-else chain with instanceof checks:
+{
+    let __instanceof_tmp__ = obj;
+    if __instanceof_tmp__._instanceof("MyType") {
+        let mut x: MyType = __instanceof_tmp__.clone();
+        println!("{}", (x).field);
+    } else {
+        println!("{}", "other");
+    }
+}
+```
+
 ### Break / Continue
 
 ```java
@@ -1393,3 +1436,54 @@ fn main() {
 
 Primitive casts use Rust's `as` keyword. Reference casts are not currently
 supported (see [LIMITATIONS.md](LIMITATIONS.md)).
+
+## Records (Java 16+)
+
+### Basic Record
+
+```java
+record Point(int x, int y) {
+    String describe() { return "(" + x + "," + y + ")"; }
+}
+```
+```rust
+#[derive(Debug, Clone, Default)]
+pub struct Point {
+    pub x: i32,
+    pub y: i32,
+}
+impl Point {
+    pub fn new(mut x: i32, mut y: i32) -> Self { /* assign fields */ }
+    pub fn x(&self) -> i32 { self.x }
+    pub fn y(&self) -> i32 { self.y }
+    pub fn describe(&mut self) -> JString { /* body */ }
+}
+impl ::std::fmt::Display for Point {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        write!(f, "Point[x={}, y={}]", &self.x, &self.y)
+    }
+}
+```
+
+### Record with Compact Constructor
+
+```java
+record Range(int lo, int hi) {
+    Range {
+        if (lo > hi) throw new IllegalArgumentException("lo > hi");
+    }
+}
+```
+```rust
+impl Range {
+    pub fn new(mut lo: i32, mut hi: i32) -> Self {
+        let mut __self__: Self = Self { lo: 0, hi: 0, ..Default::default() };
+        // compact body runs first (validation)
+        if lo > hi { panic!("JException:IllegalArgumentException:lo > hi") }
+        // then implicit field assignments
+        (__self__).lo = lo;
+        (__self__).hi = hi;
+        __self__
+    }
+}
+```

@@ -1546,4 +1546,35 @@ Expression calculator tests complete",
     fn test_arbitrary_monitor() {
         check("ArbitraryMonitor.java", "1\n2");
     }
+
+    // ── Stage 14 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_multi_label_switch() {
+        check(
+            "MultiLabelSwitch.java",
+            "1 = Weekday\n6 = Weekend\nGood\nMedium",
+        );
+    }
+
+    #[test]
+    fn test_switch_pattern() {
+        check("SwitchPattern.java", "alpha: 42\nbeta: 99");
+    }
+
+    #[test]
+    fn test_record_compact() {
+        check(
+            "RecordCompact.java",
+            "1..10\nRange[lo=1, hi=10]\ncaught: lo must be <= hi",
+        );
+    }
+
+    #[test]
+    fn test_record_custom_equals() {
+        check(
+            "RecordCustomEquals.java",
+            "true\nfalse\n25\n(3, 4)\nPoint[x=3, y=4]",
+        );
+    }
 }
