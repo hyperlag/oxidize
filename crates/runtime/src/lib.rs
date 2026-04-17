@@ -55,8 +55,9 @@ pub use enum_set::JEnumSet;
 pub use exception::JException;
 pub use io::{
     JBufferedReader, JBufferedWriter, JByteArrayInputStream, JByteArrayOutputStream, JFile,
-    JFileInputStream, JFileOutputStream, JFileReader, JFileWriter, JFiles, JPath, JPaths,
-    JPrintWriter, JScanner, JStringReader, JStringWriter,
+    JFileInputStream, JFileOutputStream, JFileReader, JFileWriter, JFiles, JInputStream,
+    JOutputStream, JPath, JPaths, JPrintWriter, JReader, JScanner, JStringReader, JStringWriter,
+    JWriter,
 };
 pub use iterator::JIterator;
 pub use linked_hash_map::JLinkedHashMap;

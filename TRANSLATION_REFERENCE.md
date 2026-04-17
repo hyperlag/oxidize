@@ -1264,6 +1264,21 @@ the result-carrying handle.
 | `fos.write(b)`                        | `fos.write_byte(b)`                          |
 | `fos.flush()`                         | `fos.flush()`                                |
 
+### Abstract I/O Types (Polymorphic Enums)
+
+| Java                                              | Rust                                                    |
+|---------------------------------------------------|---------------------------------------------------------|
+| `InputStream is = new FileInputStream(...)`       | `let mut is: JInputStream = JFileInputStream::new(...).into()` |
+| `InputStream is = new ByteArrayInputStream(...)`  | `let mut is: JInputStream = JByteArrayInputStream::new(...).into()` |
+| `OutputStream os = new ByteArrayOutputStream()`   | `let mut os: JOutputStream = JByteArrayOutputStream::new().into()` |
+| `Reader r = new StringReader(...)`                | `let mut r: JReader = JStringReader::new(...).into()`   |
+| `Writer w = new StringWriter()`                   | `let mut w: JWriter = JStringWriter::new().into()`      |
+| `is.read()` / `is.available()` / `is.close()`    | `is.read()` / `is.available()` / `is.close()`           |
+| `os.write(b)` / `os.flush()` / `os.close()`      | `os.write(b)` / `os.flush()` / `os.close()`             |
+| `new BufferedReader(new StringReader(...))`        | `JBufferedReader::from_string_reader(...)`               |
+| `new BufferedReader(reader)` (Reader arg)          | `reader.into_buffered_reader()`                          |
+| `new BufferedWriter(writer)` (Writer arg)          | `writer.into_buffered_writer()`                          |
+
 ### Scanner
 
 | Java                              | Rust                                     |

@@ -204,15 +204,17 @@ with `getSimpleName()`, `getName()`, and `getCanonicalName()` methods;
 The following java.io classes are supported: `File`, `FileReader`, `FileWriter`,
 `BufferedReader`, `BufferedWriter`, `PrintWriter`, `FileInputStream`,
 `FileOutputStream`, `Scanner`, `StringWriter`, `StringReader`,
-`ByteArrayOutputStream`, and `ByteArrayInputStream`. The following java.nio.file
-classes are supported: `Path`, `Paths`, and `Files` (with `readString`,
-`writeString`, `readAllLines`, `write`, `exists`, `isDirectory`, `isRegularFile`,
-`size`, `delete`, `deleteIfExists`, `createDirectory`, `createDirectories`,
-`copy`, `move`).
+`ByteArrayOutputStream`, and `ByteArrayInputStream`. Abstract I/O base types
+(`InputStream`, `OutputStream`, `Reader`, `Writer`) are supported as polymorphic
+enum types — concrete constructors are automatically wrapped when assigned to
+an abstract-typed variable. `BufferedReader(new StringReader(...))` is supported.
+The following java.nio.file classes are supported: `Path`, `Paths`, and `Files`
+(with `readString`, `writeString`, `readAllLines`, `write`, `exists`,
+`isDirectory`, `isRegularFile`, `size`, `delete`, `deleteIfExists`,
+`createDirectory`, `createDirectories`, `copy`, `move`).
 
 The following are **not** supported:
 
-- Abstract `InputStream` / `OutputStream` / `Reader` / `Writer` base classes as polymorphic types
 - `java.nio.channels` (NIO channels and selectors)
 - Serialization (`Serializable`, `ObjectInputStream`, `ObjectOutputStream`)
 

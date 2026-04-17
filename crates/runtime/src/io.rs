@@ -267,6 +267,13 @@ impl JBufferedReader {
         }
     }
 
+    /// Construct from a `JStringReader` (i.e. `new BufferedReader(new StringReader(...))`).
+    pub fn from_string_reader(sr: JStringReader) -> Self {
+        Self {
+            inner: Box::new(std::io::BufReader::new(sr.cursor)),
+        }
+    }
+
     /// Java `br.readLine()` — returns an empty `JString` at EOF.
     pub fn readLine(&mut self) -> JString {
         let mut line = String::new();
@@ -1195,6 +1202,300 @@ impl JByteArrayInputStream {
 impl Read for JByteArrayInputStream {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.cursor.read(buf)
+    }
+}
+
+// ─── Polymorphic I/O base types (Java abstract class → Rust enum) ─────────────
+
+/// Java `java.io.InputStream` — polymorphic byte input.
+///
+/// Wraps concrete `FileInputStream` and `ByteArrayInputStream` so that methods
+/// accepting `InputStream` work with any implementation.
+#[derive(Debug)]
+pub enum JInputStream {
+    File(JFileInputStream),
+    ByteArray(JByteArrayInputStream),
+}
+
+impl Clone for JInputStream {
+    fn clone(&self) -> Self {
+        match self {
+            Self::ByteArray(b) => Self::ByteArray(b.clone()),
+            _ => Self::default(),
+        }
+    }
+}
+
+impl Default for JInputStream {
+    fn default() -> Self {
+        Self::File(JFileInputStream::default())
+    }
+}
+
+impl JInputStream {
+    /// Java `is.read()` — reads a single byte, returns -1 at EOF.
+    pub fn read(&mut self) -> i32 {
+        match self {
+            Self::File(f) => f.read(),
+            Self::ByteArray(b) => b.read(),
+        }
+    }
+
+    /// Java `is.available()`.
+    pub fn available(&self) -> i32 {
+        match self {
+            Self::File(f) => f.available(),
+            Self::ByteArray(b) => b.available(),
+        }
+    }
+
+    /// Java `is.close()`.
+    pub fn close(&mut self) {}
+}
+
+impl std::fmt::Display for JInputStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "InputStream")
+    }
+}
+
+impl From<JFileInputStream> for JInputStream {
+    fn from(f: JFileInputStream) -> Self {
+        Self::File(f)
+    }
+}
+
+impl From<JByteArrayInputStream> for JInputStream {
+    fn from(b: JByteArrayInputStream) -> Self {
+        Self::ByteArray(b)
+    }
+}
+
+/// Java `java.io.OutputStream` — polymorphic byte output.
+#[derive(Debug)]
+pub enum JOutputStream {
+    File(JFileOutputStream),
+    ByteArray(JByteArrayOutputStream),
+}
+
+impl Clone for JOutputStream {
+    fn clone(&self) -> Self {
+        match self {
+            Self::ByteArray(b) => Self::ByteArray(b.clone()),
+            _ => Self::default(),
+        }
+    }
+}
+
+impl Default for JOutputStream {
+    fn default() -> Self {
+        Self::File(JFileOutputStream::default())
+    }
+}
+
+impl JOutputStream {
+    /// Java `os.write(int b)` — writes a single byte.
+    pub fn write(&mut self, b: i32) {
+        match self {
+            Self::File(f) => {
+                let _ = f.file.write_all(&[b as u8]);
+            }
+            Self::ByteArray(ba) => ba.write(b),
+        }
+    }
+
+    /// Java `os.flush()`.
+    pub fn flush(&mut self) {
+        match self {
+            Self::File(f) => {
+                let _ = f.file.flush();
+            }
+            Self::ByteArray(ba) => ba.flush(),
+        }
+    }
+
+    /// Java `os.close()`.
+    pub fn close(&mut self) {
+        self.flush();
+    }
+}
+
+impl std::fmt::Display for JOutputStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "OutputStream")
+    }
+}
+
+impl From<JFileOutputStream> for JOutputStream {
+    fn from(f: JFileOutputStream) -> Self {
+        Self::File(f)
+    }
+}
+
+impl From<JByteArrayOutputStream> for JOutputStream {
+    fn from(b: JByteArrayOutputStream) -> Self {
+        Self::ByteArray(b)
+    }
+}
+
+/// Java `java.io.Reader` — polymorphic character input.
+///
+/// Wraps concrete reader types so that methods accepting `Reader` work with
+/// `FileReader`, `StringReader`, and `BufferedReader`.
+#[derive(Debug)]
+pub enum JReader {
+    File(JFileReader),
+    String(JStringReader),
+    Buffered(JBufferedReader),
+}
+
+impl Default for JReader {
+    fn default() -> Self {
+        Self::File(JFileReader::default())
+    }
+}
+
+impl Clone for JReader {
+    fn clone(&self) -> Self {
+        // Readers are not truly clonable; provide a default fallback.
+        Self::default()
+    }
+}
+
+impl JReader {
+    /// Java `r.read()` — reads a single character, returns -1 at EOF.
+    pub fn read(&mut self) -> i32 {
+        match self {
+            Self::File(_) => -1, // FileReader doesn't expose read directly
+            Self::String(s) => s.read(),
+            Self::Buffered(b) => b.read(),
+        }
+    }
+
+    /// Java `r.close()`.
+    pub fn close(&mut self) {}
+
+    /// Convert into a `JBufferedReader` for wrapping.
+    pub fn into_buffered_reader(self) -> JBufferedReader {
+        match self {
+            Self::File(fr) => JBufferedReader::from_reader(fr),
+            Self::String(sr) => JBufferedReader::from_bufreader(std::io::BufReader::new(sr.cursor)),
+            Self::Buffered(br) => br,
+        }
+    }
+}
+
+impl std::fmt::Display for JReader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Reader")
+    }
+}
+
+impl From<JFileReader> for JReader {
+    fn from(f: JFileReader) -> Self {
+        Self::File(f)
+    }
+}
+
+impl From<JStringReader> for JReader {
+    fn from(s: JStringReader) -> Self {
+        Self::String(s)
+    }
+}
+
+impl From<JBufferedReader> for JReader {
+    fn from(b: JBufferedReader) -> Self {
+        Self::Buffered(b)
+    }
+}
+
+/// Java `java.io.Writer` — polymorphic character output.
+///
+/// Wraps concrete writer types so that methods accepting `Writer` work with
+/// `FileWriter`, `StringWriter`, `BufferedWriter`, and `PrintWriter`.
+#[derive(Debug)]
+pub enum JWriter {
+    File(JFileWriter),
+    String(JStringWriter),
+    Buffered(JBufferedWriter),
+    Print(JPrintWriter),
+}
+
+impl Default for JWriter {
+    fn default() -> Self {
+        Self::File(JFileWriter::default())
+    }
+}
+
+impl Clone for JWriter {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl JWriter {
+    /// Java `w.write(str)`.
+    pub fn write(&mut self, s: JString) {
+        match self {
+            Self::File(fw) => fw.write(s),
+            Self::String(sw) => sw.write(s),
+            Self::Buffered(bw) => bw.write(s),
+            Self::Print(pw) => pw.write(s),
+        }
+    }
+
+    /// Java `w.flush()`.
+    pub fn flush(&mut self) {
+        match self {
+            Self::File(fw) => fw.close(),
+            Self::String(sw) => sw.flush(),
+            Self::Buffered(bw) => bw.flush(),
+            Self::Print(pw) => pw.flush(),
+        }
+    }
+
+    /// Java `w.close()`.
+    pub fn close(&mut self) {
+        self.flush();
+    }
+
+    /// Convert into a `JBufferedWriter`.
+    pub fn into_buffered_writer(self) -> JBufferedWriter {
+        match self {
+            Self::File(fw) => JBufferedWriter::from_writer(fw),
+            Self::Buffered(bw) => bw,
+            _ => JBufferedWriter::default(),
+        }
+    }
+}
+
+impl std::fmt::Display for JWriter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Writer")
+    }
+}
+
+impl From<JFileWriter> for JWriter {
+    fn from(f: JFileWriter) -> Self {
+        Self::File(f)
+    }
+}
+
+impl From<JStringWriter> for JWriter {
+    fn from(s: JStringWriter) -> Self {
+        Self::String(s)
+    }
+}
+
+impl From<JBufferedWriter> for JWriter {
+    fn from(b: JBufferedWriter) -> Self {
+        Self::Buffered(b)
+    }
+}
+
+impl From<JPrintWriter> for JWriter {
+    fn from(p: JPrintWriter) -> Self {
+        Self::Print(p)
     }
 }
 
