@@ -1220,8 +1220,13 @@ pub enum JInputStream {
 impl Clone for JInputStream {
     fn clone(&self) -> Self {
         match self {
+            Self::File(f) => Self::File(JFileInputStream {
+                file: f
+                    .file
+                    .try_clone()
+                    .expect("failed to clone file handle for JInputStream"),
+            }),
             Self::ByteArray(b) => Self::ByteArray(b.clone()),
-            _ => Self::default(),
         }
     }
 }
@@ -1250,7 +1255,15 @@ impl JInputStream {
     }
 
     /// Java `is.close()`.
-    pub fn close(&mut self) {}
+    pub fn close(&mut self) {
+        match self {
+            Self::File(f) => {
+                let taken = std::mem::take(f);
+                taken.close();
+            }
+            Self::ByteArray(b) => b.close(),
+        }
+    }
 }
 
 impl std::fmt::Display for JInputStream {
@@ -1281,8 +1294,13 @@ pub enum JOutputStream {
 impl Clone for JOutputStream {
     fn clone(&self) -> Self {
         match self {
+            Self::File(f) => Self::File(JFileOutputStream {
+                file: f
+                    .file
+                    .try_clone()
+                    .expect("failed to clone file handle for JOutputStream"),
+            }),
             Self::ByteArray(b) => Self::ByteArray(b.clone()),
-            _ => Self::default(),
         }
     }
 }
@@ -1297,9 +1315,7 @@ impl JOutputStream {
     /// Java `os.write(int b)` — writes a single byte.
     pub fn write(&mut self, b: i32) {
         match self {
-            Self::File(f) => {
-                let _ = f.file.write_all(&[b as u8]);
-            }
+            Self::File(f) => f.write_byte(b),
             Self::ByteArray(ba) => ba.write(b),
         }
     }
@@ -1307,9 +1323,7 @@ impl JOutputStream {
     /// Java `os.flush()`.
     pub fn flush(&mut self) {
         match self {
-            Self::File(f) => {
-                let _ = f.file.flush();
-            }
+            Self::File(f) => f.flush(),
             Self::ByteArray(ba) => ba.flush(),
         }
     }
@@ -1357,16 +1371,20 @@ impl Default for JReader {
 
 impl Clone for JReader {
     fn clone(&self) -> Self {
-        // Readers are not truly clonable; provide a default fallback.
-        Self::default()
+        panic!("JReader cannot be cloned safely: cloning would not preserve the underlying reader")
     }
 }
 
 impl JReader {
     /// Java `r.read()` — reads a single character, returns -1 at EOF.
     pub fn read(&mut self) -> i32 {
+        if let Self::File(fr) = self {
+            let file_reader = std::mem::take(fr);
+            *self = Self::Buffered(JBufferedReader::from_reader(file_reader));
+        }
+
         match self {
-            Self::File(_) => -1, // FileReader doesn't expose read directly
+            Self::File(_) => -1,
             Self::String(s) => s.read(),
             Self::Buffered(b) => b.read(),
         }
@@ -1429,7 +1447,7 @@ impl Default for JWriter {
 
 impl Clone for JWriter {
     fn clone(&self) -> Self {
-        Self::default()
+        panic!("JWriter cannot be cloned safely: cloning would not preserve the underlying writer")
     }
 }
 
@@ -1464,7 +1482,12 @@ impl JWriter {
         match self {
             Self::File(fw) => JBufferedWriter::from_writer(fw),
             Self::Buffered(bw) => bw,
-            _ => JBufferedWriter::default(),
+            Self::String(_) => {
+                panic!("JWriter::into_buffered_writer does not support JWriter::String")
+            }
+            Self::Print(_) => {
+                panic!("JWriter::into_buffered_writer does not support JWriter::Print")
+            }
         }
     }
 }

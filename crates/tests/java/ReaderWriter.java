@@ -9,8 +9,9 @@ import java.io.*;
 
 class ReaderWriter {
     public static void main(String[] args) throws Exception {
-        // Test 1: BufferedReader wrapping StringReader
-        BufferedReader br = new BufferedReader(new StringReader("hello\nworld"));
+        // Test 1: Reader variable from StringReader, then wrap in BufferedReader
+        Reader r = new StringReader("hello\nworld");
+        BufferedReader br = new BufferedReader(r);
         System.out.println(br.readLine());  // hello
         System.out.println(br.readLine());  // world
         br.close();
