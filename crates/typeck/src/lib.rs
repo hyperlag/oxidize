@@ -1120,10 +1120,8 @@ fn resolve_method_return_type(
                     _ => {}
                 },
                 // FileReader methods
-                "FileReader" | "JFileReader" => {
-                    if method_name == "close" {
-                        return IrType::Void;
-                    }
+                "FileReader" | "JFileReader" if method_name == "close" => {
+                    return IrType::Void;
                 }
                 // FileWriter methods
                 "FileWriter" | "JFileWriter" => match method_name {
