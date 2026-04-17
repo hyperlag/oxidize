@@ -1371,7 +1371,7 @@ impl Default for JReader {
 
 impl Clone for JReader {
     fn clone(&self) -> Self {
-        panic!("JReader cannot be cloned safely: cloning would not preserve the underlying reader")
+        panic!("JReader cannot be cloned safely: cloning would not preserve the underlying reader.")
     }
 }
 
@@ -1384,9 +1384,9 @@ impl JReader {
         }
 
         match self {
-            Self::File(_) => -1,
             Self::String(s) => s.read(),
             Self::Buffered(b) => b.read(),
+            Self::File(_) => unreachable!("File variant is promoted to Buffered above"),
         }
     }
 
@@ -1447,7 +1447,7 @@ impl Default for JWriter {
 
 impl Clone for JWriter {
     fn clone(&self) -> Self {
-        panic!("JWriter cannot be cloned safely: cloning would not preserve the underlying writer")
+        panic!("JWriter cannot be cloned safely: cloning would not preserve the underlying writer.")
     }
 }
 
