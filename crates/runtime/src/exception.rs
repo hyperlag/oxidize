@@ -29,10 +29,8 @@ impl JException {
     pub fn from_panic_payload(payload: &Box<dyn std::any::Any + Send>) -> Option<Self> {
         let msg: &str = if let Some(s) = payload.downcast_ref::<String>() {
             s.as_str()
-        } else if let Some(s) = payload.downcast_ref::<&str>() {
-            s
         } else {
-            return None;
+            payload.downcast_ref::<&str>()?
         };
         Self::from_panic_msg(msg)
     }
