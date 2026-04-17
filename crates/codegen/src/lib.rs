@@ -201,6 +201,7 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             JBufferedReader, JBufferedWriter, JPrintWriter,
             JFileReader, JFileWriter, JFileInputStream, JFileOutputStream,
             JScanner, JPath, JPaths, JFiles,
+            JInputStream, JOutputStream, JReader, JWriter,
             JBigDecimal, JMathContext, JRoundingMode,
             JURL, JSocket, JServerSocket, JHttpURLConnection,
             JSpliterator, JavaObject,
@@ -1989,7 +1990,20 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
                     emit_type(ty)
                 };
                 let val = emit_expr(init_expr)?;
-                Ok(quote! { let mut #n: #effective_ty_ts = #val; })
+                // When the declared type is an abstract I/O base class and the
+                // init is a concrete constructor, bridge with `.into()` so that
+                // e.g. `InputStream is = new FileInputStream(...)` compiles as
+                // `let mut is: JInputStream = JFileInputStream::new(...).into();`.
+                let needs_io_into = matches!(
+                    ty,
+                    IrType::Class(ref c)
+                    if matches!(c.as_str(), "InputStream" | "OutputStream" | "Reader" | "Writer")
+                ) && matches!(init_expr, IrExpr::New { .. });
+                if needs_io_into {
+                    Ok(quote! { let mut #n: #effective_ty_ts = (#val).into(); })
+                } else {
+                    Ok(quote! { let mut #n: #effective_ty_ts = #val; })
+                }
             } else {
                 let t = emit_type(ty);
                 Ok(quote! { let mut #n: #t; })
@@ -4942,6 +4956,12 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             Some(IrType::Class(ref c)) if c == "InputStreamReader" => {
                                 Ok(quote! { JBufferedReader::new_stdin() })
                             }
+                            Some(IrType::Class(ref c)) if c == "StringReader" => {
+                                Ok(quote! { JBufferedReader::from_string_reader(#a) })
+                            }
+                            Some(IrType::Class(ref c)) if c == "Reader" => {
+                                Ok(quote! { (#a).into_buffered_reader() })
+                            }
                             _ => Ok(quote! { JBufferedReader::from_reader(#a) }),
                         }
                     }
@@ -4951,7 +4971,13 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                         Ok(quote! { JBufferedWriter::default() })
                     } else {
                         let a = &args_ts[0];
-                        Ok(quote! { JBufferedWriter::from_writer(#a) })
+                        let arg_ty = args.first().map(|e| e.ty());
+                        match arg_ty {
+                            Some(IrType::Class(ref c)) if c == "Writer" => {
+                                Ok(quote! { (#a).into_buffered_writer() })
+                            }
+                            _ => Ok(quote! { JBufferedWriter::from_writer(#a) }),
+                        }
                     }
                 }
                 "PrintWriter" => {
@@ -5290,7 +5316,18 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             }
             let l = emit_place(lhs)?;
             let r = emit_expr(rhs)?;
-            Ok(quote! { #l = #r })
+            // Abstract I/O assignment: wrap with .into() when assigning a
+            // concrete I/O constructor to a variable typed as the abstract base.
+            let lhs_is_abstract_io = matches!(
+                lhs.ty(),
+                IrType::Class(ref c)
+                if matches!(c.as_str(), "InputStream" | "OutputStream" | "Reader" | "Writer")
+            ) && matches!(rhs.as_ref(), IrExpr::New { .. });
+            if lhs_is_abstract_io {
+                Ok(quote! { #l = (#r).into() })
+            } else {
+                Ok(quote! { #l = #r })
+            }
         }
 
         IrExpr::CompoundAssign { op, lhs, rhs, .. } => {
@@ -5661,6 +5698,10 @@ fn emit_type(ty: &IrType) -> TokenStream {
                 "FileInputStream" => quote! { JFileInputStream },
                 "FileOutputStream" => quote! { JFileOutputStream },
                 "InputStreamReader" => quote! { JFileReader },
+                "InputStream" => quote! { JInputStream },
+                "OutputStream" => quote! { JOutputStream },
+                "Reader" => quote! { JReader },
+                "Writer" => quote! { JWriter },
                 "Scanner" => quote! { JScanner },
                 "Path" => quote! { JPath },
                 "Files" => quote! { JFiles },

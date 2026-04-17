@@ -1577,4 +1577,16 @@ Expression calculator tests complete",
             "true\nfalse\n25\n(3, 4)\nPoint[x=3, y=4]",
         );
     }
+
+    // ── Stage 15 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_input_stream_param() {
+        check("InputStreamParam.java", "72\n101\n108\n2\n65\n66");
+    }
+
+    #[test]
+    fn test_reader_writer() {
+        check("ReaderWriter.java", "hello\nworld\ndone");
+    }
 }
