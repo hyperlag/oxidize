@@ -86,6 +86,10 @@ fn record_local_var_type(name: &str, ty: &IrType) {
     LOCAL_VAR_TYPES.with(|scopes| {
         let mut scopes = scopes.borrow_mut();
         if scopes.is_empty() {
+            debug_assert!(
+                false,
+                "record_local_var_type called with empty local-var scope stack"
+            );
             scopes.push(std::collections::HashMap::new());
         }
         if let Some(scope) = scopes.last_mut() {
