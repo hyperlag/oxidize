@@ -119,6 +119,7 @@ fn check_enum(
         methods: enm.methods.clone(),
         constructors: enm.constructor.iter().cloned().collect(),
         is_record: false,
+        captures: vec![],
     };
 
     for method in &mut enm.methods {
@@ -1274,6 +1275,7 @@ mod tests {
             }],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         }
     }
 
@@ -3335,6 +3337,7 @@ mod tests {
             methods: vec![],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         };
         let child = IrClass {
             name: "Child".into(),
@@ -3364,6 +3367,7 @@ mod tests {
             }],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         };
         module.decls.push(IrDecl::Class(parent));
         module.decls.push(IrDecl::Class(child));
@@ -3407,6 +3411,7 @@ mod tests {
             }],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         };
         let child = IrClass {
             name: "Dog".into(),
@@ -3438,6 +3443,7 @@ mod tests {
             }],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         };
         module.decls.push(IrDecl::Class(parent));
         module.decls.push(IrDecl::Class(child));
@@ -3471,6 +3477,7 @@ mod tests {
             methods: vec![],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         };
         let child = IrClass {
             name: "Sub".into(),
@@ -3504,6 +3511,7 @@ mod tests {
             }],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         };
         module.decls.push(IrDecl::Class(parent));
         module.decls.push(IrDecl::Class(child));
@@ -3586,6 +3594,7 @@ mod tests {
             ],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         };
         module.decls.push(IrDecl::Class(cls));
         let checked = tc(module);
@@ -3618,6 +3627,7 @@ mod tests {
             methods: vec![],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         };
         let child = IrClass {
             name: "Derived2".into(),
@@ -3655,6 +3665,7 @@ mod tests {
             }],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         };
         module.decls.push(IrDecl::Class(parent));
         module.decls.push(IrDecl::Class(child));

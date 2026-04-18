@@ -279,6 +279,7 @@ fn arb_ir_class() -> impl Strategy<Value = decl::IrClass> {
             methods,
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         })
 }
 

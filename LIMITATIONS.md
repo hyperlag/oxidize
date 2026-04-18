@@ -348,7 +348,8 @@ Non-static inner classes, anonymous inner classes, and local classes are now
 supported with the following limitations:
 
 - **Anonymous inner classes:** supported when implementing an interface with
-  method overrides; outer-scope variable capture is not supported.
+  method overrides; outer-scope variable capture is supported (captured variables
+  are cloned into the anonymous class as fields).
 - **Non-static inner classes:** hoisted to top-level structs with a mangled
   name (`Outer$Inner`); outer field and method access via `OuterClass.this.field`
   and `OuterClass.this.method()` is supported. The outer reference is a snapshot

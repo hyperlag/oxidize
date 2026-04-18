@@ -1360,6 +1360,11 @@ Expression calculator tests complete",
     }
 
     #[test]
+    fn test_anon_capture() {
+        check("AnonCapture.java", "Hello, World!\n142");
+    }
+
+    #[test]
     fn test_inner_class() {
         check("InnerClass.java", "3");
     }

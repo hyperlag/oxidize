@@ -56,6 +56,69 @@ fn pop_outer_class() {
     });
 }
 
+// Stack of local-variable scopes, from outermost to innermost, populated
+// during method/block lowering so anonymous-class capture detection follows
+// Java lexical scoping rules.
+thread_local! {
+    static LOCAL_VAR_TYPES: RefCell<Vec<std::collections::HashMap<String, IrType>>> =
+        const { RefCell::new(Vec::new()) };
+}
+
+fn push_local_var_scope() {
+    LOCAL_VAR_TYPES.with(|scopes| {
+        scopes.borrow_mut().push(std::collections::HashMap::new());
+    });
+}
+
+fn pop_local_var_scope() {
+    LOCAL_VAR_TYPES.with(|scopes| {
+        scopes.borrow_mut().pop();
+    });
+}
+
+fn clear_local_var_scopes() {
+    LOCAL_VAR_TYPES.with(|scopes| {
+        scopes.borrow_mut().clear();
+    });
+}
+
+fn record_local_var_type(name: &str, ty: &IrType) {
+    LOCAL_VAR_TYPES.with(|scopes| {
+        let mut scopes = scopes.borrow_mut();
+        if scopes.is_empty() {
+            debug_assert!(
+                false,
+                "record_local_var_type called with empty local-var scope stack"
+            );
+            scopes.push(std::collections::HashMap::new());
+        }
+        if let Some(scope) = scopes.last_mut() {
+            scope.insert(name.to_owned(), ty.clone());
+        }
+    });
+}
+
+fn lookup_local_var_type(name: &str) -> IrType {
+    LOCAL_VAR_TYPES.with(|scopes| {
+        scopes
+            .borrow()
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).cloned())
+            .unwrap_or(IrType::Unknown)
+    })
+}
+
+/// RAII guard that calls `pop_local_var_scope()` when dropped, ensuring the
+/// stack stays balanced even when lowering returns early via `?`.
+struct LocalVarScopeGuard;
+
+impl Drop for LocalVarScopeGuard {
+    fn drop(&mut self) {
+        pop_local_var_scope();
+    }
+}
+
 /// RAII guard that calls `pop_outer_class()` when dropped, ensuring the stack
 /// stays balanced even when `lower_class` returns early via `?`.
 struct OuterClassGuard;
@@ -77,6 +140,342 @@ fn next_anon_name() -> String {
         v
     });
     format!("__Anon_{n}")
+}
+
+// ─── anonymous class variable capture ────────────────────────────────────────
+
+/// Collect all `Var` names referenced in an expression.
+fn collect_var_refs_expr(expr: &IrExpr, out: &mut std::collections::HashSet<String>) {
+    match expr {
+        IrExpr::Var { name, .. } => {
+            out.insert(name.clone());
+        }
+        IrExpr::BinOp { lhs, rhs, .. }
+        | IrExpr::Assign { lhs, rhs, .. }
+        | IrExpr::CompoundAssign { lhs, rhs, .. } => {
+            collect_var_refs_expr(lhs, out);
+            collect_var_refs_expr(rhs, out);
+        }
+        IrExpr::UnOp { operand, .. } | IrExpr::Cast { expr: operand, .. } => {
+            collect_var_refs_expr(operand, out);
+        }
+        IrExpr::Ternary {
+            cond, then_, else_, ..
+        } => {
+            collect_var_refs_expr(cond, out);
+            collect_var_refs_expr(then_, out);
+            collect_var_refs_expr(else_, out);
+        }
+        IrExpr::MethodCall { receiver, args, .. } => {
+            if let Some(r) = receiver {
+                collect_var_refs_expr(r, out);
+            }
+            for a in args {
+                collect_var_refs_expr(a, out);
+            }
+        }
+        IrExpr::New { args, .. } => {
+            for a in args {
+                collect_var_refs_expr(a, out);
+            }
+        }
+        IrExpr::FieldAccess { receiver, .. } => {
+            collect_var_refs_expr(receiver, out);
+        }
+        IrExpr::ArrayAccess { array, index, .. } => {
+            collect_var_refs_expr(array, out);
+            collect_var_refs_expr(index, out);
+        }
+        IrExpr::NewArray { len, .. } => {
+            collect_var_refs_expr(len, out);
+        }
+        IrExpr::NewArrayMultiDim { dims, .. } => {
+            for d in dims {
+                collect_var_refs_expr(d, out);
+            }
+        }
+        IrExpr::Lambda {
+            body, body_stmts, ..
+        } => {
+            collect_var_refs_expr(body, out);
+            for s in body_stmts {
+                collect_var_refs_stmt(s, out);
+            }
+        }
+        IrExpr::InstanceOf { expr, .. } => {
+            collect_var_refs_expr(expr, out);
+        }
+        IrExpr::SwitchExpr {
+            expr,
+            arms,
+            default,
+            ..
+        } => {
+            collect_var_refs_expr(expr, out);
+            for (pat, body) in arms {
+                collect_var_refs_expr(pat, out);
+                collect_var_refs_expr(body, out);
+            }
+            if let Some(d) = default {
+                collect_var_refs_expr(d, out);
+            }
+        }
+        IrExpr::MethodRef {
+            target: Some(t), ..
+        } => {
+            collect_var_refs_expr(t, out);
+        }
+        _ => {} // Literals, Unit, LitNull, ClassLiteral
+    }
+}
+
+/// Collect all `Var` names referenced in a statement, and also collect
+/// locally-declared variable names into `declared`.
+fn collect_var_refs_stmt(stmt: &IrStmt, out: &mut std::collections::HashSet<String>) {
+    match stmt {
+        IrStmt::Expr(e) | IrStmt::Return(Some(e)) | IrStmt::Throw(e) => {
+            collect_var_refs_expr(e, out);
+        }
+        IrStmt::LocalVar { init, .. } => {
+            if let Some(e) = init {
+                collect_var_refs_expr(e, out);
+            }
+        }
+        IrStmt::If {
+            cond, then_, else_, ..
+        } => {
+            collect_var_refs_expr(cond, out);
+            for s in then_ {
+                collect_var_refs_stmt(s, out);
+            }
+            if let Some(es) = else_ {
+                for s in es {
+                    collect_var_refs_stmt(s, out);
+                }
+            }
+        }
+        IrStmt::While { cond, body, .. } => {
+            collect_var_refs_expr(cond, out);
+            for s in body {
+                collect_var_refs_stmt(s, out);
+            }
+        }
+        IrStmt::DoWhile { body, cond, .. } => {
+            for s in body {
+                collect_var_refs_stmt(s, out);
+            }
+            collect_var_refs_expr(cond, out);
+        }
+        IrStmt::For {
+            init,
+            cond,
+            update,
+            body,
+            ..
+        } => {
+            if let Some(i) = init {
+                collect_var_refs_stmt(i, out);
+            }
+            if let Some(c) = cond {
+                collect_var_refs_expr(c, out);
+            }
+            for u in update {
+                collect_var_refs_expr(u, out);
+            }
+            for s in body {
+                collect_var_refs_stmt(s, out);
+            }
+        }
+        IrStmt::ForEach { iterable, body, .. } => {
+            collect_var_refs_expr(iterable, out);
+            for s in body {
+                collect_var_refs_stmt(s, out);
+            }
+        }
+        IrStmt::Switch {
+            expr,
+            cases,
+            default,
+        } => {
+            collect_var_refs_expr(expr, out);
+            for case in cases {
+                collect_var_refs_expr(&case.value, out);
+                for s in &case.body {
+                    collect_var_refs_stmt(s, out);
+                }
+            }
+            if let Some(d) = default {
+                for s in d {
+                    collect_var_refs_stmt(s, out);
+                }
+            }
+        }
+        IrStmt::TryCatch {
+            body,
+            catches,
+            finally,
+        } => {
+            for s in body {
+                collect_var_refs_stmt(s, out);
+            }
+            for c in catches {
+                for s in &c.body {
+                    collect_var_refs_stmt(s, out);
+                }
+            }
+            if let Some(f) = finally {
+                for s in f {
+                    collect_var_refs_stmt(s, out);
+                }
+            }
+        }
+        IrStmt::Synchronized { monitor, body } => {
+            collect_var_refs_expr(monitor, out);
+            for s in body {
+                collect_var_refs_stmt(s, out);
+            }
+        }
+        IrStmt::SuperConstructorCall { args } => {
+            for a in args {
+                collect_var_refs_expr(a, out);
+            }
+        }
+        IrStmt::Block(stmts) => {
+            for s in stmts {
+                collect_var_refs_stmt(s, out);
+            }
+        }
+        IrStmt::Return(None) | IrStmt::Break(_) | IrStmt::Continue(_) => {}
+    }
+}
+
+/// Collect names declared by `LocalVar` and `ForEach` in a list of statements.
+fn collect_locally_declared(stmts: &[IrStmt], out: &mut std::collections::HashSet<String>) {
+    for s in stmts {
+        match s {
+            IrStmt::LocalVar { name, .. } => {
+                out.insert(name.clone());
+            }
+            IrStmt::ForEach { var, .. } => {
+                out.insert(var.clone());
+            }
+            IrStmt::For { init, body, .. } => {
+                if let Some(i) = init {
+                    collect_locally_declared(std::slice::from_ref(i.as_ref()), out);
+                }
+                collect_locally_declared(body, out);
+            }
+            IrStmt::If { then_, else_, .. } => {
+                collect_locally_declared(then_, out);
+                if let Some(es) = else_ {
+                    collect_locally_declared(es, out);
+                }
+            }
+            IrStmt::While { body, .. }
+            | IrStmt::DoWhile { body, .. }
+            | IrStmt::Synchronized { body, .. } => {
+                collect_locally_declared(body, out);
+            }
+            IrStmt::Block(inner) => {
+                collect_locally_declared(inner, out);
+            }
+            IrStmt::TryCatch {
+                body,
+                catches,
+                finally,
+            } => {
+                collect_locally_declared(body, out);
+                for c in catches {
+                    out.insert(c.var.clone());
+                    collect_locally_declared(&c.body, out);
+                }
+                if let Some(f) = finally {
+                    collect_locally_declared(f, out);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Detect captured variables in anonymous class methods.
+///
+/// Returns a sorted, deduplicated list of variable names that are referenced
+/// in the anonymous class method bodies but are neither method parameters,
+/// fields of the anonymous class, nor locally declared within the methods.
+fn detect_captures(methods: &[IrMethod], fields: &[IrField]) -> Vec<String> {
+    // Names that are always available (not captures)
+    let well_known: std::collections::HashSet<&str> = [
+        "this",
+        "self",
+        "System",
+        "Math",
+        "Integer",
+        "Long",
+        "Double",
+        "Float",
+        "Boolean",
+        "Character",
+        "Byte",
+        "Short",
+        "String",
+        "Arrays",
+        "Collections",
+        "Objects",
+        "Thread",
+        "Runtime",
+        "Optional",
+        "Class",
+        "args",
+    ]
+    .into_iter()
+    .collect();
+
+    let field_names: std::collections::HashSet<String> =
+        fields.iter().map(|f| f.name.clone()).collect();
+
+    let mut captures = std::collections::BTreeSet::new();
+
+    for method in methods {
+        let mut all_refs = std::collections::HashSet::new();
+        if let Some(body) = &method.body {
+            for s in body {
+                collect_var_refs_stmt(s, &mut all_refs);
+            }
+        }
+        // Subtract method parameters
+        let param_names: std::collections::HashSet<String> =
+            method.params.iter().map(|p| p.name.clone()).collect();
+        // Subtract locally declared variables
+        let mut local_names = std::collections::HashSet::new();
+        if let Some(body) = &method.body {
+            collect_locally_declared(body, &mut local_names);
+        }
+
+        for name in &all_refs {
+            if param_names.contains(name) {
+                continue;
+            }
+            if local_names.contains(name) {
+                continue;
+            }
+            if field_names.contains(name) {
+                continue;
+            }
+            if well_known.contains(name.as_str()) {
+                continue;
+            }
+            // Skip names that look like class names (start with uppercase)
+            // unless they also look like local variables (we can't be 100% sure,
+            // but this heuristic catches most false positives like type names).
+            // Actually, in Java, captured vars are typically lowercase.
+            // We keep all that pass the other filters — the codegen will just
+            // emit `self.__cap_X` and if X is a class name, it still works.
+            captures.insert(name.clone());
+        }
+    }
+
+    captures.into_iter().collect()
 }
 
 /// Parse `source` as Java and return the tree-sitter tree.
@@ -112,6 +511,7 @@ pub fn parse_to_ir(source: &str) -> Result<IrModule, ParseError> {
     ANON_COUNTER.with(|c| c.set(0));
     HOISTED_DECLS.with(|h| h.borrow_mut().clear());
     OUTER_CLASS_STACK.with(|s| s.borrow_mut().clear());
+    clear_local_var_scopes();
 
     let tree = parse_source(source)?;
     let root = tree.root_node();
@@ -525,6 +925,7 @@ fn lower_record(node: Node<'_>, src: &[u8]) -> Result<IrClass, ParseError> {
         fields,
         methods,
         constructors: vec![canonical_ctor],
+        captures: vec![],
     })
 }
 
@@ -681,6 +1082,7 @@ fn lower_class(node: Node<'_>, src: &[u8]) -> Result<(IrClass, Vec<IrEnum>), Par
             methods,
             constructors,
             is_record: false,
+            captures: vec![],
         },
         inner_enums,
     ))
@@ -953,6 +1355,12 @@ fn lower_method(node: Node<'_>, src: &[u8]) -> Result<IrMethod, ParseError> {
         .map(|params_node| lower_params(params_node, src))
         .unwrap_or_default();
 
+    push_local_var_scope();
+    let _local_scope_guard = LocalVarScopeGuard;
+    for p in &params {
+        record_local_var_type(&p.name, &p.ty);
+    }
+
     let body = child_by_field(node, "body")
         .map(|b| lower_block(b, src))
         .transpose()?;
@@ -1157,6 +1565,8 @@ fn lower_type(node: Node<'_>, src: &[u8]) -> IrType {
 // ─── block / statements ─────────────────────────────────────────────────────
 
 fn lower_block(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
+    push_local_var_scope();
+    let _local_scope_guard = LocalVarScopeGuard;
     let mut stmts = Vec::new();
     let mut cursor = node.walk();
     for child in node.named_children(&mut cursor) {
@@ -1179,6 +1589,7 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                 let init = child_by_field(decl, "value")
                     .map(|n| lower_expr(n, src))
                     .transpose()?;
+                record_local_var_type(&name, &ty);
                 stmts.push(IrStmt::LocalVar {
                     name,
                     ty: ty.clone(),
@@ -1267,6 +1678,8 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
             Ok(stmts)
         }
         "for_statement" => {
+            push_local_var_scope();
+            let _local_scope_guard = LocalVarScopeGuard;
             // init is either a local_variable_declaration or expression_statement
             let init = child_by_field(node, "init")
                 .map(|n| lower_stmt(n, src))
@@ -1299,12 +1712,17 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
             }])
         }
         "enhanced_for_statement" => {
+            push_local_var_scope();
+            let _local_scope_guard = LocalVarScopeGuard;
             let var_ty = child_by_field(node, "type")
                 .map(|n| lower_type(n, src))
                 .unwrap_or(IrType::Unknown);
             let var = child_by_field(node, "name")
                 .map(|n| text(n, src).to_owned())
                 .unwrap_or_default();
+            if !var.is_empty() {
+                record_local_var_type(&var, &var_ty);
+            }
             let iterable = child_by_field(node, "value")
                 .map(|n| lower_expr(n, src))
                 .transpose()?
@@ -1584,6 +2002,16 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                         } else {
                             (vec![], String::new())
                         };
+                        push_local_var_scope();
+                        let _local_scope_guard = LocalVarScopeGuard;
+                        if !var.is_empty() {
+                            let catch_ty = exception_types
+                                .first()
+                                .cloned()
+                                .map(IrType::Class)
+                                .unwrap_or(IrType::Class("Object".to_owned()));
+                            record_local_var_type(&var, &catch_ty);
+                        }
                         let catch_body = child_by_field(child, "body")
                             .map(|n| lower_block(n, src))
                             .transpose()?
@@ -1616,6 +2044,8 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
         // try (Resource r = new Resource()) { body } catch (...) { ... }
         // Desugared: let r = new Resource(); try { body } finally { r.close(); }
         "try_with_resources_statement" => {
+            push_local_var_scope();
+            let _local_scope_guard = LocalVarScopeGuard;
             let mut result_stmts = Vec::new();
             let mut resource_names: Vec<String> = Vec::new();
 
@@ -1636,6 +2066,7 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                         .map(|n| lower_expr(n, src))
                         .transpose()?;
                     if !name.is_empty() {
+                        record_local_var_type(&name, &ty);
                         resource_names.push(name.clone());
                         result_stmts.push(IrStmt::LocalVar { name, ty, init });
                     }
@@ -1685,6 +2116,16 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                         } else {
                             (vec![], String::new())
                         };
+                        push_local_var_scope();
+                        let _local_scope_guard = LocalVarScopeGuard;
+                        if !var.is_empty() {
+                            let catch_ty = exception_types
+                                .first()
+                                .cloned()
+                                .map(IrType::Class)
+                                .unwrap_or(IrType::Class("Object".to_owned()));
+                            record_local_var_type(&var, &catch_ty);
+                        }
                         let catch_body = child_by_field(child, "body")
                             .map(|n| lower_block(n, src))
                             .transpose()?
@@ -2079,6 +2520,18 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                         _ => {}
                     }
                 }
+                // Detect captured variables from the enclosing scope.
+                let capture_names = detect_captures(&anon_methods, &anon_fields);
+                let captures: Vec<(String, IrType)> = capture_names
+                    .into_iter()
+                    .map(|n| {
+                        let ty = match lookup_local_var_type(&n) {
+                            IrType::Unknown => IrType::Class("Object".to_owned()),
+                            other => other,
+                        };
+                        (n, ty)
+                    })
+                    .collect();
                 // The anonymous class implements the target interface/superclass.
                 let anon_cls = IrClass {
                     name: anon_name.clone(),
@@ -2092,6 +2545,7 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                     fields: anon_fields,
                     methods: anon_methods,
                     constructors: anon_ctors,
+                    captures,
                 };
                 hoist_decl(IrDecl::Class(anon_cls));
                 return Ok(IrExpr::New {

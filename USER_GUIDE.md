@@ -713,7 +713,7 @@ lambda expressions, text blocks (Java 13+).
 | `java.nio.channels` (NIO selectors) | Not implemented |
 | Java serialization (`Serializable`, `ObjectInputStream`) | Not implemented |
 | `java.io.Serializable` / `ObjectOutputStream` | Not implemented |
-| Anonymous inner classes capturing outer-scope variables | Captured variables not supported |
+| Anonymous inner classes capturing outer-scope variables | Supported for interface-implementing anonymous classes; captured values are cloned into generated fields |
 | `wait()`/`notify()` outside `synchronized(this)` | Only supported on `this` |
 
 ### Partially supported
@@ -721,7 +721,7 @@ lambda expressions, text blocks (Java 13+).
 | Feature | Limitation |
 |---|---|
 | Generic method type inference across call chains | May require explicit type annotations |
-| Anonymous inner classes | Interface implementations only; no outer-variable capture |
+| Anonymous inner classes | Interface implementations only |
 | Non-static inner classes | Outer reference is a snapshot clone taken at construction; mutations via inner class not reflected in original outer |
 | `@Override`, `@Deprecated` | Tolerated syntactically; no code generation effect |
 | Switch expressions with patterns (Java 21) | Not yet supported |
