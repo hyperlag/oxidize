@@ -56,19 +56,63 @@ fn pop_outer_class() {
     });
 }
 
-// Map of local variable name → IrType, populated during method lowering so
-// that anonymous-class capture detection can resolve concrete types.
+// Stack of local-variable scopes, from outermost to innermost, populated
+// during method/block lowering so anonymous-class capture detection follows
+// Java lexical scoping rules.
 thread_local! {
-    static LOCAL_VAR_TYPES: RefCell<std::collections::HashMap<String, IrType>> =
-        RefCell::new(std::collections::HashMap::new());
+    static LOCAL_VAR_TYPES: RefCell<Vec<std::collections::HashMap<String, IrType>>> =
+        const { RefCell::new(Vec::new()) };
+}
+
+fn push_local_var_scope() {
+    LOCAL_VAR_TYPES.with(|scopes| {
+        scopes.borrow_mut().push(std::collections::HashMap::new());
+    });
+}
+
+fn pop_local_var_scope() {
+    LOCAL_VAR_TYPES.with(|scopes| {
+        scopes.borrow_mut().pop();
+    });
+}
+
+fn clear_local_var_scopes() {
+    LOCAL_VAR_TYPES.with(|scopes| {
+        scopes.borrow_mut().clear();
+    });
 }
 
 fn record_local_var_type(name: &str, ty: &IrType) {
-    LOCAL_VAR_TYPES.with(|m| m.borrow_mut().insert(name.to_owned(), ty.clone()));
+    LOCAL_VAR_TYPES.with(|scopes| {
+        let mut scopes = scopes.borrow_mut();
+        if scopes.is_empty() {
+            scopes.push(std::collections::HashMap::new());
+        }
+        if let Some(scope) = scopes.last_mut() {
+            scope.insert(name.to_owned(), ty.clone());
+        }
+    });
 }
 
 fn lookup_local_var_type(name: &str) -> IrType {
-    LOCAL_VAR_TYPES.with(|m| m.borrow().get(name).cloned().unwrap_or(IrType::Unknown))
+    LOCAL_VAR_TYPES.with(|scopes| {
+        scopes
+            .borrow()
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).cloned())
+            .unwrap_or(IrType::Unknown)
+    })
+}
+
+/// RAII guard that calls `pop_local_var_scope()` when dropped, ensuring the
+/// stack stays balanced even when lowering returns early via `?`.
+struct LocalVarScopeGuard;
+
+impl Drop for LocalVarScopeGuard {
+    fn drop(&mut self) {
+        pop_local_var_scope();
+    }
 }
 
 /// RAII guard that calls `pop_outer_class()` when dropped, ensuring the stack
@@ -172,7 +216,9 @@ fn collect_var_refs_expr(expr: &IrExpr, out: &mut std::collections::HashSet<Stri
                 collect_var_refs_expr(d, out);
             }
         }
-        IrExpr::MethodRef { target: Some(t), .. } => {
+        IrExpr::MethodRef {
+            target: Some(t), ..
+        } => {
             collect_var_refs_expr(t, out);
         }
         _ => {} // Literals, Unit, LitNull, ClassLiteral
@@ -461,6 +507,7 @@ pub fn parse_to_ir(source: &str) -> Result<IrModule, ParseError> {
     ANON_COUNTER.with(|c| c.set(0));
     HOISTED_DECLS.with(|h| h.borrow_mut().clear());
     OUTER_CLASS_STACK.with(|s| s.borrow_mut().clear());
+    clear_local_var_scopes();
 
     let tree = parse_source(source)?;
     let root = tree.root_node();
@@ -1304,9 +1351,8 @@ fn lower_method(node: Node<'_>, src: &[u8]) -> Result<IrMethod, ParseError> {
         .map(|params_node| lower_params(params_node, src))
         .unwrap_or_default();
 
-    // Save outer scope's local vars (so nested anon class lowering doesn't
-    // wipe the enclosing scope), then seed with method params.
-    let saved_vars = LOCAL_VAR_TYPES.with(|m| m.borrow().clone());
+    push_local_var_scope();
+    let _local_scope_guard = LocalVarScopeGuard;
     for p in &params {
         record_local_var_type(&p.name, &p.ty);
     }
@@ -1314,9 +1360,6 @@ fn lower_method(node: Node<'_>, src: &[u8]) -> Result<IrMethod, ParseError> {
     let body = child_by_field(node, "body")
         .map(|b| lower_block(b, src))
         .transpose()?;
-
-    // Restore enclosing scope's local vars.
-    LOCAL_VAR_TYPES.with(|m| *m.borrow_mut() = saved_vars);
 
     let throws = child_by_field(node, "throws")
         .map(|t| {
@@ -1518,6 +1561,8 @@ fn lower_type(node: Node<'_>, src: &[u8]) -> IrType {
 // ─── block / statements ─────────────────────────────────────────────────────
 
 fn lower_block(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
+    push_local_var_scope();
+    let _local_scope_guard = LocalVarScopeGuard;
     let mut stmts = Vec::new();
     let mut cursor = node.walk();
     for child in node.named_children(&mut cursor) {
@@ -1629,6 +1674,8 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
             Ok(stmts)
         }
         "for_statement" => {
+            push_local_var_scope();
+            let _local_scope_guard = LocalVarScopeGuard;
             // init is either a local_variable_declaration or expression_statement
             let init = child_by_field(node, "init")
                 .map(|n| lower_stmt(n, src))
@@ -1661,12 +1708,17 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
             }])
         }
         "enhanced_for_statement" => {
+            push_local_var_scope();
+            let _local_scope_guard = LocalVarScopeGuard;
             let var_ty = child_by_field(node, "type")
                 .map(|n| lower_type(n, src))
                 .unwrap_or(IrType::Unknown);
             let var = child_by_field(node, "name")
                 .map(|n| text(n, src).to_owned())
                 .unwrap_or_default();
+            if !var.is_empty() {
+                record_local_var_type(&var, &var_ty);
+            }
             let iterable = child_by_field(node, "value")
                 .map(|n| lower_expr(n, src))
                 .transpose()?
@@ -1946,6 +1998,16 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                         } else {
                             (vec![], String::new())
                         };
+                        push_local_var_scope();
+                        let _local_scope_guard = LocalVarScopeGuard;
+                        if !var.is_empty() {
+                            let catch_ty = exception_types
+                                .first()
+                                .cloned()
+                                .map(IrType::Class)
+                                .unwrap_or(IrType::Class("Object".to_owned()));
+                            record_local_var_type(&var, &catch_ty);
+                        }
                         let catch_body = child_by_field(child, "body")
                             .map(|n| lower_block(n, src))
                             .transpose()?
@@ -1978,6 +2040,8 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
         // try (Resource r = new Resource()) { body } catch (...) { ... }
         // Desugared: let r = new Resource(); try { body } finally { r.close(); }
         "try_with_resources_statement" => {
+            push_local_var_scope();
+            let _local_scope_guard = LocalVarScopeGuard;
             let mut result_stmts = Vec::new();
             let mut resource_names: Vec<String> = Vec::new();
 
@@ -1998,6 +2062,7 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                         .map(|n| lower_expr(n, src))
                         .transpose()?;
                     if !name.is_empty() {
+                        record_local_var_type(&name, &ty);
                         resource_names.push(name.clone());
                         result_stmts.push(IrStmt::LocalVar { name, ty, init });
                     }
@@ -2047,6 +2112,16 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
                         } else {
                             (vec![], String::new())
                         };
+                        push_local_var_scope();
+                        let _local_scope_guard = LocalVarScopeGuard;
+                        if !var.is_empty() {
+                            let catch_ty = exception_types
+                                .first()
+                                .cloned()
+                                .map(IrType::Class)
+                                .unwrap_or(IrType::Class("Object".to_owned()));
+                            record_local_var_type(&var, &catch_ty);
+                        }
                         let catch_body = child_by_field(child, "body")
                             .map(|n| lower_block(n, src))
                             .transpose()?
@@ -2446,7 +2521,10 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                 let captures: Vec<(String, IrType)> = capture_names
                     .into_iter()
                     .map(|n| {
-                        let ty = lookup_local_var_type(&n);
+                        let ty = match lookup_local_var_type(&n) {
+                            IrType::Unknown => IrType::Class("Object".to_owned()),
+                            other => other,
+                        };
                         (n, ty)
                     })
                     .collect();

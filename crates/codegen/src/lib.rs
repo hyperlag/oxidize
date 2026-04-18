@@ -5218,11 +5218,9 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                 quote! { #cid.clone() }
                             })
                             .collect();
-                        if cap_args.is_empty() {
-                            Ok(quote! { #cls_ident::new(#(#args_ts),*) })
-                        } else {
-                            Ok(quote! { #cls_ident::new(#(#cap_args),*) })
-                        }
+                        let mut ctor_args = args_ts.clone();
+                        ctor_args.extend(cap_args);
+                        Ok(quote! { #cls_ident::new(#(#ctor_args),*) })
                     }
                 }
             }
@@ -6195,6 +6193,7 @@ mod tests {
             }],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         }
     }
 
@@ -7264,6 +7263,7 @@ mod tests {
             }],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         };
         // Child class: Dog extends Animal
         let child = IrClass {
@@ -7295,6 +7295,7 @@ mod tests {
             }],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         };
         module.decls.push(IrDecl::Class(parent));
         module.decls.push(IrDecl::Class(child));
@@ -7328,6 +7329,7 @@ mod tests {
             methods: vec![],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         };
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
@@ -7405,6 +7407,7 @@ mod tests {
             ],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         };
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
@@ -7825,6 +7828,7 @@ mod tests {
                 })],
                 throws: vec![],
             }],
+            captures: vec![],
         };
         let child_cls = IrClass {
             name: "Child".into(),
@@ -7869,6 +7873,7 @@ mod tests {
                 }],
                 throws: vec![],
             }],
+            captures: vec![],
         };
         module.decls.push(IrDecl::Class(parent_cls));
         module.decls.push(IrDecl::Class(child_cls));
@@ -9277,6 +9282,7 @@ mod tests {
                 body: vec![],
                 throws: vec![],
             }],
+            captures: vec![],
         };
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
@@ -9324,6 +9330,7 @@ mod tests {
             }],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         };
         let child = IrClass {
             name: "Child".into(),
@@ -9342,6 +9349,7 @@ mod tests {
                 body: vec![],
                 throws: vec![],
             }],
+            captures: vec![],
         };
         module.decls.push(IrDecl::Class(parent));
         module.decls.push(IrDecl::Class(child));
@@ -9554,6 +9562,7 @@ mod tests {
             }],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         };
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);
@@ -9646,6 +9655,7 @@ mod tests {
             }],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         };
         module.decls.push(IrDecl::Class(cls));
         gen(&module); // should not panic on abstract method (no body)
@@ -9735,6 +9745,7 @@ mod tests {
             methods: vec![],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         };
         module.decls.push(IrDecl::Class(cls));
         let code = gen(&module);

@@ -171,6 +171,7 @@ mod tests {
             }],
             constructors: vec![],
             is_record: false,
+            captures: vec![],
         });
         let json = serde_json::to_string_pretty(&cls).unwrap();
         let back: IrDecl = serde_json::from_str(&json).unwrap();
