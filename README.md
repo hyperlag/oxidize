@@ -297,6 +297,7 @@ cargo test -p tests -- --test-threads=4
 - `System.exit()`, `System.currentTimeMillis()`, `System.nanoTime()`, `System.getenv()`, `System.getProperty()`, `System.lineSeparator()`
 - Lambda expressions → Rust closures (including multi-statement block bodies)
 - Text blocks (Java 13+ `"""..."""`) with indent stripping per JEP 378
+- Switch expressions (Java 14+) with arrow syntax, multi-label arms, and `yield` blocks
 
 ### Networking
 

@@ -809,6 +809,22 @@ fn check_expr(
                 ty,
             })
         }
+
+        IrExpr::BlockExpr {
+            mut stmts, expr, ..
+        } => {
+            let mut block_env = env.clone();
+            for s in &mut stmts {
+                check_stmt(s, cls, class_map, enum_map, &mut block_env)?;
+            }
+            let checked_expr = check_expr(*expr, cls, class_map, enum_map, &block_env)?;
+            let ty = checked_expr.ty().clone();
+            Ok(IrExpr::BlockExpr {
+                stmts,
+                expr: Box::new(checked_expr),
+                ty,
+            })
+        }
     }
 }
 

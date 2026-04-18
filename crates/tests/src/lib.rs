@@ -1589,4 +1589,11 @@ Expression calculator tests complete",
     fn test_reader_writer() {
         check("ReaderWriter.java", "hello\nworld\ndone");
     }
+
+    // ── Stage 17 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_switch_yield() {
+        check("SwitchYield.java", "20\nWednesday\nB\ndivisible:42");
+    }
 }

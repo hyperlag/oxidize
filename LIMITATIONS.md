@@ -307,7 +307,9 @@ The declared type is inferred from the initializer expression (mapped to
 
 Arrow-form switch expressions (`int x = switch(y) { case A -> 1; default -> 0; }`)
 are supported and lowered to Rust `match` expressions. Arrow-form switch statements
-(`switch (x) { case A -> stmt; }`) are also supported.
+(`switch (x) { case A -> stmt; }`) are also supported. Block arms with `yield`
+(`case A -> { stmts...; yield expr; }`) are supported — the block is emitted as
+a Rust block expression inside the match arm.
 
 Switch expressions with patterns (Java 21) are not yet supported.
 

@@ -2377,10 +2377,32 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                             .transpose()?
                             .unwrap_or(IrExpr::Unit),
                         "block" => {
-                            return Err(ParseError::Unsupported(
-                                "switch expression block arms require `yield` and are not yet supported"
-                                    .into(),
-                            ))
+                            // Parse block with `yield` — collect statements
+                            // and extract the yield expression as the value.
+                            let mut block_stmts: Vec<IrStmt> = Vec::new();
+                            let mut yield_expr: Option<IrExpr> = None;
+                            let mut bc_cur = bc.walk();
+                            for block_child in bc.named_children(&mut bc_cur) {
+                                if block_child.kind() == "yield_statement" {
+                                    if let Some(val) = block_child.named_child(0) {
+                                        yield_expr = Some(lower_expr(val, src)?);
+                                    }
+                                } else {
+                                    block_stmts.extend(lower_stmt(block_child, src)?);
+                                }
+                            }
+                            match yield_expr {
+                                Some(ye) => IrExpr::BlockExpr {
+                                    stmts: block_stmts,
+                                    expr: Box::new(ye),
+                                    ty: IrType::Unknown,
+                                },
+                                None => {
+                                    return Err(ParseError::Unsupported(
+                                        "switch expression block arm without `yield`".into(),
+                                    ))
+                                }
+                            }
                         }
                         _ => lower_expr(bc, src).unwrap_or(IrExpr::Unit),
                     }
