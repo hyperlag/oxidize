@@ -43,6 +43,10 @@ pub struct IrClass {
     /// Whether this is a Java `record` class (auto-generates accessors / canonical constructor).
     #[serde(default)]
     pub is_record: bool,
+    /// Captured variables from the enclosing scope (anonymous inner classes).
+    /// Each entry is `(variable_name, type)`.
+    #[serde(default)]
+    pub captures: Vec<(String, IrType)>,
 }
 
 /// A field declaration.

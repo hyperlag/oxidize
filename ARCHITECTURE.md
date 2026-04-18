@@ -383,7 +383,7 @@ integration test:
 5. Compares stdout against hardcoded expected output (obtained by running the
    same Java program with `javac` and `java`)
 
-There are 115 integration tests covering all stages, plus unit tests in
+There are 169 integration tests covering all stages, plus unit tests in
 individual crates:
 
 - `codegen`: 40 unit tests

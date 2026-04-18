@@ -119,6 +119,7 @@ fn check_enum(
         methods: enm.methods.clone(),
         constructors: enm.constructor.iter().cloned().collect(),
         is_record: false,
+        captures: vec![],
     };
 
     for method in &mut enm.methods {

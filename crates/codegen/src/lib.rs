@@ -108,6 +108,15 @@ thread_local! {
     /// any synchronized block.
     static SYNC_MONITOR_EXPR: std::cell::RefCell<Option<String>> =
         const { std::cell::RefCell::new(None) };
+    /// Captured variable names for the anonymous class currently being emitted.
+    /// Cleared and re-populated per class in `emit_class`.
+    static ANON_CAPTURES: std::cell::RefCell<Vec<String>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+    /// Maps anonymous class name → list of captured variable names.
+    /// Populated in a pre-scan pass so that `New` sites know which captures
+    /// to pass as constructor arguments.
+    static ANON_CAPTURE_MAP: std::cell::RefCell<std::collections::HashMap<String, Vec<String>>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
 /// Returns `true` if `name` is a well-known Java exception base class.
@@ -410,6 +419,20 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
         for decl in &module.decls {
             if let IrDecl::Class(cls) = decl {
                 set.insert(cls.name.clone());
+            }
+        }
+    });
+
+    // Pre-scan: build anonymous-class capture map.
+    ANON_CAPTURE_MAP.with(|m| {
+        let mut map = m.borrow_mut();
+        map.clear();
+        for decl in &module.decls {
+            if let IrDecl::Class(cls) = decl {
+                if !cls.captures.is_empty() {
+                    let names: Vec<String> = cls.captures.iter().map(|(n, _)| n.clone()).collect();
+                    map.insert(cls.name.clone(), names);
+                }
             }
         }
     });
@@ -882,8 +905,8 @@ fn emit_class(
     let name = ident(&cls.name);
 
     // Generic type parameters: `struct Foo<T>` / `impl<T: Clone + Default + Debug> Foo<T>`
-    let (struct_generics, impl_generics) = if cls.type_params.is_empty() {
-        (quote! {}, quote! {})
+    let (gen_names, gen_bounds): (Vec<Ident>, Vec<TokenStream>) = if cls.type_params.is_empty() {
+        (vec![], vec![])
     } else {
         let names: Vec<_> = cls.type_params.iter().map(|tp| ident(&tp.name)).collect();
         let bounds: Vec<_> = cls
@@ -895,7 +918,7 @@ fn emit_class(
                 quote! { #id: Clone + Default + ::std::fmt::Debug #extra }
             })
             .collect();
-        (quote! { <#(#names),*> }, quote! { <#(#bounds),*> })
+        (names, bounds)
     };
 
     // Collect the set of method names that a class implements via interfaces.
@@ -954,6 +977,26 @@ fn emit_class(
         let fty = emit_type(&f.ty);
         struct_fields.push(quote! { pub #fname: #fty, });
     }
+
+    // Anonymous-class captures: add `pub __cap_X: ConcreteType` fields.
+    // Types are resolved in the parser from the enclosing scope.
+    ANON_CAPTURES.with(|ac| ac.borrow_mut().clear());
+    if !cls.captures.is_empty() {
+        let cap_names: Vec<String> = cls.captures.iter().map(|(n, _)| n.clone()).collect();
+        ANON_CAPTURES.with(|ac| *ac.borrow_mut() = cap_names);
+        for (cap_name, cap_ty) in &cls.captures {
+            let field_name = ident(&format!("__cap_{cap_name}"));
+            let fty = emit_type(cap_ty);
+            struct_fields.push(quote! { pub #field_name: #fty, });
+        }
+    }
+
+    // Build final generic parameters from the collected names/bounds.
+    let (struct_generics, impl_generics) = if gen_names.is_empty() {
+        (quote! {}, quote! {})
+    } else {
+        (quote! { <#(#gen_names),*> }, quote! { <#(#gen_bounds),*> })
+    };
 
     // Inject a per-object monitor so that `synchronized(obj)` blocks can
     // lock the *object's own* condvar.  Skip for exception subclasses (which
@@ -1125,7 +1168,31 @@ fn emit_class(
     // Always emit a `pub fn new() -> Self` even when no explicit constructor
     // exists, so that `new Foo()` calls in the generated code compile.
     if cls.constructors.is_empty() {
-        if let Some(ref outer_name) = inner_outer_name {
+        if !cls.captures.is_empty() {
+            // Anonymous class with captured variables: generate new(cap0, cap1, ...)
+            let cap_params: Vec<TokenStream> = cls
+                .captures
+                .iter()
+                .map(|(cap_name, cap_ty)| {
+                    let field = ident(&format!("__cap_{cap_name}"));
+                    let ty = emit_type(cap_ty);
+                    quote! { #field: #ty }
+                })
+                .collect();
+            let cap_inits: Vec<TokenStream> = cls
+                .captures
+                .iter()
+                .map(|(cap_name, _)| {
+                    let field = ident(&format!("__cap_{cap_name}"));
+                    quote! { #field }
+                })
+                .collect();
+            method_tokens.push(quote! {
+                pub fn new(#(#cap_params),*) -> Self {
+                    Self { #(#cap_inits,)* ..Default::default() }
+                }
+            });
+        } else if let Some(ref outer_name) = inner_outer_name {
             // Inner class: new() requires the outer reference as first arg.
             let outer_ident = ident(outer_name);
             method_tokens.push(quote! {
@@ -2627,6 +2694,12 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 return Ok(quote! {
                     #mid.get_or_init(|| ::std::default::Default::default()).clone()
                 });
+            }
+            // Check if this variable is a captured outer-scope var in an anonymous class.
+            let is_captured = ANON_CAPTURES.with(|ac| ac.borrow().contains(name));
+            if is_captured {
+                let cap_field = ident(&format!("__cap_{name}"));
+                return Ok(quote! { self.#cap_field.clone() });
             }
             let id = ident(name);
             Ok(quote! { #id })
@@ -5135,7 +5208,21 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             )
                         })
                     } else {
-                        Ok(quote! { #cls_ident::new(#(#args_ts),*) })
+                        // Anonymous class: append captured variable clones.
+                        let cap_args: Vec<TokenStream> = ANON_CAPTURE_MAP
+                            .with(|m| m.borrow().get(class.as_str()).cloned())
+                            .unwrap_or_default()
+                            .iter()
+                            .map(|cap_name| {
+                                let cid = ident(cap_name);
+                                quote! { #cid.clone() }
+                            })
+                            .collect();
+                        if cap_args.is_empty() {
+                            Ok(quote! { #cls_ident::new(#(#args_ts),*) })
+                        } else {
+                            Ok(quote! { #cls_ident::new(#(#cap_args),*) })
+                        }
                     }
                 }
             }
