@@ -28,7 +28,7 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
     }
 
     /// Java `stream.filter(predicate)`.
-    pub fn filter<F: Fn(T) -> bool>(self, pred: F) -> Self {
+    pub fn filter<F: FnMut(T) -> bool>(self, mut pred: F) -> Self {
         Self {
             data: self.data.into_iter().filter(|x| pred(x.clone())).collect(),
         }
@@ -67,7 +67,7 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
     }
 
     /// Java `stream.forEach(consumer)`.
-    pub fn forEach<F: Fn(T)>(self, action: F) {
+    pub fn forEach<F: FnMut(T)>(self, action: F) {
         self.data.into_iter().for_each(action);
     }
 
@@ -75,7 +75,7 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
     pub fn map<U, F>(self, f: F) -> JStream<U>
     where
         U: Clone + Default + std::fmt::Debug + 'static,
-        F: Fn(T) -> U,
+        F: FnMut(T) -> U,
     {
         JStream {
             data: self.data.into_iter().map(f).collect(),
@@ -83,10 +83,10 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
     }
 
     /// Java `stream.flatMap(mapper)`.
-    pub fn flatMap<U, F>(self, f: F) -> JStream<U>
+    pub fn flatMap<U, F>(self, mut f: F) -> JStream<U>
     where
         U: Clone + Default + std::fmt::Debug + 'static,
-        F: Fn(T) -> JStream<U>,
+        F: FnMut(T) -> JStream<U>,
     {
         JStream {
             data: self.data.into_iter().flat_map(|x| f(x).data).collect(),
@@ -94,7 +94,7 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
     }
 
     /// Java `stream.reduce(identity, accumulator)`.
-    pub fn reduce<F: Fn(T, T) -> T>(self, identity: T, f: F) -> T {
+    pub fn reduce<F: FnMut(T, T) -> T>(self, identity: T, f: F) -> T {
         self.data.into_iter().fold(identity, f)
     }
 
@@ -129,22 +129,22 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
     }
 
     /// Java `stream.anyMatch(predicate)`.
-    pub fn anyMatch<F: Fn(T) -> bool>(self, pred: F) -> bool {
+    pub fn anyMatch<F: FnMut(T) -> bool>(self, pred: F) -> bool {
         self.data.into_iter().any(pred)
     }
 
     /// Java `stream.allMatch(predicate)`.
-    pub fn allMatch<F: Fn(T) -> bool>(self, pred: F) -> bool {
+    pub fn allMatch<F: FnMut(T) -> bool>(self, pred: F) -> bool {
         self.data.into_iter().all(pred)
     }
 
     /// Java `stream.noneMatch(predicate)`.
-    pub fn noneMatch<F: Fn(T) -> bool>(self, pred: F) -> bool {
+    pub fn noneMatch<F: FnMut(T) -> bool>(self, pred: F) -> bool {
         !self.data.into_iter().any(pred)
     }
 
     /// Java `stream.peek(action)` — applies action to each element, passes stream through.
-    pub fn peek<F: Fn(&T)>(self, action: F) -> Self {
+    pub fn peek<F: FnMut(&T)>(self, mut action: F) -> Self {
         for item in &self.data {
             action(item);
         }
@@ -214,12 +214,12 @@ impl JStream<i32> {
 
 impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
     /// Java `stream.collect(Collectors.toMap(keyFn, valFn))`.
-    pub fn collect_to_map<K, V, KF, VF>(self, key_fn: KF, val_fn: VF) -> JMap<K, V>
+    pub fn collect_to_map<K, V, KF, VF>(self, mut key_fn: KF, mut val_fn: VF) -> JMap<K, V>
     where
         K: Clone + Default + std::fmt::Debug + Eq + std::hash::Hash + 'static,
         V: Clone + Default + std::fmt::Debug + 'static,
-        KF: Fn(T) -> K,
-        VF: Fn(T) -> V,
+        KF: FnMut(T) -> K,
+        VF: FnMut(T) -> V,
     {
         let mut map = JMap::new();
         for item in self.data {
@@ -231,10 +231,10 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
     }
 
     /// Java `stream.collect(Collectors.groupingBy(classifier))`.
-    pub fn collect_grouping_by<K, F>(self, classifier: F) -> JMap<K, JList<T>>
+    pub fn collect_grouping_by<K, F>(self, mut classifier: F) -> JMap<K, JList<T>>
     where
         K: Clone + Default + std::fmt::Debug + Eq + std::hash::Hash + 'static,
-        F: Fn(T) -> K,
+        F: FnMut(T) -> K,
     {
         let mut map = JMap::new();
         for item in self.data {

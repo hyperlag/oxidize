@@ -26,8 +26,8 @@ mod tests {
     }
 
     /// Translate a Java source file through the full pipeline, compile the
-    /// generated Rust, run it, and return its stdout.
-    fn translate_and_run(java_file: &str) -> Result<String, String> {
+    /// generated Rust, run it, and return its stdout and stderr.
+    fn translate_and_run_outputs(java_file: &str) -> Result<(String, String), String> {
         let java_path = java_dir().join(java_file);
         let source =
             fs::read_to_string(&java_path).map_err(|e| format!("Cannot read {java_file}: {e}"))?;
@@ -57,7 +57,7 @@ mod tests {
         let output = Command::new("cargo")
             .args(["run", "--quiet"])
             .current_dir(tmp.path())
-            .env("RUSTFLAGS", "") // don't propagate -D warnings into generated code
+            .env("RUSTFLAGS", "-Awarnings") // don't propagate -D warnings into generated code
             .output()
             .map_err(|e| format!("Failed to spawn cargo: {e}"))?;
 
@@ -69,7 +69,15 @@ mod tests {
                 String::from_utf8_lossy(&output.stderr)
             ));
         }
-        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+        Ok((
+            String::from_utf8_lossy(&output.stdout).into_owned(),
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        ))
+    }
+
+    /// Translate a Java source file and return its stdout.
+    fn translate_and_run(java_file: &str) -> Result<String, String> {
+        translate_and_run_outputs(java_file).map(|(stdout, _stderr)| stdout)
     }
 
     fn check(java_file: &str, expected: &str) {
@@ -79,6 +87,24 @@ mod tests {
                 expected.trim_end(),
                 "Output mismatch for {java_file}"
             ),
+            Err(e) => panic!("{e}"),
+        }
+    }
+
+    fn check_with_stderr(java_file: &str, expected_stdout: &str, expected_stderr: &str) {
+        match translate_and_run_outputs(java_file) {
+            Ok((actual_stdout, actual_stderr)) => {
+                assert_eq!(
+                    actual_stdout.trim_end(),
+                    expected_stdout.trim_end(),
+                    "Stdout mismatch for {java_file}"
+                );
+                assert_eq!(
+                    actual_stderr.trim_end(),
+                    expected_stderr.trim_end(),
+                    "Stderr mismatch for {java_file}"
+                );
+            }
             Err(e) => panic!("{e}"),
         }
     }
@@ -1600,5 +1626,24 @@ Expression calculator tests complete",
     #[test]
     fn test_switch_yield() {
         check("SwitchYield.java", "20\nWednesday\nB\ndivisible:42");
+    }
+
+    // ── Stage 18 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_bound_method_ref() {
+        check(
+            "BoundMethodRef.java",
+            "Hello, Alice\nHello, Bob\nHello, Charlie\nAlice\nBob\nCharlie",
+        );
+    }
+
+    #[test]
+    fn test_this_method_ref() {
+        check_with_stderr(
+            "ThisMethodRef.java",
+            "Hello, Alice\nHello, Bob\nHello, Charlie",
+            "Alice\nBob\nCharlie",
+        );
     }
 }
