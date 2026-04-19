@@ -2381,12 +2381,30 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                             // and extract the yield expression as the value.
                             let mut block_stmts: Vec<IrStmt> = Vec::new();
                             let mut yield_expr: Option<IrExpr> = None;
+                            let mut saw_top_level_yield = false;
                             let mut bc_cur = bc.walk();
                             for block_child in bc.named_children(&mut bc_cur) {
+                                if saw_top_level_yield {
+                                    return Err(ParseError::Unsupported(
+                                        if block_child.kind() == "yield_statement" {
+                                            "switch expression block arm has multiple top-level `yield` statements"
+                                                .into()
+                                        } else {
+                                            "switch expression block arm has statements after top-level `yield`"
+                                                .into()
+                                        },
+                                    ));
+                                }
+
                                 if block_child.kind() == "yield_statement" {
-                                    if let Some(val) = block_child.named_child(0) {
-                                        yield_expr = Some(lower_expr(val, src)?);
-                                    }
+                                    let val = block_child.named_child(0).ok_or_else(|| {
+                                        ParseError::Unsupported(
+                                            "switch expression `yield` statement without value expression"
+                                                .into(),
+                                        )
+                                    })?;
+                                    yield_expr = Some(lower_expr(val, src)?);
+                                    saw_top_level_yield = true;
                                 } else {
                                     block_stmts.extend(lower_stmt(block_child, src)?);
                                 }
@@ -2666,6 +2684,59 @@ mod tests {
                 ParseError::Unsupported(ref msg) if msg.contains("colon-form switch labels")
             ),
             "expected unsupported colon-form pattern switch error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn rejects_switch_expression_block_arm_with_multiple_top_level_yields() {
+        let src = r#"
+            class Demo {
+                static int run(int x) {
+                    return switch (x) {
+                        case 0 -> {
+                            yield 1;
+                            yield 2;
+                        }
+                        default -> 0;
+                    };
+                }
+            }
+        "#;
+        let err = parse_to_ir(src).expect_err("multiple top-level yields should be rejected");
+        assert!(
+            matches!(
+                err,
+                ParseError::Unsupported(ref msg)
+                    if msg.contains("multiple top-level `yield` statements")
+            ),
+            "expected unsupported multiple-yield error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn rejects_switch_expression_block_arm_with_statements_after_top_level_yield() {
+        let src = r#"
+            class Demo {
+                static int run(int x) {
+                    return switch (x) {
+                        case 0 -> {
+                            yield 1;
+                            int y = 2;
+                        }
+                        default -> 0;
+                    };
+                }
+            }
+        "#;
+        let err =
+            parse_to_ir(src).expect_err("statements after top-level yield should be rejected");
+        assert!(
+            matches!(
+                err,
+                ParseError::Unsupported(ref msg)
+                    if msg.contains("statements after top-level `yield`")
+            ),
+            "expected unsupported post-yield statement error, got: {err}"
         );
     }
 }
