@@ -1611,4 +1611,12 @@ Expression calculator tests complete",
             "Hello, Alice\nHello, Bob\nHello, Charlie\nAlice\nBob\nCharlie",
         );
     }
+
+    #[test]
+    fn test_this_method_ref() {
+        check(
+            "ThisMethodRef.java",
+            "Hello, Alice\nHello, Bob\nHello, Charlie",
+        );
+    }
 }

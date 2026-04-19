@@ -5561,8 +5561,10 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     }
                 }
                 // Handle `this::method` — need `self.clone()` as receiver
-                let recv_ts = if matches!(recv.as_ref(), IrExpr::Var { name, .. } if name == "this")
-                {
+                let recv_ts = if matches!(
+                    recv.as_ref(),
+                    IrExpr::Var { name, .. } if name == "self" || name == "__self__"
+                ) {
                     quote! { self.clone() }
                 } else {
                     emit_expr(recv)?
