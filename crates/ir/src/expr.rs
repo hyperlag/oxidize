@@ -138,6 +138,15 @@ pub enum IrExpr {
         class_name: String,
     },
 
+    // ── Block expression (Java 14+ yield) ────────────────────────────────
+    /// `{ stmts...; yield expr; }` — a block that produces a value, used
+    /// inside switch expression block arms.
+    BlockExpr {
+        stmts: Vec<crate::stmt::IrStmt>,
+        expr: Box<IrExpr>,
+        ty: IrType,
+    },
+
     // ── Switch expression (Java 14+) ──────────────────────────────────────
     /// `switch(expr) { case A -> rhs; case B, C -> rhs2; default -> rhs3; }`
     /// used as a value.  Each arm is `(pattern_expr, result_expr)`.
@@ -190,7 +199,8 @@ impl IrExpr {
             | IrExpr::ArrayAccess { ty, .. }
             | IrExpr::Assign { ty, .. }
             | IrExpr::CompoundAssign { ty, .. }
-            | IrExpr::Lambda { ty, .. } => ty,
+            | IrExpr::Lambda { ty, .. }
+            | IrExpr::BlockExpr { ty, .. } => ty,
             IrExpr::Cast { target, .. } => target,
             IrExpr::InstanceOf { .. } => &IrType::Bool,
             IrExpr::ClassLiteral { .. } => &IrType::Unknown,

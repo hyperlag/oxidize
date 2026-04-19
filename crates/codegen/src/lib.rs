@@ -5573,6 +5573,12 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             };
             Ok(quote! { match #scrutinee { #(#arm_tokens)* #default_arm } })
         }
+
+        IrExpr::BlockExpr { stmts, expr, .. } => {
+            let stmts_ts = emit_stmts(stmts)?;
+            let val = emit_expr(expr)?;
+            Ok(quote! { { #(#stmts_ts)* #val } })
+        }
     }
 }
 

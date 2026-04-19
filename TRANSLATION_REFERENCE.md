@@ -276,6 +276,26 @@ match day {
 }
 ```
 
+### Switch Expression Yield Block (Java 14+)
+
+```java
+int result = switch (x) {
+    case 1 -> { yield 10; }
+    case 2 -> {
+        int y = 20;
+        yield y;
+    }
+    default -> { yield 0; }
+};
+```
+```rust
+let mut result: i32 = match x {
+    1 => { 10 },
+    2 => { let mut y: i32 = 20; y },
+    _ => { 0 },
+};
+```
+
 ### Pattern Switch (Java 21)
 
 ```java
