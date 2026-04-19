@@ -36,7 +36,7 @@ Rust source (.rs)
 | `codegen` | Lowers annotated IR to Rust token streams via `proc-macro2` / `quote` |
 | `runtime` | `java-compat` crate: runtime types (`JString`, `JArray`, `JList`, `JMap`, `JOptional`, `JStream`, `JThread`, etc.) |
 | `cli` | `jtrans` binary: CLI driver with `translate`, `init-maven`, `init-gradle` subcommands, watch mode, incremental cache, and source map generation |
-| `tests` | Differential test suite (169 tests: translated Rust output vs. expected output) |
+| `tests` | Differential test suite (171 tests: translated Rust output vs. expected output) |
 
 ## Requirements
 
@@ -210,7 +210,7 @@ cargo test
 
 The differential integration tests in `crates/tests` compile and run each translated Rust
 program, then assert that stdout matches the expected output. No JDK is required to run
-the tests. The suite currently contains **169 differential tests**:
+the tests. The suite currently contains **171 differential tests**:
 
 ```bash
 cargo test -p tests -- --test-threads=4
@@ -296,6 +296,7 @@ cargo test -p tests -- --test-threads=4
 - `String.format()`, `String.join()`, `System.out.printf()`
 - `System.exit()`, `System.currentTimeMillis()`, `System.nanoTime()`, `System.getenv()`, `System.getProperty()`, `System.lineSeparator()`
 - Lambda expressions → Rust closures (including multi-statement block bodies)
+- Method references: static (`Class::method`), constructor (`Class::new`), bound instance (`obj::method`, `System.out::println`)
 - Text blocks (Java 13+ `"""..."""`) with indent stripping per JEP 378
 - Switch expressions (Java 14+) with arrow syntax, multi-label arms, and `yield` blocks
 

@@ -5539,9 +5539,35 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 let cident = ident(cls);
                 Ok(quote! { |__x0| #cident::#mident(__x0) })
             } else if let Some(recv) = target {
-                let recv_ts = emit_expr(recv)?;
-                // `mut` is required because generated instance methods take `&mut self`;
-                // no `.clone()` needed since the receiver is moved into the closure.
+                // Special case: System.out::println → |__x0| println!("{}", __x0)
+                //               System.err::println → |__x0| eprintln!("{}", __x0)
+                if let IrExpr::FieldAccess {
+                    receiver,
+                    field_name,
+                    ..
+                } = recv.as_ref()
+                {
+                    if let IrExpr::Var { name, .. } = receiver.as_ref() {
+                        if name == "System"
+                            && (field_name == "out" || field_name == "err")
+                            && method_name == "println"
+                        {
+                            if field_name == "err" {
+                                return Ok(quote! { |__x0| eprintln!("{}", __x0) });
+                            } else {
+                                return Ok(quote! { |__x0| println!("{}", __x0) });
+                            }
+                        }
+                    }
+                }
+                // Handle `this::method` — need `self.clone()` as receiver
+                let recv_ts = if matches!(recv.as_ref(), IrExpr::Var { name, .. } if name == "this")
+                {
+                    quote! { self.clone() }
+                } else {
+                    emit_expr(recv)?
+                };
+                // `mut` is required because generated instance methods take `&mut self`.
                 Ok(quote! { { let mut __ref = #recv_ts; move |__x0| __ref.#mident(__x0) } })
             } else {
                 Err(CodegenError::Unsupported(

@@ -1601,4 +1601,14 @@ Expression calculator tests complete",
     fn test_switch_yield() {
         check("SwitchYield.java", "20\nWednesday\nB\ndivisible:42");
     }
+
+    // ── Stage 18 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_bound_method_ref() {
+        check(
+            "BoundMethodRef.java",
+            "Hello, Alice\nHello, Bob\nHello, Charlie\nAlice\nBob\nCharlie",
+        );
+    }
 }
