@@ -2491,7 +2491,8 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
                 };
                 SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = monitor_var_name.clone());
                 let mon_ts = emit_expr(monitor);
-                let body_ts = mon_ts.and_then(|mon_ts| emit_stmts(body).map(|body_ts| (mon_ts, body_ts)));
+                let body_ts =
+                    mon_ts.and_then(|mon_ts| emit_stmts(body).map(|body_ts| (mon_ts, body_ts)));
                 SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = prev_sync_mon);
                 let (mon_ts, body_ts) = body_ts?;
 
