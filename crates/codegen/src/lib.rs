@@ -117,6 +117,11 @@ thread_local! {
     /// to pass as constructor arguments.
     static ANON_CAPTURE_MAP: std::cell::RefCell<std::collections::HashMap<String, Vec<String>>> =
         std::cell::RefCell::new(std::collections::HashMap::new());
+    /// Maps `"ClassName::method_name"` → parameter count for **static** methods.
+    /// Populated in a pre-scan pass so that `ClassName::method` method
+    /// references can emit the correct number of closure parameters.
+    static STATIC_METHOD_ARITIES: std::cell::RefCell<std::collections::HashMap<String, usize>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
 /// Returns `true` if `name` is a well-known Java exception base class.
@@ -303,6 +308,24 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
                         // Number of regular (non-varargs) parameters before the varargs one
                         let key = format!("{}::{}", cls.name, method.name);
                         map.insert(key, varargs_pos);
+                    }
+                }
+            }
+        }
+    });
+
+    // Pre-scan ALL static methods across all classes to populate
+    // STATIC_METHOD_ARITIES.  This lets MethodRef codegen emit closures with
+    // the correct number of parameters for user-defined multi-arg methods.
+    STATIC_METHOD_ARITIES.with(|sa| {
+        let mut map = sa.borrow_mut();
+        map.clear();
+        for decl in &module.decls {
+            if let IrDecl::Class(cls) = decl {
+                for method in &cls.methods {
+                    if method.is_static {
+                        let key = format!("{}::{}", cls.name, method.name);
+                        map.insert(key, method.params.len());
                     }
                 }
             }
@@ -5537,7 +5560,34 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 Ok(quote! { |__x0| #cident::new(__x0) })
             } else if let Some(cls) = class_name {
                 let cident = ident(cls);
-                Ok(quote! { |__x0| #cident::#mident(__x0) })
+                // Known binary built-in static method references
+                match (cls.as_str(), method_name.as_str()) {
+                    ("Integer" | "Long" | "Double" | "Float", "sum") => {
+                        Ok(quote! { |__x0, __x1| __x0 + __x1 })
+                    }
+                    ("Integer" | "Long" | "Double" | "Float" | "Math", "max") => {
+                        Ok(quote! { |__x0, __x1| if __x0 > __x1 { __x0 } else { __x1 } })
+                    }
+                    ("Integer" | "Long" | "Double" | "Float" | "Math", "min") => {
+                        Ok(quote! { |__x0, __x1| if __x0 < __x1 { __x0 } else { __x1 } })
+                    }
+                    ("Integer" | "Long" | "Double" | "Float", "compare") => Ok(
+                        quote! { |__x0, __x1| if __x0 < __x1 { -1i32 } else if __x0 == __x1 { 0i32 } else { 1i32 } },
+                    ),
+                    _ => {
+                        // Check pre-scanned arities for user-defined multi-arg methods
+                        let key = format!("{}::{}", cls, method_name);
+                        let arity = STATIC_METHOD_ARITIES
+                            .with(|sa| sa.borrow().get(&key).copied().unwrap_or(1));
+                        if arity >= 2 {
+                            let params: Vec<proc_macro2::Ident> =
+                                (0..arity).map(|i| ident(&format!("__x{i}"))).collect();
+                            Ok(quote! { |#(#params),*| #cident::#mident(#(#params),*) })
+                        } else {
+                            Ok(quote! { |__x0| #cident::#mident(__x0) })
+                        }
+                    }
+                }
             } else if let Some(recv) = target {
                 // Special case: System.out::println → |__x0| println!("{}", __x0)
                 //               System.err::println → |__x0| eprintln!("{}", __x0)
