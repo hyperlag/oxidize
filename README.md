@@ -210,7 +210,7 @@ cargo test
 
 The differential integration tests in `crates/tests` compile and run each translated Rust
 program, then assert that stdout matches the expected output. No JDK is required to run
-the tests. The suite currently contains **171 differential tests**:
+the tests. The suite currently contains **175 differential tests**:
 
 ```bash
 cargo test -p tests -- --test-threads=4

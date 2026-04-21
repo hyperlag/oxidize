@@ -2454,6 +2454,7 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
                 monitor,
                 IrExpr::Var { name, .. } if name == "this" || name == "self"
             );
+            let prev_sync_mon = SYNC_MONITOR_EXPR.with(|m| m.borrow().clone());
             if is_self_monitor {
                 // `synchronized(this)` → use the per-object __monitor field,
                 // consistent with Java's single per-object monitor semantics.
@@ -2466,8 +2467,9 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
                     None
                 };
                 SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = monitor_var_name);
-                let body_ts = emit_stmts(body)?;
-                SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = None);
+                let body_ts = emit_stmts(body);
+                SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = prev_sync_mon.clone());
+                let body_ts = body_ts?;
                 Ok(quote! {
                     {
                         let __sync_arc = self.__monitor.pair();
@@ -2488,11 +2490,10 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
                     None
                 };
                 SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = monitor_var_name.clone());
-                let mon_ts = emit_expr(monitor)?;
-                let body_ts = emit_stmts(body)?;
-                // Clear after body is emitted so the slot is not reused
-                // accidentally.
-                SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = None);
+                let mon_ts = emit_expr(monitor);
+                let body_ts = mon_ts.and_then(|mon_ts| emit_stmts(body).map(|body_ts| (mon_ts, body_ts)));
+                SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = prev_sync_mon);
+                let (mon_ts, body_ts) = body_ts?;
 
                 // Use obj.__monitor when the monitor expression is a user-defined
                 // class (which has an injected __monitor field).  Fall back to the
