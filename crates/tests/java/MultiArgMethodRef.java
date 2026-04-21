@@ -10,6 +10,14 @@ public class MultiArgMethodRef {
         return a > b ? a : b;
     }
 
+    static int triAdd(int a, int b, int c) {
+        return a + b + c;
+    }
+
+    static int getDefault() {
+        return 42;
+    }
+
     public static void main(String[] args) {
         List<Integer> nums = Arrays.asList(1, 2, 3, 4, 5);
 
@@ -40,5 +48,9 @@ public class MultiArgMethodRef {
         // Another user-defined binary static method ref
         int max2 = nums.stream().reduce(0, MultiArgMethodRef::pickMax);
         System.out.println(max2);
+
+        // Verify 3-arg and 0-arg methods produce expected values
+        System.out.println(triAdd(10, 20, 30));
+        System.out.println(getDefault());
     }
 }

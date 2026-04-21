@@ -1651,6 +1651,6 @@ Expression calculator tests complete",
 
     #[test]
     fn test_multi_arg_method_ref() {
-        check("MultiArgMethodRef.java", "15\n5\n1\n5\n1\n15\n5");
+        check("MultiArgMethodRef.java", "15\n5\n1\n5\n1\n15\n5\n60\n42");
     }
 }
