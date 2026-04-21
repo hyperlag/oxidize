@@ -36,7 +36,7 @@ Rust source (.rs)
 | `codegen` | Lowers annotated IR to Rust token streams via `proc-macro2` / `quote` |
 | `runtime` | `java-compat` crate: runtime types (`JString`, `JArray`, `JList`, `JMap`, `JOptional`, `JStream`, `JThread`, etc.) |
 | `cli` | `jtrans` binary: CLI driver with `translate`, `init-maven`, `init-gradle` subcommands, watch mode, incremental cache, and source map generation |
-| `tests` | Differential test suite (173 tests: translated Rust output vs. expected output) |
+| `tests` | Differential test suite (174 tests: translated Rust output vs. expected output) |
 
 ## Requirements
 
@@ -246,6 +246,7 @@ cargo test -p tests -- --test-threads=4
 ### Enums
 
 - Simple enums and enums with fields/constructors/methods
+- Multiple enum constructors (overloaded by arity)
 - Built-in methods: `name()`, `ordinal()`, `values()`, `valueOf()`, `equals()`
 - Enum switch statements, equality via `==` and `.equals()`
 - `EnumMap<K,V>` and `EnumSet<T>` collections

@@ -1175,7 +1175,7 @@ fn lower_enum(node: Node<'_>, src: &[u8]) -> Result<IrEnum, ParseError> {
     let mut constants = Vec::new();
     let mut fields = Vec::new();
     let mut methods = Vec::new();
-    let mut constructor = None;
+    let mut constructors = Vec::new();
 
     if let Some(body) = child_by_field(node, "body") {
         let mut cur = body.walk();
@@ -1228,12 +1228,7 @@ fn lower_enum(node: Node<'_>, src: &[u8]) -> Result<IrEnum, ParseError> {
                                 methods.push(lower_method(decl, src)?);
                             }
                             "constructor_declaration" => {
-                                if constructor.is_some() {
-                                    return Err(ParseError::Unsupported(
-                                        "multiple enum constructors are not supported".to_string(),
-                                    ));
-                                }
-                                constructor = Some(lower_constructor(decl, src)?);
+                                constructors.push(lower_constructor(decl, src)?);
                             }
                             _ => {}
                         }
@@ -1251,7 +1246,7 @@ fn lower_enum(node: Node<'_>, src: &[u8]) -> Result<IrEnum, ParseError> {
         constants,
         fields,
         methods,
-        constructor,
+        constructors,
     })
 }
 

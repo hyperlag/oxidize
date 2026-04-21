@@ -631,44 +631,43 @@ fn emit_enum(
     let mut impl_methods: Vec<TokenStream> = Vec::new();
 
     // __data() method for enums with constructor args
-    let has_fields = enm
-        .constructor
-        .as_ref()
-        .is_some_and(|c| !c.params.is_empty());
-    if has_fields {
-        let ctor = enm.constructor.as_ref().unwrap();
-        let field_types: Vec<TokenStream> = ctor.params.iter().map(|p| emit_type(&p.ty)).collect();
-        let data_arms: Vec<TokenStream> = enm
-            .constants
-            .iter()
-            .map(|c| {
-                let cname = ident(&c.name);
-                let arg_exprs = c
-                    .args
-                    .iter()
-                    .map(emit_expr)
-                    .collect::<Result<Vec<_>, CodegenError>>()?;
-                Ok(quote! { Self::#cname => (#(#arg_exprs),*,) })
-            })
-            .collect::<Result<Vec<_>, CodegenError>>()?;
-        impl_methods.push(quote! {
-            fn __data(&self) -> (#(#field_types),*,) {
-                match self {
-                    #(#data_arms),*
-                }
-            }
-        });
-
-        // Field accessor methods (one per field, indexed into __data() tuple)
-        for (i, field) in enm.fields.iter().enumerate() {
-            let fname = ident(&field.name);
-            let fty = emit_type(&field.ty);
-            let idx = syn::Index::from(i);
+    let ctor_with_params = enm.constructors.iter().find(|c| !c.params.is_empty());
+    if !enm.fields.is_empty() {
+        if let Some(ctor) = ctor_with_params {
+            let field_types: Vec<TokenStream> =
+                ctor.params.iter().map(|p| emit_type(&p.ty)).collect();
+            let data_arms: Vec<TokenStream> = enm
+                .constants
+                .iter()
+                .map(|c| {
+                    let cname = ident(&c.name);
+                    let arg_exprs = c
+                        .args
+                        .iter()
+                        .map(emit_expr)
+                        .collect::<Result<Vec<_>, CodegenError>>()?;
+                    Ok(quote! { Self::#cname => (#(#arg_exprs),*,) })
+                })
+                .collect::<Result<Vec<_>, CodegenError>>()?;
             impl_methods.push(quote! {
-                pub fn #fname(&self) -> #fty {
-                    self.__data().#idx
+                fn __data(&self) -> (#(#field_types),*,) {
+                    match self {
+                        #(#data_arms),*
+                    }
                 }
             });
+
+            // Field accessor methods (one per field, indexed into __data() tuple)
+            for (i, field) in enm.fields.iter().enumerate() {
+                let fname = ident(&field.name);
+                let fty = emit_type(&field.ty);
+                let idx = syn::Index::from(i);
+                impl_methods.push(quote! {
+                    pub fn #fname(&self) -> #fty {
+                        self.__data().#idx
+                    }
+                });
+            }
         }
     }
 

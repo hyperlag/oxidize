@@ -934,6 +934,11 @@ Expression calculator tests complete",
     }
 
     #[test]
+    fn test_enum_multiple_constructors() {
+        check("EnumMultipleConstructors.java", "A\nB\nC\n3\n1\ntrue");
+    }
+
+    #[test]
     fn test_buffered_reader_writer() {
         check(
             "BufferedReaderWriter.java",

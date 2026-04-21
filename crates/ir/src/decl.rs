@@ -132,8 +132,8 @@ pub struct IrEnum {
     pub fields: Vec<IrField>,
     /// Instance and static methods defined on the enum.
     pub methods: Vec<IrMethod>,
-    /// Constructor (at most one supported; private by convention).
-    pub constructor: Option<IrConstructor>,
+    /// Constructors declared in the enum body (private by convention).
+    pub constructors: Vec<IrConstructor>,
 }
 
 #[cfg(test)]
