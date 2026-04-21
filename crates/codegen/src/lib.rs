@@ -117,6 +117,11 @@ thread_local! {
     /// to pass as constructor arguments.
     static ANON_CAPTURE_MAP: std::cell::RefCell<std::collections::HashMap<String, Vec<String>>> =
         std::cell::RefCell::new(std::collections::HashMap::new());
+    /// Maps `"ClassName::method_name"` → parameter count for **static** methods.
+    /// Populated in a pre-scan pass so that `ClassName::method` method
+    /// references can emit the correct number of closure parameters.
+    static STATIC_METHOD_ARITIES: std::cell::RefCell<std::collections::HashMap<String, usize>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
 /// Returns `true` if `name` is a well-known Java exception base class.
@@ -303,6 +308,42 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
                         // Number of regular (non-varargs) parameters before the varargs one
                         let key = format!("{}::{}", cls.name, method.name);
                         map.insert(key, varargs_pos);
+                    }
+                }
+            }
+        }
+    });
+
+    // Pre-scan ALL static methods across all classes, interfaces, and enums to
+    // populate STATIC_METHOD_ARITIES.  This lets MethodRef codegen emit closures
+    // with the correct number of parameters for user-defined multi-arg methods.
+    STATIC_METHOD_ARITIES.with(|sa| {
+        let mut map = sa.borrow_mut();
+        map.clear();
+        for decl in &module.decls {
+            match decl {
+                IrDecl::Class(cls) => {
+                    for method in &cls.methods {
+                        if method.is_static {
+                            let key = format!("{}::{}", cls.name, method.name);
+                            map.insert(key, method.params.len());
+                        }
+                    }
+                }
+                IrDecl::Interface(iface) => {
+                    for method in &iface.methods {
+                        if method.is_static {
+                            let key = format!("{}::{}", iface.name, method.name);
+                            map.insert(key, method.params.len());
+                        }
+                    }
+                }
+                IrDecl::Enum(enm) => {
+                    for method in &enm.methods {
+                        if method.is_static {
+                            let key = format!("{}::{}", enm.name, method.name);
+                            map.insert(key, method.params.len());
+                        }
                     }
                 }
             }
@@ -5537,7 +5578,97 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 Ok(quote! { |__x0| #cident::new(__x0) })
             } else if let Some(cls) = class_name {
                 let cident = ident(cls);
-                Ok(quote! { |__x0| #cident::#mident(__x0) })
+                // Known binary built-in static method references
+                match (cls.as_str(), method_name.as_str()) {
+                    ("Integer" | "Long", "sum") => {
+                        Ok(quote! { |__x0, __x1| __x0.wrapping_add(__x1) })
+                    }
+                    ("Double" | "Float", "sum") => Ok(quote! { |__x0, __x1| __x0 + __x1 }),
+                    ("Integer" | "Long", "max") => {
+                        Ok(quote! { |__x0, __x1| if __x0 > __x1 { __x0 } else { __x1 } })
+                    }
+                    ("Integer" | "Long", "min") => {
+                        Ok(quote! { |__x0, __x1| if __x0 < __x1 { __x0 } else { __x1 } })
+                    }
+                    ("Double", "max") => Ok(quote! { |__x0: f64, __x1: f64| __x0.max(__x1) }),
+                    ("Double", "min") => Ok(quote! { |__x0: f64, __x1: f64| __x0.min(__x1) }),
+                    ("Float", "max") => Ok(quote! { |__x0: f32, __x1: f32| __x0.max(__x1) }),
+                    ("Float", "min") => Ok(quote! { |__x0: f32, __x1: f32| __x0.min(__x1) }),
+                    ("Math", "max") => {
+                        Ok(quote! { |__x0, __x1| if __x0 > __x1 { __x0 } else { __x1 } })
+                    }
+                    ("Math", "min") => {
+                        Ok(quote! { |__x0, __x1| if __x0 < __x1 { __x0 } else { __x1 } })
+                    }
+                    ("Integer" | "Long", "compare") => Ok(quote! {
+                        |__x0, __x1| match __x0.cmp(&__x1) {
+                            std::cmp::Ordering::Less => -1i32,
+                            std::cmp::Ordering::Equal => 0i32,
+                            std::cmp::Ordering::Greater => 1i32,
+                        }
+                    }),
+                    ("Double", "compare") => Ok(quote! {
+                        |__x0: f64, __x1: f64| {
+                            if __x0 < __x1 {
+                                -1i32
+                            } else if __x0 > __x1 {
+                                1i32
+                            } else if __x0.is_nan() {
+                                if __x1.is_nan() { 0i32 } else { 1i32 }
+                            } else if __x1.is_nan() {
+                                -1i32
+                            } else if __x0 == 0.0f64 && __x1 == 0.0f64 {
+                                if __x0.is_sign_negative() == __x1.is_sign_negative() {
+                                    0i32
+                                } else if __x0.is_sign_negative() {
+                                    -1i32
+                                } else {
+                                    1i32
+                                }
+                            } else {
+                                0i32
+                            }
+                        }
+                    }),
+                    ("Float", "compare") => Ok(quote! {
+                        |__x0: f32, __x1: f32| {
+                            if __x0 < __x1 {
+                                -1i32
+                            } else if __x0 > __x1 {
+                                1i32
+                            } else if __x0.is_nan() {
+                                if __x1.is_nan() { 0i32 } else { 1i32 }
+                            } else if __x1.is_nan() {
+                                -1i32
+                            } else if __x0 == 0.0f32 && __x1 == 0.0f32 {
+                                if __x0.is_sign_negative() == __x1.is_sign_negative() {
+                                    0i32
+                                } else if __x0.is_sign_negative() {
+                                    -1i32
+                                } else {
+                                    1i32
+                                }
+                            } else {
+                                0i32
+                            }
+                        }
+                    }),
+                    _ => {
+                        // Check pre-scanned arities for user-defined static methods
+                        let key = format!("{}::{}", cls, method_name);
+                        let arity = STATIC_METHOD_ARITIES
+                            .with(|sa| sa.borrow().get(&key).copied().unwrap_or(1));
+                        if arity == 0 {
+                            Ok(quote! { || #cident::#mident() })
+                        } else if arity == 1 {
+                            Ok(quote! { |__x0| #cident::#mident(__x0) })
+                        } else {
+                            let params: Vec<proc_macro2::Ident> =
+                                (0..arity).map(|i| ident(&format!("__x{i}"))).collect();
+                            Ok(quote! { |#(#params),*| #cident::#mident(#(#params),*) })
+                        }
+                    }
+                }
             } else if let Some(recv) = target {
                 // Special case: System.out::println → |__x0| println!("{}", __x0)
                 //               System.err::println → |__x0| eprintln!("{}", __x0)
@@ -9786,6 +9917,160 @@ mod tests {
         assert!(
             code.contains("const MAX"),
             "should emit const for static final field"
+        );
+    }
+
+    // ── Method reference arity ────────────────────────────────────────────
+
+    fn make_static_method(name: &str, param_count: usize) -> IrMethod {
+        IrMethod {
+            name: name.into(),
+            visibility: Visibility::Public,
+            is_static: true,
+            is_abstract: false,
+            is_final: false,
+            is_synchronized: false,
+            type_params: vec![],
+            params: (0..param_count)
+                .map(|i| ir::decl::IrParam {
+                    name: format!("p{i}"),
+                    ty: IrType::Int,
+                    is_varargs: false,
+                })
+                .collect(),
+            return_ty: IrType::Int,
+            body: Some(vec![IrStmt::Return(Some(IrExpr::LitInt(0)))]),
+            throws: vec![],
+            is_default: false,
+        }
+    }
+
+    #[test]
+    fn method_ref_zero_arity_emits_no_arg_closure() {
+        let mut module = IrModule::new("");
+        let method_ref_expr = IrExpr::MethodRef {
+            class_name: Some("Foo".into()),
+            target: None,
+            method_name: "getVal".into(),
+            ty: IrType::Int,
+        };
+        let stmt = IrStmt::Expr(method_ref_expr);
+        let cls = IrClass {
+            name: "Foo".into(),
+            visibility: Visibility::Public,
+            is_abstract: false,
+            is_final: false,
+            superclass: None,
+            interfaces: vec![],
+            type_params: vec![],
+            fields: vec![],
+            methods: vec![
+                make_static_method("main", 1),
+                make_static_method("getVal", 0),
+            ],
+            constructors: vec![],
+            is_record: false,
+            captures: vec![],
+        };
+        module.decls.push(IrDecl::Class(cls));
+        // Emit a class with a main that contains the method-ref expression
+        let main_stmts = vec![stmt];
+        let mut module2 = IrModule::new("");
+        let cls2 = IrClass {
+            name: "Foo".into(),
+            visibility: Visibility::Public,
+            is_abstract: false,
+            is_final: false,
+            superclass: None,
+            interfaces: vec![],
+            type_params: vec![],
+            fields: vec![],
+            methods: vec![
+                IrMethod {
+                    name: "main".into(),
+                    visibility: Visibility::Public,
+                    is_static: true,
+                    is_abstract: false,
+                    is_final: false,
+                    is_synchronized: false,
+                    type_params: vec![],
+                    params: vec![ir::decl::IrParam {
+                        name: "args".into(),
+                        ty: IrType::Array(Box::new(IrType::String)),
+                        is_varargs: false,
+                    }],
+                    return_ty: IrType::Void,
+                    body: Some(main_stmts),
+                    throws: vec![],
+                    is_default: false,
+                },
+                make_static_method("getVal", 0),
+            ],
+            constructors: vec![],
+            is_record: false,
+            captures: vec![],
+        };
+        module2.decls.push(IrDecl::Class(cls2));
+        let code = gen(&module2);
+        assert!(
+            code.contains("|| Foo::getVal()"),
+            "0-arg static method ref should emit '|| Foo::getVal()', got:\n{code}"
+        );
+    }
+
+    #[test]
+    fn method_ref_three_arity_emits_three_arg_closure() {
+        let mut module = IrModule::new("");
+        let method_ref_expr = IrExpr::MethodRef {
+            class_name: Some("Bar".into()),
+            target: None,
+            method_name: "triAdd".into(),
+            ty: IrType::Int,
+        };
+        let main_stmts = vec![IrStmt::Expr(method_ref_expr)];
+        let cls = IrClass {
+            name: "Bar".into(),
+            visibility: Visibility::Public,
+            is_abstract: false,
+            is_final: false,
+            superclass: None,
+            interfaces: vec![],
+            type_params: vec![],
+            fields: vec![],
+            methods: vec![
+                IrMethod {
+                    name: "main".into(),
+                    visibility: Visibility::Public,
+                    is_static: true,
+                    is_abstract: false,
+                    is_final: false,
+                    is_synchronized: false,
+                    type_params: vec![],
+                    params: vec![ir::decl::IrParam {
+                        name: "args".into(),
+                        ty: IrType::Array(Box::new(IrType::String)),
+                        is_varargs: false,
+                    }],
+                    return_ty: IrType::Void,
+                    body: Some(main_stmts),
+                    throws: vec![],
+                    is_default: false,
+                },
+                make_static_method("triAdd", 3),
+            ],
+            constructors: vec![],
+            is_record: false,
+            captures: vec![],
+        };
+        module.decls.push(IrDecl::Class(cls));
+        let code = gen(&module);
+        assert!(
+            code.contains("__x0") && code.contains("__x1") && code.contains("__x2"),
+            "3-arg static method ref should emit 3-param closure, got:\n{code}"
+        );
+        assert!(
+            code.contains("Bar::triAdd"),
+            "3-arg static method ref should call Bar::triAdd, got:\n{code}"
         );
     }
 }

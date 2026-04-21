@@ -36,7 +36,7 @@ Rust source (.rs)
 | `codegen` | Lowers annotated IR to Rust token streams via `proc-macro2` / `quote` |
 | `runtime` | `java-compat` crate: runtime types (`JString`, `JArray`, `JList`, `JMap`, `JOptional`, `JStream`, `JThread`, etc.) |
 | `cli` | `jtrans` binary: CLI driver with `translate`, `init-maven`, `init-gradle` subcommands, watch mode, incremental cache, and source map generation |
-| `tests` | Differential test suite (171 tests: translated Rust output vs. expected output) |
+| `tests` | Differential test suite (173 tests: translated Rust output vs. expected output) |
 
 ## Requirements
 
@@ -296,7 +296,7 @@ cargo test -p tests -- --test-threads=4
 - `String.format()`, `String.join()`, `System.out.printf()`
 - `System.exit()`, `System.currentTimeMillis()`, `System.nanoTime()`, `System.getenv()`, `System.getProperty()`, `System.lineSeparator()`
 - Lambda expressions → Rust closures (including multi-statement block bodies)
-- Method references: static (`Class::method`), constructor (`Class::new`), bound instance (`obj::method`, `System.out::println`)
+- Method references: static (`Class::method`), constructor (`Class::new`), bound instance (`obj::method`, `System.out::println`), multi-argument (`Integer::sum`, `Math::max`, user-defined binary method refs)
 - Text blocks (Java 13+ `"""..."""`) with indent stripping per JEP 378
 - Switch expressions (Java 14+) with arrow syntax, multi-label arms, and `yield` blocks
 
