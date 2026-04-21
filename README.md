@@ -246,7 +246,7 @@ cargo test -p tests -- --test-threads=4
 ### Enums
 
 - Simple enums and enums with fields/constructors/methods
-- Multiple enum constructors (overloaded by arity)
+- Multiple enum constructors (including overloads by arity and parameter type)
 - Built-in methods: `name()`, `ordinal()`, `values()`, `valueOf()`, `equals()`
 - Enum switch statements, equality via `==` and `.equals()`
 - `EnumMap<K,V>` and `EnumSet<T>` collections
