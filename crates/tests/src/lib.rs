@@ -417,6 +417,11 @@ mod tests {
     }
 
     #[test]
+    fn test_sync_wait_notify() {
+        check("SynchronizedWaitNotify.java", "method ok\nblock ok");
+    }
+
+    #[test]
     fn test_thread_join() {
         check("ThreadJoin.java", "hello from t1\nhello from t2\nmain done");
     }

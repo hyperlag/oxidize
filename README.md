@@ -36,7 +36,7 @@ Rust source (.rs)
 | `codegen` | Lowers annotated IR to Rust token streams via `proc-macro2` / `quote` |
 | `runtime` | `java-compat` crate: runtime types (`JString`, `JArray`, `JList`, `JMap`, `JOptional`, `JStream`, `JThread`, etc.) |
 | `cli` | `jtrans` binary: CLI driver with `translate`, `init-maven`, `init-gradle` subcommands, watch mode, incremental cache, and source map generation |
-| `tests` | Differential test suite (174 tests: translated Rust output vs. expected output) |
+| `tests` | Differential test suite (175 tests: translated Rust output vs. expected output) |
 
 ## Requirements
 
@@ -273,7 +273,7 @@ cargo test -p tests -- --test-threads=4
 
 - `Thread` creation, `.start()`, `.join()`, `Thread.sleep()`
 - `synchronized` methods and `synchronized(obj)` blocks (per-object monitors)
-- `wait()` / `notify()` / `notifyAll()`
+- `wait()` / `notify()` / `notifyAll()` (unqualified and `this.wait()`/`this.notify()` forms)
 - `volatile` fields → atomic types with `SeqCst` ordering
 - `AtomicInteger` / `AtomicLong` / `AtomicBoolean`
 - `CountDownLatch`, `Semaphore`

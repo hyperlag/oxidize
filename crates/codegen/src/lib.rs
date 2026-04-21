@@ -1910,14 +1910,28 @@ fn emit_method_with_pub(method: &IrMethod, pub_vis: bool) -> Result<TokenStream,
         }
     });
     let prev = IN_STATIC_METHOD.with(|c| c.replace(method.is_static));
+    // For synchronized instance methods, `this.wait()`/`this.notify()` /
+    // `this.notifyAll()` must route to the block-local `__sync_cond` rather
+    // than attempting to call a non-existent instance method.  Set the monitor
+    // expression to "self" (Java `this` is lowered to "self" by the parser)
+    // so the receiver–method handler recognises the call as a monitor op.
+    let prev_sync_mon = if method.is_synchronized && !method.is_static {
+        let old = SYNC_MONITOR_EXPR.with(|m| m.borrow().clone());
+        SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = Some("self".to_string()));
+        old
+    } else {
+        SYNC_MONITOR_EXPR.with(|m| m.borrow().clone())
+    };
     let body = match &method.body {
         Some(stmts) => emit_stmts(stmts),
         None => {
             IN_STATIC_METHOD.with(|c| c.set(prev));
+            SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = prev_sync_mon);
             return Ok(quote! {}); // abstract
         }
     };
     IN_STATIC_METHOD.with(|c| c.set(prev));
+    SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = prev_sync_mon);
     let body = body?;
 
     // Preamble for `synchronized` instance methods: acquire per-class monitor.
