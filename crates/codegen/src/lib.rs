@@ -1910,14 +1910,28 @@ fn emit_method_with_pub(method: &IrMethod, pub_vis: bool) -> Result<TokenStream,
         }
     });
     let prev = IN_STATIC_METHOD.with(|c| c.replace(method.is_static));
+    // For synchronized instance methods, `this.wait()`/`this.notify()` /
+    // `this.notifyAll()` must route to the block-local `__sync_cond` rather
+    // than attempting to call a non-existent instance method.  Set the monitor
+    // expression to "self" (Java `this` is lowered to "self" by the parser)
+    // so the receiver–method handler recognises the call as a monitor op.
+    let prev_sync_mon = if method.is_synchronized && !method.is_static {
+        let old = SYNC_MONITOR_EXPR.with(|m| m.borrow().clone());
+        SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = Some("self".to_string()));
+        old
+    } else {
+        SYNC_MONITOR_EXPR.with(|m| m.borrow().clone())
+    };
     let body = match &method.body {
         Some(stmts) => emit_stmts(stmts),
         None => {
             IN_STATIC_METHOD.with(|c| c.set(prev));
+            SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = prev_sync_mon);
             return Ok(quote! {}); // abstract
         }
     };
     IN_STATIC_METHOD.with(|c| c.set(prev));
+    SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = prev_sync_mon);
     let body = body?;
 
     // Preamble for `synchronized` instance methods: acquire per-class monitor.
@@ -2440,6 +2454,7 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
                 monitor,
                 IrExpr::Var { name, .. } if name == "this" || name == "self"
             );
+            let prev_sync_mon = SYNC_MONITOR_EXPR.with(|m| m.borrow().clone());
             if is_self_monitor {
                 // `synchronized(this)` → use the per-object __monitor field,
                 // consistent with Java's single per-object monitor semantics.
@@ -2452,8 +2467,9 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
                     None
                 };
                 SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = monitor_var_name);
-                let body_ts = emit_stmts(body)?;
-                SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = None);
+                let body_ts = emit_stmts(body);
+                SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = prev_sync_mon.clone());
+                let body_ts = body_ts?;
                 Ok(quote! {
                     {
                         let __sync_arc = self.__monitor.pair();
@@ -2474,11 +2490,11 @@ fn emit_stmt(stmt: &IrStmt) -> Result<TokenStream, CodegenError> {
                     None
                 };
                 SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = monitor_var_name.clone());
-                let mon_ts = emit_expr(monitor)?;
-                let body_ts = emit_stmts(body)?;
-                // Clear after body is emitted so the slot is not reused
-                // accidentally.
-                SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = None);
+                let mon_ts = emit_expr(monitor);
+                let body_ts =
+                    mon_ts.and_then(|mon_ts| emit_stmts(body).map(|body_ts| (mon_ts, body_ts)));
+                SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = prev_sync_mon);
+                let (mon_ts, body_ts) = body_ts?;
 
                 // Use obj.__monitor when the monitor expression is a user-defined
                 // class (which has an injected __monitor field).  Fall back to the
