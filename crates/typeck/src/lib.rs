@@ -117,7 +117,7 @@ fn check_enum(
         interfaces: enm.interfaces.clone(),
         fields: enm.fields.clone(),
         methods: enm.methods.clone(),
-        constructors: enm.constructor.iter().cloned().collect(),
+        constructors: enm.constructors.clone(),
         is_record: false,
         captures: vec![],
     };
@@ -125,7 +125,7 @@ fn check_enum(
     for method in &mut enm.methods {
         check_method(method, &synthetic_cls, class_map, enum_map)?;
     }
-    if let Some(ctor) = &mut enm.constructor {
+    for ctor in &mut enm.constructors {
         let mut local_env: HashMap<String, IrType> = HashMap::new();
         local_env.insert("__self__".to_owned(), IrType::Class(enm.name.clone()));
         for p in &ctor.params {

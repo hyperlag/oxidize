@@ -631,12 +631,31 @@ fn emit_enum(
     let mut impl_methods: Vec<TokenStream> = Vec::new();
 
     // __data() method for enums with constructor args
-    let has_fields = enm
-        .constructor
-        .as_ref()
-        .is_some_and(|c| !c.params.is_empty());
-    if has_fields {
-        let ctor = enm.constructor.as_ref().unwrap();
+    if !enm.fields.is_empty() {
+        let backing_arity = enm.fields.len();
+        let ctor = enm
+            .constructors
+            .iter()
+            .find(|c| c.params.len() == backing_arity)
+            .ok_or_else(|| {
+                CodegenError::Unsupported(format!(
+                    "enum `{}` has {} field(s) but no constructor with matching arity",
+                    enm.name, backing_arity
+                ))
+            })?;
+
+        for constant in &enm.constants {
+            if constant.args.len() != backing_arity {
+                return Err(CodegenError::Unsupported(format!(
+                    "enum `{}` constant `{}` has {} argument(s), expected {} to match backing constructor; constructor chaining/defaulting is not yet supported",
+                    enm.name,
+                    constant.name,
+                    constant.args.len(),
+                    backing_arity
+                )));
+            }
+        }
+
         let field_types: Vec<TokenStream> = ctor.params.iter().map(|p| emit_type(&p.ty)).collect();
         let data_arms: Vec<TokenStream> = enm
             .constants
@@ -6373,6 +6392,126 @@ mod tests {
         let module = IrModule::new("");
         let result = generate(&module);
         assert!(result.is_ok(), "empty module should generate without error");
+    }
+
+    #[test]
+    fn generate_enum_uses_constructor_matching_field_arity() {
+        let mut module = IrModule::new("");
+        module.decls.push(IrDecl::Enum(IrEnum {
+            name: "Mode".into(),
+            visibility: Visibility::Public,
+            interfaces: vec![],
+            constants: vec![
+                IrEnumConstant {
+                    name: "A".into(),
+                    args: vec![IrExpr::LitInt(1)],
+                    body: vec![],
+                },
+                IrEnumConstant {
+                    name: "B".into(),
+                    args: vec![IrExpr::LitInt(2)],
+                    body: vec![],
+                },
+            ],
+            fields: vec![IrField {
+                name: "code".into(),
+                ty: IrType::Int,
+                visibility: Visibility::Private,
+                is_static: false,
+                is_final: true,
+                is_volatile: false,
+                init: None,
+            }],
+            methods: vec![],
+            constructors: vec![
+                IrConstructor {
+                    visibility: Visibility::Private,
+                    params: vec![
+                        IrParam {
+                            name: "a".into(),
+                            ty: IrType::Int,
+                            is_varargs: false,
+                        },
+                        IrParam {
+                            name: "b".into(),
+                            ty: IrType::Int,
+                            is_varargs: false,
+                        },
+                    ],
+                    body: vec![],
+                    throws: vec![],
+                },
+                IrConstructor {
+                    visibility: Visibility::Private,
+                    params: vec![IrParam {
+                        name: "code".into(),
+                        ty: IrType::Int,
+                        is_varargs: false,
+                    }],
+                    body: vec![],
+                    throws: vec![],
+                },
+            ],
+        }));
+
+        let code = gen(&module);
+        assert!(code.contains("fn __data(&self) -> (i32,)"));
+        assert!(!code.contains("fn __data(&self) -> (i32, i32,)"));
+    }
+
+    #[test]
+    fn generate_enum_rejects_constants_with_unsupported_ctor_chaining_shape() {
+        let mut module = IrModule::new("");
+        module.decls.push(IrDecl::Enum(IrEnum {
+            name: "Mode".into(),
+            visibility: Visibility::Public,
+            interfaces: vec![],
+            constants: vec![
+                IrEnumConstant {
+                    name: "A".into(),
+                    args: vec![IrExpr::LitInt(1)],
+                    body: vec![],
+                },
+                IrEnumConstant {
+                    name: "B".into(),
+                    args: vec![],
+                    body: vec![],
+                },
+            ],
+            fields: vec![IrField {
+                name: "code".into(),
+                ty: IrType::Int,
+                visibility: Visibility::Private,
+                is_static: false,
+                is_final: true,
+                is_volatile: false,
+                init: None,
+            }],
+            methods: vec![],
+            constructors: vec![
+                IrConstructor {
+                    visibility: Visibility::Private,
+                    params: vec![IrParam {
+                        name: "code".into(),
+                        ty: IrType::Int,
+                        is_varargs: false,
+                    }],
+                    body: vec![],
+                    throws: vec![],
+                },
+                IrConstructor {
+                    visibility: Visibility::Private,
+                    params: vec![],
+                    body: vec![],
+                    throws: vec![],
+                },
+            ],
+        }));
+
+        let err = generate(&module).expect_err("expected unsupported ctor chaining shape");
+        assert!(
+            matches!(err, CodegenError::Unsupported(msg) if msg.contains("constructor chaining/defaulting is not yet supported"))
+        );
     }
 
     /// Helper: construct System.out.println(expr) the way the real parser does.
