@@ -5590,12 +5590,10 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     ("Integer" | "Long", "min") => {
                         Ok(quote! { |__x0, __x1| if __x0 < __x1 { __x0 } else { __x1 } })
                     }
-                    ("Double" | "Float", "max") => {
-                        Ok(quote! { |__x0: f64, __x1: f64| __x0.max(__x1) })
-                    }
-                    ("Double" | "Float", "min") => {
-                        Ok(quote! { |__x0: f64, __x1: f64| __x0.min(__x1) })
-                    }
+                    ("Double", "max") => Ok(quote! { |__x0: f64, __x1: f64| __x0.max(__x1) }),
+                    ("Double", "min") => Ok(quote! { |__x0: f64, __x1: f64| __x0.min(__x1) }),
+                    ("Float", "max") => Ok(quote! { |__x0: f32, __x1: f32| __x0.max(__x1) }),
+                    ("Float", "min") => Ok(quote! { |__x0: f32, __x1: f32| __x0.min(__x1) }),
                     ("Math", "max") => {
                         Ok(quote! { |__x0, __x1| if __x0 > __x1 { __x0 } else { __x1 } })
                     }
@@ -5609,7 +5607,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             std::cmp::Ordering::Greater => 1i32,
                         }
                     }),
-                    ("Double" | "Float", "compare") => Ok(quote! {
+                    ("Double", "compare") => Ok(quote! {
                         |__x0: f64, __x1: f64| {
                             if __x0 < __x1 {
                                 -1i32
@@ -5620,6 +5618,29 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             } else if __x1.is_nan() {
                                 -1i32
                             } else if __x0 == 0.0f64 && __x1 == 0.0f64 {
+                                if __x0.is_sign_negative() == __x1.is_sign_negative() {
+                                    0i32
+                                } else if __x0.is_sign_negative() {
+                                    -1i32
+                                } else {
+                                    1i32
+                                }
+                            } else {
+                                0i32
+                            }
+                        }
+                    }),
+                    ("Float", "compare") => Ok(quote! {
+                        |__x0: f32, __x1: f32| {
+                            if __x0 < __x1 {
+                                -1i32
+                            } else if __x0 > __x1 {
+                                1i32
+                            } else if __x0.is_nan() {
+                                if __x1.is_nan() { 0i32 } else { 1i32 }
+                            } else if __x1.is_nan() {
+                                -1i32
+                            } else if __x0 == 0.0f32 && __x1 == 0.0f32 {
                                 if __x0.is_sign_negative() == __x1.is_sign_negative() {
                                     0i32
                                 } else if __x0.is_sign_negative() {
