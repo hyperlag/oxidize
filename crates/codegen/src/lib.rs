@@ -3159,7 +3159,10 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 }
 
                 // Thread.sleep(ms) — static call on the Thread class name.
-                if let IrExpr::Var { name, ty: recv_ty, .. } = recv.as_ref() {
+                if let IrExpr::Var {
+                    name, ty: recv_ty, ..
+                } = recv.as_ref()
+                {
                     if name == "Thread" && method_name == "sleep" {
                         return Ok(quote! { JThread::sleep(#(#args_ts),*) });
                     }
