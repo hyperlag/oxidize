@@ -172,6 +172,19 @@ pub enum IrExpr {
         method_name: String,
         ty: IrType,
     },
+
+    // ── Pattern switch expression (Java 21+) ──────────────────────────────
+    /// `switch(scrutinee) { case Type b -> expr; ... }` used as a value.
+    /// Each pattern arm is `(check_type, binding_name, result_expr)`.
+    /// Lowered to a Rust if-else chain block expression.
+    PatternSwitchExpr {
+        scrutinee: Box<IrExpr>,
+        /// Arms: (instanceof check type, binding variable name, result expr).
+        arms: Vec<(IrType, String, IrExpr)>,
+        /// Default arm result expression.
+        default: Option<Box<IrExpr>>,
+        ty: IrType,
+    },
 }
 
 impl IrExpr {
@@ -206,6 +219,7 @@ impl IrExpr {
             IrExpr::ClassLiteral { .. } => &IrType::Unknown,
             IrExpr::SwitchExpr { ty, .. } => ty,
             IrExpr::MethodRef { ty, .. } => ty,
+            IrExpr::PatternSwitchExpr { ty, .. } => ty,
         }
     }
 }

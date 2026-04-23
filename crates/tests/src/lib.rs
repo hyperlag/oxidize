@@ -1663,4 +1663,16 @@ Expression calculator tests complete",
     fn test_multi_arg_method_ref() {
         check("MultiArgMethodRef.java", "15\n5\n1\n5\n1\n15\n5\n60\n42");
     }
+
+    // ── Stage 22 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_pattern_switch_expr() {
+        check("PatternSwitchExpr.java", "circle:5\nsquare:3");
+    }
+
+    #[test]
+    fn test_pattern_switch_block() {
+        check("PatternSwitchBlock.java", "widget:6\ngadget:10");
+    }
 }

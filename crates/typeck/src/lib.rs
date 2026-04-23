@@ -826,6 +826,40 @@ fn check_expr(
                 ty,
             })
         }
+
+        IrExpr::PatternSwitchExpr {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            let checked_scrutinee = check_expr(*scrutinee, cls, class_map, enum_map, env)?;
+            let checked_arms = arms
+                .into_iter()
+                .map(|(arm_ty, binding, body)| {
+                    // Inject the binding variable into a child env so the arm
+                    // body expression can reference it.
+                    let mut arm_env = env.clone();
+                    arm_env.insert(binding.clone(), arm_ty.clone());
+                    let checked_body = check_expr(body, cls, class_map, enum_map, &arm_env)?;
+                    Ok::<_, TypeckError>((arm_ty, binding, checked_body))
+                })
+                .collect::<Result<Vec<_>, TypeckError>>()?;
+            let checked_default = default
+                .map(|d| check_expr(*d, cls, class_map, enum_map, env).map(Box::new))
+                .transpose()?;
+            let ty = checked_arms
+                .first()
+                .map(|(_, _, b)| b.ty().clone())
+                .or_else(|| checked_default.as_deref().map(|d: &IrExpr| d.ty().clone()))
+                .unwrap_or(IrType::Unknown);
+            Ok(IrExpr::PatternSwitchExpr {
+                scrutinee: Box::new(checked_scrutinee),
+                arms: checked_arms,
+                default: checked_default,
+                ty,
+            })
+        }
     }
 }
 
