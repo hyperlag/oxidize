@@ -1670,4 +1670,16 @@ Expression calculator tests complete",
     fn test_pattern_switch_expr() {
         check("PatternSwitchExpr.java", "circle:5\nsquare:3");
     }
+
+    // ── Stage 23 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_multi_class_helper() {
+        check("MultiClassHelper.java", "16\n27");
+    }
+
+    #[test]
+    fn test_multi_class_instance() {
+        check("MultiClassInstance.java", "2\n1");
+    }
 }

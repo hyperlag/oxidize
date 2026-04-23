@@ -3159,7 +3159,10 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 }
 
                 // Thread.sleep(ms) — static call on the Thread class name.
-                if let IrExpr::Var { name, .. } = recv.as_ref() {
+                if let IrExpr::Var {
+                    name, ty: recv_ty, ..
+                } = recv.as_ref()
+                {
                     if name == "Thread" && method_name == "sleep" {
                         return Ok(quote! { JThread::sleep(#(#args_ts),*) });
                     }
@@ -4516,6 +4519,16 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                         let enum_ident = ident(&canonical_name);
                         let m = ident(method_name);
                         return Ok(quote! { #enum_ident::#m(#(#args_ts),*) });
+                    }
+                    // User-defined class static method call:
+                    // Helper.method(args) → Helper::method(args)
+                    // Only rewrite when the receiver has Unknown type (i.e. it is a
+                    // type reference, not a local variable that happens to share the
+                    // name of a user-defined class).
+                    if is_user_class(name) && *recv_ty == IrType::Unknown {
+                        let cls_ident = ident(name);
+                        let m = ident(method_name);
+                        return Ok(quote! { #cls_ident::#m(#(#args_ts),*) });
                     }
                 }
 
