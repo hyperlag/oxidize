@@ -5799,8 +5799,13 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     .rev()
                     .try_fold(default_ts, |acc, (check_type, binding, body)| {
                         let type_name_str = match check_type {
-                            IrType::Class(name) => name.clone(),
-                            _ => "Object".to_owned(),
+                            IrType::Class(name) => Some(name.clone()),
+                            IrType::String => Some("String".to_owned()),
+                            _ => None,
+                        };
+
+                        let Some(type_name_str) = type_name_str else {
+                            return Ok::<_, CodegenError>(acc);
                         };
                         let bname = ident(binding);
                         let bty = emit_type(check_type);

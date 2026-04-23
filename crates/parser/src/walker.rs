@@ -2848,25 +2848,43 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                     if label_text.contains("default") {
                         pat_default = Some(Box::new(arm_expr));
                     } else if let Some(lbl) = label_node {
-                        // Extract pattern → type_pattern → (type, binding)
+                        // Extract pattern → type_pattern → (type, binding).
+                        // Reject any other non-default label form so we do
+                        // not silently drop arms from a mixed pattern switch.
                         let pattern_node = named_children(lbl)
                             .into_iter()
-                            .find(|n| n.kind() == "pattern");
-                        if let Some(pat) = pattern_node {
-                            if let Some(type_pat) = pat.named_child(0) {
-                                if type_pat.kind() == "type_pattern" {
-                                    let ir_type = type_pat
-                                        .named_child(0)
-                                        .map(|n| lower_type(n, src))
-                                        .unwrap_or_else(|| IrType::Class("Object".to_owned()));
-                                    let binding = type_pat
-                                        .named_child(1)
-                                        .map(|n| text(n, src).to_owned())
-                                        .unwrap_or_else(|| "_unused".to_owned());
-                                    pattern_arms.push((ir_type, binding, arm_expr));
-                                }
-                            }
+                            .find(|n| n.kind() == "pattern")
+                            .ok_or_else(|| {
+                                ParseError::Unsupported(format!(
+                                    "unsupported non-pattern switch label in pattern switch: {}",
+                                    label_text
+                                ))
+                            })?;
+                        let type_pat = pattern_node.named_child(0).ok_or_else(|| {
+                            ParseError::Unsupported(format!(
+                                "unsupported pattern switch label form: {}",
+                                label_text
+                            ))
+                        })?;
+                        if type_pat.kind() != "type_pattern" {
+                            return Err(ParseError::Unsupported(format!(
+                                "unsupported pattern switch label form: {}",
+                                label_text
+                            )));
                         }
+                        let ir_type = type_pat
+                            .named_child(0)
+                            .map(|n| lower_type(n, src))
+                            .unwrap_or_else(|| IrType::Class("Object".to_owned()));
+                        let binding = type_pat
+                            .named_child(1)
+                            .map(|n| text(n, src).to_owned())
+                            .unwrap_or_else(|| "_unused".to_owned());
+                        pattern_arms.push((ir_type, binding, arm_expr));
+                    } else {
+                        return Err(ParseError::Unsupported(
+                            "unsupported empty switch label in pattern switch".to_owned(),
+                        ));
                     }
                 }
 
