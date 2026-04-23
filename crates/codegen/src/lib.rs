@@ -5803,11 +5803,10 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             _ => "Object".to_owned(),
                         };
                         let bname = ident(binding);
-                        let bty = emit_type(check_type);
                         let body_ts = emit_expr(body)?;
                         Ok::<_, CodegenError>(quote! {
                             if (#tmp)._instanceof(#type_name_str) {
-                                let mut #bname: #bty = #tmp.clone();
+                                let mut #bname = #tmp.clone();
                                 #body_ts
                             } else #acc
                         })

@@ -2823,6 +2823,73 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                 let mut pattern_arms: Vec<(IrType, String, IrExpr)> = Vec::new();
                 let mut pat_default: Option<Box<IrExpr>> = None;
 
+                // Lower the body of a single pattern switch arm to an IrExpr,
+                // handling both arrow-expression arms and block/yield arms.
+                let lower_pattern_switch_arm_expr =
+                    |body_child: Option<tree_sitter::Node>| -> Result<IrExpr, ParseError> {
+                        if let Some(bc) = body_child {
+                            match bc.kind() {
+                                "expression_statement" => bc
+                                    .named_child(0)
+                                    .map(|e| lower_expr(e, src))
+                                    .transpose()?
+                                    .ok_or_else(|| {
+                                        ParseError::Unsupported(
+                                            "empty expression_statement in pattern switch arm"
+                                                .into(),
+                                        )
+                                    }),
+                                "block" => {
+                                    // Collect statements and extract the yield
+                                    // expression as the block's value.
+                                    let mut block_stmts: Vec<IrStmt> = Vec::new();
+                                    let mut yield_expr: Option<IrExpr> = None;
+                                    let mut saw_top_level_yield = false;
+                                    let mut bc_cur = bc.walk();
+                                    for block_child in bc.named_children(&mut bc_cur) {
+                                        if saw_top_level_yield {
+                                            return Err(ParseError::Unsupported(
+                                                if block_child.kind() == "yield_statement" {
+                                                    "pattern switch block arm has multiple top-level `yield` statements"
+                                                        .into()
+                                                } else {
+                                                    "pattern switch block arm has statements after top-level `yield`"
+                                                        .into()
+                                                },
+                                            ));
+                                        }
+                                        if block_child.kind() == "yield_statement" {
+                                            let val =
+                                                block_child.named_child(0).ok_or_else(|| {
+                                                    ParseError::Unsupported(
+                                                        "pattern switch block arm `yield` without value"
+                                                            .into(),
+                                                    )
+                                                })?;
+                                            yield_expr = Some(lower_expr(val, src)?);
+                                            saw_top_level_yield = true;
+                                        } else {
+                                            block_stmts.extend(lower_stmt(block_child, src)?);
+                                        }
+                                    }
+                                    match yield_expr {
+                                        Some(ye) => Ok(IrExpr::BlockExpr {
+                                            stmts: block_stmts,
+                                            expr: Box::new(ye),
+                                            ty: IrType::Unknown,
+                                        }),
+                                        None => Err(ParseError::Unsupported(
+                                            "pattern switch block arm missing `yield`".into(),
+                                        )),
+                                    }
+                                }
+                                _ => lower_expr(bc, src),
+                            }
+                        } else {
+                            Ok(IrExpr::Unit)
+                        }
+                    };
+
                 for rule in &rule_children {
                     let label_node = rule.named_child(0);
                     let label_text = label_node.map(|n| text(n, src)).unwrap_or_default();
@@ -2832,38 +2899,37 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                     } else {
                         None
                     };
-                    let arm_expr = if let Some(bc) = body_child {
-                        match bc.kind() {
-                            "expression_statement" => bc
-                                .named_child(0)
-                                .map(|e| lower_expr(e, src))
-                                .transpose()?
-                                .unwrap_or(IrExpr::Unit),
-                            _ => lower_expr(bc, src).unwrap_or(IrExpr::Unit),
-                        }
-                    } else {
-                        IrExpr::Unit
-                    };
+                    let arm_expr = lower_pattern_switch_arm_expr(body_child)?;
 
                     if label_text.contains("default") {
                         pat_default = Some(Box::new(arm_expr));
                     } else if let Some(lbl) = label_node {
-                        // Extract pattern → type_pattern → (type, binding)
-                        let pattern_node = named_children(lbl)
+                        // Iterate all pattern nodes in the label so that
+                        // multi-pattern labels like `case A a, B b ->` emit
+                        // one arm per pattern (cloning the body as needed).
+                        for pat in named_children(lbl)
                             .into_iter()
-                            .find(|n| n.kind() == "pattern");
-                        if let Some(pat) = pattern_node {
+                            .filter(|n| n.kind() == "pattern")
+                        {
                             if let Some(type_pat) = pat.named_child(0) {
                                 if type_pat.kind() == "type_pattern" {
                                     let ir_type = type_pat
                                         .named_child(0)
                                         .map(|n| lower_type(n, src))
                                         .unwrap_or_else(|| IrType::Class("Object".to_owned()));
-                                    let binding = type_pat
-                                        .named_child(1)
-                                        .map(|n| text(n, src).to_owned())
-                                        .unwrap_or_else(|| "_unused".to_owned());
-                                    pattern_arms.push((ir_type, binding, arm_expr));
+                                    // Treat `_` as "no binding" and generate a
+                                    // unique placeholder name to avoid emitting
+                                    // an invalid `_` Rust identifier.
+                                    let raw_binding =
+                                        type_pat.named_child(1).map(|n| text(n, src).to_owned());
+                                    let binding = match raw_binding.as_deref() {
+                                        Some("_") => {
+                                            format!("_unused_pat_{}", pattern_arms.len())
+                                        }
+                                        Some(name) => name.to_owned(),
+                                        None => "_unused".to_owned(),
+                                    };
+                                    pattern_arms.push((ir_type, binding, arm_expr.clone()));
                                 }
                             }
                         }

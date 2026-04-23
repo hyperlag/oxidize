@@ -1670,4 +1670,9 @@ Expression calculator tests complete",
     fn test_pattern_switch_expr() {
         check("PatternSwitchExpr.java", "circle:5\nsquare:3");
     }
+
+    #[test]
+    fn test_pattern_switch_block() {
+        check("PatternSwitchBlock.java", "widget:6\ngadget:10");
+    }
 }
