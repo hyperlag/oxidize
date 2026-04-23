@@ -4517,6 +4517,13 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                         let m = ident(method_name);
                         return Ok(quote! { #enum_ident::#m(#(#args_ts),*) });
                     }
+                    // User-defined class static method call:
+                    // Helper.method(args) → Helper::method(args)
+                    if is_user_class(name) {
+                        let cls_ident = ident(name);
+                        let m = ident(method_name);
+                        return Ok(quote! { #cls_ident::#m(#(#args_ts),*) });
+                    }
                 }
 
                 // `.collect(Collectors.*)` dispatch
