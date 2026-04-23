@@ -5773,6 +5773,58 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             let val = emit_expr(expr)?;
             Ok(quote! { { #(#stmts_ts)* #val } })
         }
+
+        IrExpr::PatternSwitchExpr {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            let scrutinee_ts = emit_expr(scrutinee)?;
+            let tmp = ident("__ps_tmp");
+
+            // Build the default (innermost) else block.
+            let default_ts = if let Some(d) = default {
+                let d_ts = emit_expr(d)?;
+                quote! { { #d_ts } }
+            } else {
+                quote! { { unreachable!() } }
+            };
+
+            // Fold arms in reverse to build a nested if-else chain.
+            // Starting from `else { default }` and wrapping outward so that
+            // the first arm becomes the outermost `if`.
+            let chain =
+                arms.iter()
+                    .rev()
+                    .try_fold(default_ts, |acc, (check_type, binding, body)| {
+                        let type_name_str = match check_type {
+                            IrType::Class(name) => Some(name.clone()),
+                            IrType::String => Some("String".to_owned()),
+                            _ => None,
+                        };
+
+                        let Some(type_name_str) = type_name_str else {
+                            return Ok::<_, CodegenError>(acc);
+                        };
+                        let bname = ident(binding);
+                        let bty = emit_type(check_type);
+                        let body_ts = emit_expr(body)?;
+                        Ok::<_, CodegenError>(quote! {
+                            if (#tmp)._instanceof(#type_name_str) {
+                                let mut #bname: #bty = #tmp.clone();
+                                #body_ts
+                            } else #acc
+                        })
+                    })?;
+
+            Ok(quote! {
+                {
+                    let #tmp = #scrutinee_ts;
+                    #chain
+                }
+            })
+        }
     }
 }
 

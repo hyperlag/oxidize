@@ -2802,14 +2802,105 @@ fn lower_expr(node: Node<'_>, src: &[u8]) -> Result<IrExpr, ParseError> {
                 .unwrap_or(IrExpr::LitNull);
 
             let body_node = child_by_field(node, "body").unwrap_or(node);
+
+            // Collect all switch_rule children and detect pattern labels.
+            let rule_children: Vec<_> = {
+                let mut cur = body_node.walk();
+                body_node
+                    .named_children(&mut cur)
+                    .filter(|n| n.kind() == "switch_rule")
+                    .collect()
+            };
+            let is_pattern_switch = rule_children
+                .iter()
+                .any(|rule| rule.named_child(0).map(label_has_pattern).unwrap_or(false));
+
+            if is_pattern_switch {
+                // ── Pattern switch expression ─────────────────────────────
+                // Lower to PatternSwitchExpr: each non-default arm carries
+                // an instanceof check type, a binding name, and a result
+                // expression.
+                let mut pattern_arms: Vec<(IrType, String, IrExpr)> = Vec::new();
+                let mut pat_default: Option<Box<IrExpr>> = None;
+
+                for rule in &rule_children {
+                    let label_node = rule.named_child(0);
+                    let label_text = label_node.map(|n| text(n, src)).unwrap_or_default();
+                    let body_count = rule.named_child_count();
+                    let body_child = if body_count > 1 {
+                        rule.named_child(body_count - 1)
+                    } else {
+                        None
+                    };
+                    let arm_expr = if let Some(bc) = body_child {
+                        match bc.kind() {
+                            "expression_statement" => bc
+                                .named_child(0)
+                                .map(|e| lower_expr(e, src))
+                                .transpose()?
+                                .unwrap_or(IrExpr::Unit),
+                            _ => lower_expr(bc, src).unwrap_or(IrExpr::Unit),
+                        }
+                    } else {
+                        IrExpr::Unit
+                    };
+
+                    if label_text.contains("default") {
+                        pat_default = Some(Box::new(arm_expr));
+                    } else if let Some(lbl) = label_node {
+                        // Extract pattern → type_pattern → (type, binding).
+                        // Reject any other non-default label form so we do
+                        // not silently drop arms from a mixed pattern switch.
+                        let pattern_node = named_children(lbl)
+                            .into_iter()
+                            .find(|n| n.kind() == "pattern")
+                            .ok_or_else(|| {
+                                ParseError::Unsupported(format!(
+                                    "unsupported non-pattern switch label in pattern switch: {}",
+                                    label_text
+                                ))
+                            })?;
+                        let type_pat = pattern_node.named_child(0).ok_or_else(|| {
+                            ParseError::Unsupported(format!(
+                                "unsupported pattern switch label form: {}",
+                                label_text
+                            ))
+                        })?;
+                        if type_pat.kind() != "type_pattern" {
+                            return Err(ParseError::Unsupported(format!(
+                                "unsupported pattern switch label form: {}",
+                                label_text
+                            )));
+                        }
+                        let ir_type = type_pat
+                            .named_child(0)
+                            .map(|n| lower_type(n, src))
+                            .unwrap_or_else(|| IrType::Class("Object".to_owned()));
+                        let binding = type_pat
+                            .named_child(1)
+                            .map(|n| text(n, src).to_owned())
+                            .unwrap_or_else(|| "_unused".to_owned());
+                        pattern_arms.push((ir_type, binding, arm_expr));
+                    } else {
+                        return Err(ParseError::Unsupported(
+                            "unsupported empty switch label in pattern switch".to_owned(),
+                        ));
+                    }
+                }
+
+                return Ok(IrExpr::PatternSwitchExpr {
+                    scrutinee: Box::new(cond_node),
+                    arms: pattern_arms,
+                    default: pat_default,
+                    ty: IrType::Unknown,
+                });
+            }
+
+            // ── Regular (literal-value) switch expression ─────────────────
             let mut arms: Vec<(IrExpr, IrExpr)> = Vec::new();
             let mut sw_default: Option<Box<IrExpr>> = None;
 
-            let mut cur = body_node.walk();
-            for child in body_node.named_children(&mut cur) {
-                if child.kind() != "switch_rule" {
-                    continue;
-                }
+            for child in &rule_children {
                 let label_node = child.named_child(0);
                 let label_text = label_node.map(|n| text(n, src)).unwrap_or_default();
                 let body_count = child.named_child_count();
