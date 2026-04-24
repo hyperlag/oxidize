@@ -5297,9 +5297,17 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             )
                         })
                     } else {
-                        // Anonymous class: append captured variable clones.
+                        // Anonymous / local class: append captured variable clones.
+                        // Look up by the mangled name (INNER_CLASS_MAP already resolved
+                        // short → mangled above), falling back to the original name for
+                        // anonymous classes whose full name is already in the IrExpr.
                         let cap_args: Vec<TokenStream> = ANON_CAPTURE_MAP
-                            .with(|m| m.borrow().get(class.as_str()).cloned())
+                            .with(|m| {
+                                let map = m.borrow();
+                                map.get(mangled.as_str())
+                                    .or_else(|| map.get(class.as_str()))
+                                    .cloned()
+                            })
                             .unwrap_or_default()
                             .iter()
                             .map(|cap_name| {

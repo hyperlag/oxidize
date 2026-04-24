@@ -1682,4 +1682,11 @@ Expression calculator tests complete",
     fn test_multi_class_instance() {
         check("MultiClassInstance.java", "2\n1");
     }
+
+    // ── Stage 24 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_local_class_capture() {
+        check("LocalClassCapture.java", "105\n142\nresult=107");
+    }
 }

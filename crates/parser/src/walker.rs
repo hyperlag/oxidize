@@ -2213,6 +2213,20 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
             let (mut cls, sub_enums) = lower_class(node, src)?;
             let orig_name = cls.name.clone();
             cls.name = format!("{}__loc__{}", outer, orig_name);
+            // Detect variables captured from the enclosing method scope,
+            // exactly as anonymous classes do in Stage 16.  This allows local
+            // named classes to reference outer final/effectively-final locals.
+            let capture_names = detect_captures(&cls.methods, &cls.fields);
+            cls.captures = capture_names
+                .into_iter()
+                .map(|n| {
+                    let ty = match lookup_local_var_type(&n) {
+                        IrType::Unknown => IrType::Class("Object".to_owned()),
+                        other => other,
+                    };
+                    (n, ty)
+                })
+                .collect();
             for mut e in sub_enums {
                 e.name = format!("{}${}", cls.name, e.name);
                 hoist_decl(IrDecl::Enum(e));
