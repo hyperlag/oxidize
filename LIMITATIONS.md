@@ -108,10 +108,13 @@ The following are **not** supported:
 
 - Lambda-based closures capturing shared mutable state across multiple
   executor tasks (use `Runnable` implementations instead)
-- `this.wait()` / `this.notify()` inside a `synchronized(this)` block
-  (unqualified `wait()`/`notify()` inside a `synchronized` instance method do work)
 - `wait()`/`notify()` when the receiver is a non-variable expression or when
   the monitor is a built-in type (String, collection, array)
+
+**Supported:** Unqualified `wait()`/`notify()`/`notifyAll()` in `synchronized`
+instance methods, `this.wait()`/`this.notify()` in `synchronized(this)` blocks,
+and `obj.wait()`/`obj.notify()` when `obj` is the exact variable used as the
+monitor in the enclosing `synchronized(obj)` block.
 
 ## Collections (Advanced)
 
@@ -286,10 +289,14 @@ Arrow-form type-pattern **switch statements** (`case String s -> ...`) are
 supported. The parser transforms them into a nested if-else chain using
 `instanceof` with binding variables.
 
-The following are currently not supported:
+Arrow-form type-pattern **switch expressions** (assigning the result of a
+pattern switch to a variable, e.g. `var x = switch (obj) { case String s -> s.length(); default -> 0; }`) are
+also supported. The parser emits an `IrExpr::PatternSwitchExpr` that codegen
+lowers to a Rust if-else chain block expression.
 
-- Colon-form pattern labels in statements (`case String s:`)
-- Pattern switch expressions (`var x = switch (obj) { ... }`)
+The following is currently not supported:
+
+- Colon-form pattern labels (`case String s:`) — use arrow form instead
 
 ### Sealed Classes (Java 17+)
 
@@ -314,17 +321,16 @@ Rust block expression inside the match arm. Nested `yield` statements inside `if
 nested `switch`, or similar constructs are not currently extracted and may still be
 treated as unsupported statements.
 
-Switch expressions with patterns (Java 21) are not yet supported.
+Switch expressions with patterns (Java 21) are supported — see the
+`Pattern Matching in Switch` section above for full details.
 
 ### Method References (Java 8+)
 
-Static method references (`ClassName::method`) and constructor references
-(`ClassName::new`) are supported. Bound instance method references
-(`obj::method`) are not yet supported. Supported method references lower to
-single-argument Rust closures. Multi-argument method references are not yet
-supported.
-
-### Interface Default Methods (Java 8+)
+Static method references (`ClassName::method`), constructor references
+(`ClassName::new`), bound instance method references (`obj::method`,
+`System.out::println`), and multi-argument method references (`Integer::sum`,
+`Math::max`, user-defined binary static methods) are all supported. Method
+references lower to Rust closures with the appropriate arity.
 
 `default` methods in interface bodies are supported. A class that does not
 override a default method automatically inherits the interface's implementation.
@@ -334,7 +340,7 @@ override a default method automatically inherits the interface's implementation.
 - `instanceof` with a single binding variable is supported:
   `if (obj instanceof Box x) { ... }` injects `let mut x: Box = obj.clone();`
   at the start of the then-block.
-- Switch expressions with patterns (Java 21) are not yet supported.
+- Pattern switch expressions (Java 21) are supported: `var x = switch(obj) { case Type t -> expr; }` emits a Rust if-else chain block expression.
 
 ### Text Blocks (Java 13+)
 
@@ -361,15 +367,17 @@ supported with the following limitations:
   clone taken at construction time, so mutations to outer state made via the inner
   class reference are not reflected back in the original outer object.
 - **Local classes:** classes declared inside a method body are hoisted to
-  top-level structs using a mangled name (`Outer__loc__Local`); outer-scope
-  variable capture is not supported.
+  top-level structs using a mangled name (`Outer__loc__Local`); effectively-final
+  outer-scope variables captured by the local class are injected as `__cap_X`
+  fields at construction, mirroring anonymous class capture.
 
 Static nested classes are supported as top-level classes.
 
 ### Multiple Classes Per File
 
-Each `.java` file should contain one public class. Multiple top-level class
-declarations in a single file may not translate correctly.
+Multiple top-level class declarations in a single `.java` file are supported.
+Package-private helper classes are hoisted alongside the public class; cross-class
+static and instance method calls are emitted using Rust associated-function syntax.
 
 ### Package-Level Features
 

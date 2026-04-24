@@ -253,6 +253,35 @@ native binary. No JVM is required to run the result.
 - The `java-compat` crate is available (included in the oxidize source tree
   at `crates/runtime/`)
 
+### Pre-translation checklist
+
+Before running `jtrans`, scan your Java source for patterns that are not
+supported (see [Section 12](#12-known-limitations)). Common blockers in Maven projects:
+
+| Pattern | Action |
+|---|---|
+| Spring / Hibernate / JPA annotations | Refactor or stub out |
+| `java.lang.reflect.*` usage | Remove or replace with compile-time alternatives |
+| `native` methods | out of scope; must be rewritten |
+| Third-party library calls | Replace with standard-library equivalents or stubs |
+| `module-info.java` | Delete it — `jtrans` ignores module declarations |
+| `ClassLoader.loadClass()` | Not supported; refactor to avoid dynamic loading |
+
+Quick search for common blockers:
+
+```bash
+# Check for reflection usage
+grep -r "java.lang.reflect\|Method.invoke\|Class.forName" src/main/java/
+
+# Check for native methods
+grep -r "native " src/main/java/
+
+# Check for heavy framework annotations
+grep -r "@Autowired\|@Entity\|@SpringBootApplication" src/main/java/
+```
+
+If none of these turn up, your project is a good candidate for translation.
+
 ### Step 1: Understand your project layout
 
 A typical Maven project looks like this:
@@ -457,6 +486,64 @@ cd rust-out && cargo build --release
 # Run
 ./target/release/rust-out          # → Hello, World!
 ./target/release/rust-out Alice    # → Hello, Alice!
+```
+
+### Step 8 (Optional): Produce a portable, stripped binary
+
+By default, `cargo build --release` produces a reasonably optimised binary, but
+it still contains debug symbols. To reduce size and produce a self-contained
+file ready for distribution:
+
+```bash
+cd rust-out/
+
+# Build with link-time optimisation
+RUSTFLAGS="-C lto=thin" cargo build --release
+
+# Strip debug symbols (Linux / macOS)
+strip target/release/<binary-name>
+```
+
+The resulting file is typically 60–80 % smaller than the unstripped build and
+has no runtime dependencies on the JVM.
+
+### Step 9 (Optional): Static linking with musl (Linux)
+
+For a truly portable Linux binary that runs on any Linux distribution without
+shared-library dependencies, compile against the `musl` libc target:
+
+```bash
+# Install the musl target once
+rustup target add x86_64-unknown-linux-musl
+
+# Build a statically linked binary
+cd rust-out/
+cargo build --release --target x86_64-unknown-linux-musl
+
+# Strip it
+strip target/x86_64-unknown-linux-musl/release/<binary-name>
+```
+
+The resulting binary links everything statically, including libc. You can copy
+it to any `x86_64` Linux machine and run it directly.
+
+### Step 10 (Optional): Rename the binary
+
+By default the binary name in the generated `Cargo.toml` is derived from the
+main Java class file. To use a custom name, edit `Cargo.toml` in the output
+directory:
+
+```toml
+[[bin]]
+name = "my-tool"          # ← change this to whatever you want
+path = "src/greeter.rs"
+```
+
+Then rebuild:
+
+```bash
+cargo build --release
+# binary is now at target/release/my-tool
 ```
 
 ---
@@ -708,24 +795,22 @@ lambda expressions, text blocks (Java 13+).
 | `native` methods / JNI | Calls into C/C++ cannot be represented |
 | Annotation processing / framework annotations | Spring, JPA, etc. not supported |
 | `module-info.java` (Java 9+ modules) | Not parsed |
-| `ForkJoinPool`, `StampedLock` | Not yet implemented |
-| `InputStream`/`OutputStream` as polymorphic types | Stream hierarchy not fully modelled |
 | `java.nio.channels` (NIO selectors) | Not implemented |
-| Java serialization (`Serializable`, `ObjectInputStream`) | Not implemented |
-| `java.io.Serializable` / `ObjectOutputStream` | Not implemented |
-| Anonymous inner classes capturing outer-scope variables | Supported for interface-implementing anonymous classes; captured values are cloned into generated fields |
-| `wait()`/`notify()` outside `synchronized(this)` | Only supported on `this` |
+| Java serialization (`Serializable`, `ObjectInputStream`, `ObjectOutputStream`) | Not implemented |
+| Colon-form pattern labels in switch statements (`case String s:`) | Use arrow form instead |
+| Lambda closures sharing mutable state across executor tasks | Use `Runnable` implementations instead |
 
 ### Partially supported
 
 | Feature | Limitation |
 |---|---|
 | Generic method type inference across call chains | May require explicit type annotations |
-| Anonymous inner classes | Interface implementations only |
+| Anonymous inner classes | Interface implementations only; captured outer-scope variables are cloned into `__cap_X` fields (effectively-final values only) |
+| Local named classes in method bodies | Captures effectively-final locals via `__cap_X` fields, same as anonymous classes |
 | Non-static inner classes | Outer reference is a snapshot clone taken at construction; mutations via inner class not reflected in original outer |
 | `@Override`, `@Deprecated` | Tolerated syntactically; no code generation effect |
-| Switch expressions with patterns (Java 21) | Not yet supported |
 | Advanced enum features | Anonymous constant subclasses with fields not supported |
+| `wait()`/`notify()` | Supported on `this` (in `synchronized` methods and `synchronized(this)` blocks); not supported when the monitor is a non-variable expression or a built-in type (String, array, collection) |
 
 For more detail see [LIMITATIONS.md](LIMITATIONS.md).
 
@@ -827,7 +912,7 @@ Rust source (.rs)
 | `codegen` | Converts the annotated IR into Rust token streams using `proc-macro2` and `quote!` |
 | `runtime` | `java-compat` crate — Rust implementations of Java standard library types |
 | `cli` | The `jtrans` binary — argument parsing, watch loop, incremental cache, source map writer |
-| `tests` | 139 differential integration tests (translate + compile + compare stdout) |
+| `tests` | 179 differential integration tests (translate + compile + compare stdout) |
 
 ### IR design
 
