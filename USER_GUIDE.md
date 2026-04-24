@@ -11,16 +11,17 @@ executables using `jtrans`, the oxidize command-line tool.
 2. [Installation](#2-installation)
 3. [Quick Start](#3-quick-start)
 4. [CLI Reference](#4-cli-reference)
-5. [Maven Project to Native Executable](#5-maven-project-to-native-executable)
-6. [Gradle Integration](#6-gradle-integration)
-7. [Incremental Translation](#7-incremental-translation)
-8. [Watch Mode](#8-watch-mode)
-9. [Source Maps](#9-source-maps)
-10. [The java-compat Runtime](#10-the-java-compat-runtime)
-11. [Supported Java Features](#11-supported-java-features)
-12. [Known Limitations](#12-known-limitations)
-13. [Troubleshooting](#13-troubleshooting)
-14. [Architecture Overview](#14-architecture-overview)
+5. [Pre-flight Compatibility Scan](#5-pre-flight-compatibility-scan)
+6. [Maven Project to Native Executable](#6-maven-project-to-native-executable)
+7. [Gradle Integration](#7-gradle-integration)
+8. [Incremental Translation](#8-incremental-translation)
+9. [Watch Mode](#9-watch-mode)
+10. [Source Maps](#10-source-maps)
+11. [The java-compat Runtime](#11-the-java-compat-runtime)
+12. [Supported Java Features](#12-supported-java-features)
+13. [Known Limitations](#13-known-limitations)
+14. [Troubleshooting](#14-troubleshooting)
+15. [Architecture Overview](#15-architecture-overview)
 
 ---
 
@@ -46,7 +47,7 @@ concurrency primitives.
 - Heavy framework code (Spring, Hibernate, JPA) that is annotation-driven.
 - Programs that depend on Java modules (`module-info.java`).
 
-See [Section 12: Known Limitations](#12-known-limitations) for the full list.
+See [Section 13: Known Limitations](#13-known-limitations) for the full list.
 
 ---
 
@@ -219,7 +220,7 @@ Generate a Maven plugin fragment to run `jtrans` as part of the Maven build:
 jtrans init-maven --output .
 ```
 
-Writes `jtrans-maven-plugin.xml`. See [Section 5](#5-maven-project-to-native-executable).
+Writes `jtrans-maven-plugin.xml`. See [Section 6](#6-maven-project-to-native-executable).
 
 ### `jtrans init-gradle`
 
@@ -229,7 +230,21 @@ Generate a Gradle build script fragment in Kotlin DSL:
 jtrans init-gradle --output .
 ```
 
-Writes `jtrans.gradle.kts`. See [Section 6](#6-gradle-integration).
+Writes `jtrans.gradle.kts`. See [Section 7](#7-gradle-integration).
+
+### `jtrans scan`
+
+Scan Java source files for compatibility issues before translation. See [Section
+5](#5-pre-flight-compatibility-scan) for full details.
+
+```
+jtrans scan [OPTIONS] --input <INPUT>
+
+Options:
+  -i, --input <INPUT>  Input directory or file(s) to scan [required]
+      --issues-only    Suppress ✓ lines; show only files that have issues
+      --strict         Exit with code 1 if any blocking errors are found
+```
 
 ### Legacy positional syntax
 
@@ -241,7 +256,118 @@ jtrans HelloWorld.java --output out/
 
 ---
 
-## 5. Maven Project to Native Executable
+## 5. Pre-flight Compatibility Scan
+
+Before spending time on translation, run `jtrans scan` to identify Java
+patterns that `jtrans` cannot handle. The scanner analyses every `.java` file
+in two passes:
+
+1. **Pattern pass** — line-by-line checks for known-bad constructs using fast
+   regular expressions.
+2. **Parser pass** — a full parse attempt; any file the parser rejects is
+   flagged immediately.
+
+Issues are classified as:
+
+- **`error`** — will cause a parse or code-generation failure; the file cannot
+  be translated as-is.
+- **`warning`** — the file will translate, but the translated code may behave
+  differently from the original Java (e.g., Spring annotations have no effect).
+
+### Running a scan
+
+```bash
+# Scan an entire Maven source tree
+jtrans scan --input src/main/java/
+
+# Show only files with problems (skip the ✓ lines)
+jtrans scan --input src/ --issues-only
+
+# Exit with code 1 if any errors are found (CI gate)
+jtrans scan --input src/ --strict
+```
+
+### Sample output
+
+```
+Scanning 42 Java files…
+
+  ✓  src/main/java/com/example/App.java
+  ✗  src/main/java/com/example/Loader.java  [2 errors]
+       line 4: [error:reflection-import] java.lang.reflect import (reflection not supported)
+       line 12: [error:reflection-class-for-name] Class.forName() — dynamic class loading not supported
+  ⚠  src/main/java/com/example/Dao.java  [1 warning]
+       line 1: [warning:spring-annotations] Spring/JPA annotation — framework injection will NOT work after translation
+
+══════════════════════════════════════════════════
+Summary
+══════════════════════════════════════════════════
+  Files scanned            : 42
+  Files fully compatible   : 39
+  Files with warnings only : 1
+  Files with errors        : 2
+
+  Total errors             : 2
+  Total warnings           : 1
+
+  Issue breakdown:
+     1×  [error:reflection-class-for-name]
+     1×  [error:reflection-import]
+     1×  [warning:spring-annotations]
+
+2 file(s) have blocking errors that must be addressed before translation.
+```
+
+### Detected error codes
+
+| Code | Meaning |
+|---|---|
+| `native-method` | `native` method declaration — JNI not supported |
+| `reflection-import` | `import java.lang.reflect.*` |
+| `reflection-class-for-name` | `Class.forName()` — dynamic class loading |
+| `reflection-method-invoke` | `Method.invoke()` |
+| `reflection-field-access` | `Field.get()` / `Field.set()` |
+| `reflection-constructor` | `Constructor.newInstance()` |
+| `reflection-declared-members` | `getDeclaredMethods/Fields/Constructors` |
+| `reflection-set-accessible` | `setAccessible()` |
+| `classloader` | `ClassLoader` usage |
+| `load-library` | `System.loadLibrary()` / `System.load()` |
+| `annotation-processing-import` | `javax.annotation.processing` |
+| `rmi-import` | `java.rmi` |
+| `nio-channels-import` | `java.nio.channels` |
+| `object-streams` | `ObjectInputStream` / `ObjectOutputStream` |
+| `instrument-import` | `java.lang.instrument` |
+| `colon-form-pattern-switch` | `case Type var:` pattern label — use arrow form |
+| `dynamic-proxy` | `Proxy.newProxyInstance()` |
+| `module-info` | `module-info.java` file |
+| `parse-error` | File rejected by the parser itself |
+
+### Detected warning codes
+
+| Code | Meaning |
+|---|---|
+| `serializable` | `implements Serializable` — compiles, but serialization has no effect |
+| `spring-annotations` | Spring/JPA annotations (`@Autowired`, `@Entity`, etc.) — no injection |
+| `runtime-getruntime` | `Runtime.getRuntime()` — only `.exec()` is supported |
+| `externalizable` | `implements Externalizable` |
+
+### Using scan in a CI pipeline
+
+Add `jtrans scan --strict` as a pre-flight gate so translation failures surface
+early:
+
+```yaml
+# GitHub Actions example
+- name: jtrans compatibility scan
+  run: jtrans scan --input src/main/java/ --strict
+```
+
+The exit code is `0` when no errors are found (warnings are permitted), and `1`
+when `--strict` is set and at least one error is present.
+
+---
+
+## 6. Maven Project to Native Executable
 
 This section walks through converting an existing Maven Java project into a
 native binary. No JVM is required to run the result.
@@ -255,8 +381,15 @@ native binary. No JVM is required to run the result.
 
 ### Pre-translation checklist
 
-Before running `jtrans`, scan your Java source for patterns that are not
-supported (see [Section 12](#12-known-limitations)). Common blockers in Maven projects:
+Run the built-in compatibility scanner first — it is the fastest way to find
+blockers:
+
+```bash
+jtrans scan --input src/main/java/ --strict
+```
+
+See [Section 5](#5-pre-flight-compatibility-scan) for a full description of
+all issue codes and CI integration. Common blockers in Maven projects:
 
 | Pattern | Action |
 |---|---|
@@ -266,21 +399,6 @@ supported (see [Section 12](#12-known-limitations)). Common blockers in Maven pr
 | Third-party library calls | Replace with standard-library equivalents or stubs |
 | `module-info.java` | Delete it — `jtrans` ignores module declarations |
 | `ClassLoader.loadClass()` | Not supported; refactor to avoid dynamic loading |
-
-Quick search for common blockers:
-
-```bash
-# Check for reflection usage
-grep -r "java.lang.reflect\|Method.invoke\|Class.forName" src/main/java/
-
-# Check for native methods
-grep -r "native " src/main/java/
-
-# Check for heavy framework annotations
-grep -r "@Autowired\|@Entity\|@SpringBootApplication" src/main/java/
-```
-
-If none of these turn up, your project is a good candidate for translation.
 
 ### Step 1: Understand your project layout
 
@@ -548,7 +666,7 @@ cargo build --release
 
 ---
 
-## 6. Gradle Integration
+## 7. Gradle Integration
 
 Generate a Kotlin DSL fragment:
 
@@ -573,7 +691,7 @@ the output in `rust-out/` by default.
 
 ---
 
-## 7. Incremental Translation
+## 8. Incremental Translation
 
 By default, `jtrans` maintains a `.jtrans-cache` file in the output directory.
 This file stores SHA-256 hashes of each input file. On subsequent runs, only
@@ -603,7 +721,7 @@ rm rust-out/.jtrans-cache
 
 ---
 
-## 8. Watch Mode
+## 9. Watch Mode
 
 Use `--watch` to keep `jtrans` running and re-translate automatically whenever
 a source file changes. This is useful during active development:
@@ -629,7 +747,7 @@ cd rust-out && cargo watch -x build
 
 ---
 
-## 9. Source Maps
+## 10. Source Maps
 
 Every translated `.rs` file is accompanied by a `.jtrans-map` file that records
 the Rust line → Java line correspondence:
@@ -650,7 +768,7 @@ Disable source map generation with `--no-source-map`.
 
 ---
 
-## 10. The java-compat Runtime
+## 11. The java-compat Runtime
 
 All translated programs link against `java-compat`, the oxidize runtime crate.
 It provides Rust types that mirror Java's standard library behaviour.
@@ -706,7 +824,7 @@ You have two options:
 
 ---
 
-## 11. Supported Java Features
+## 12. Supported Java Features
 
 ### Core language
 
@@ -784,7 +902,7 @@ lambda expressions, text blocks (Java 13+).
 
 ---
 
-## 12. Known Limitations
+## 13. Known Limitations
 
 ### Not supported
 
@@ -816,7 +934,7 @@ For more detail see [LIMITATIONS.md](LIMITATIONS.md).
 
 ---
 
-## 13. Troubleshooting
+## 14. Troubleshooting
 
 ### error: can't find crate for `java_compat`
 
@@ -882,7 +1000,7 @@ file to the source tree, restart `jtrans --watch` to pick it up.
 
 ---
 
-## 14. Architecture Overview
+## 15. Architecture Overview
 
 The translation pipeline has five stages:
 

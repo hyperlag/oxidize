@@ -35,7 +35,7 @@ Rust source (.rs)
 | `typeck` | Type-checking and symbol-resolution pass over the IR |
 | `codegen` | Lowers annotated IR to Rust token streams via `proc-macro2` / `quote` |
 | `runtime` | `java-compat` crate: runtime types (`JString`, `JArray`, `JList`, `JMap`, `JOptional`, `JStream`, `JThread`, etc.) |
-| `cli` | `jtrans` binary: CLI driver with `translate`, `init-maven`, `init-gradle` subcommands, watch mode, incremental cache, and source map generation |
+| `cli` | `jtrans` binary: CLI driver with `translate`, `scan`, `init-maven`, `init-gradle` subcommands, watch mode, incremental cache, and source map generation |
 | `tests` | Differential test suite (179 tests: translated Rust output vs. expected output) |
 
 ## Requirements
@@ -155,6 +155,67 @@ jtrans translate --input HelloWorld.java --print
 
 ```bash
 jtrans translate --input HelloWorld.java --dump-ir
+```
+
+### `jtrans scan` — pre-flight compatibility check
+
+Analyse a Java project for patterns that `jtrans` cannot translate before
+attempting a full conversion. Reports blocking errors (reflection, native
+methods, unsupported syntax) and warnings (Spring annotations, serialization)
+per file, then prints a project-level summary.
+
+```
+jtrans scan [OPTIONS] --input <INPUT>
+
+Options:
+  -i, --input <INPUT>  Input directory or file(s) to scan [required]
+      --issues-only    Suppress the ✓ lines; show only files with problems
+      --strict         Exit with code 1 if any blocking errors are found
+```
+
+#### Scan a whole Maven source tree
+
+```bash
+jtrans scan --input src/main/java/
+```
+
+Example output:
+
+```
+Scanning 42 Java files…
+
+  ✓  src/main/java/com/example/App.java
+  ✗  src/main/java/com/example/Loader.java  [2 errors]
+       line 4: [error:reflection-import] java.lang.reflect import (reflection not supported)
+       line 12: [error:reflection-class-for-name] Class.forName() — dynamic class loading not supported
+  ⚠  src/main/java/com/example/Dao.java  [1 warning]
+       line 1: [warning:spring-annotations] Spring/JPA annotation — framework injection will NOT work after translation
+  ✓  ...
+
+══════════════════════════════════════════════════
+Summary
+══════════════════════════════════════════════════
+  Files scanned            : 42
+  Files fully compatible   : 39
+  Files with warnings only : 1
+  Files with errors        : 2
+
+  Total errors             : 2
+  Total warnings           : 1
+
+  Issue breakdown:
+     1×  [error:reflection-class-for-name]
+     1×  [error:reflection-import]
+     1×  [warning:spring-annotations]
+
+2 file(s) have blocking errors that must be addressed before translation.
+```
+
+#### CI pre-flight gate
+
+```bash
+# Fail CI if any file has blocking errors
+jtrans scan --input src/main/java/ --strict
 ```
 
 ### `jtrans init-maven` — Maven integration
