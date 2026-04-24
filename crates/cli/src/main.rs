@@ -1,6 +1,7 @@
 //! `jtrans` — command-line driver for the Java→Rust translator.
 
 mod cache;
+mod scan;
 mod source_map;
 
 use anyhow::Context;
@@ -96,6 +97,25 @@ enum Commands {
         #[arg(short, long, default_value = ".")]
         output: PathBuf,
     },
+
+    /// Scan a Java project for compatibility issues before translation.
+    ///
+    /// Analyses each .java file for patterns that jtrans does not support
+    /// (reflection, native methods, Spring annotations, etc.) and reports
+    /// a per-file breakdown plus a project-level summary.
+    Scan {
+        /// Input directory or file(s) to scan.
+        #[arg(short, long, required = true)]
+        input: Vec<PathBuf>,
+
+        /// Only print files that have issues (suppress the ✓ lines).
+        #[arg(long)]
+        issues_only: bool,
+
+        /// Exit with a non-zero status code if any blocking errors are found.
+        #[arg(long)]
+        strict: bool,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -168,6 +188,23 @@ fn main() -> anyhow::Result<()> {
 
         Some(Commands::InitGradle { output }) => {
             write_gradle_fragment(&output)?;
+        }
+
+        Some(Commands::Scan {
+            input,
+            issues_only,
+            strict,
+        }) => {
+            let java_files = collect_java_files(&input)?;
+            if java_files.is_empty() {
+                anyhow::bail!("No .java files found in the specified input paths");
+            }
+            info!("scanning {} Java file(s)…", java_files.len());
+            let report = scan::scan_files(&java_files);
+            let had_errors = scan::print_report(&report, issues_only);
+            if strict && had_errors {
+                std::process::exit(1);
+            }
         }
 
         None => {
