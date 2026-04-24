@@ -325,28 +325,6 @@ fn scan_one(path: &Path, compiled: &[(&Check, Regex)]) -> FileScanResult {
     }
 }
 
-/// Strip the `//` line comment portion from a source line.
-/// Does not handle `/* */` block comments — good enough for pattern matching.
-fn strip_line_comment(line: &str) -> &str {
-    // Walk characters, skip anything inside a string literal, stop at `//`.
-    let bytes = line.as_bytes();
-    let mut i = 0;
-    let mut in_string = false;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'"' if !in_string => in_string = true,
-            b'"' if in_string => in_string = false,
-            b'\\' if in_string => i += 1, // skip escaped char
-            b'/' if !in_string && i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
-                return &line[..i];
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    line
-}
-
 /// Return a copy of `line` with the *contents* of string and char literals
 /// replaced by spaces, and `//` comments removed.
 ///
@@ -662,20 +640,20 @@ mod tests {
     }
 
     #[test]
-    fn strip_line_comment_removes_trailing_comment() {
-        assert_eq!(
-            strip_line_comment("  int x = 1; // native"),
-            "  int x = 1; "
-        );
+    fn mask_strips_trailing_line_comment() {
+        let masked = mask_literals_and_comments("  int x = 1; // native");
+        assert_eq!(masked, "  int x = 1; ");
     }
 
     #[test]
-    fn strip_line_comment_preserves_string_with_slashes() {
+    fn mask_replaces_string_content_and_strips_comment() {
         let line = r#"  String s = "http://example.com"; // end"#;
-        assert_eq!(
-            strip_line_comment(line),
-            r#"  String s = "http://example.com"; "#
-        );
+        let masked = mask_literals_and_comments(line);
+        // Literal content and comment must be gone; surrounding code preserved.
+        assert!(!masked.contains("http"), "masked: {masked:?}");
+        assert!(!masked.contains("end"), "masked: {masked:?}");
+        assert!(masked.contains('"'));
+        assert!(masked.contains(';'));
     }
 
     #[test]
