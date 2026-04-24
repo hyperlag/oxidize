@@ -278,9 +278,9 @@ fn scan_one(path: &Path, compiled: &[(&Check, Regex)]) -> FileScanResult {
     // Line-by-line pattern scan.
     for (line_num, line) in source.lines().enumerate() {
         let line_num = line_num + 1; // 1-based
-        let stripped = strip_line_comment(line);
+        let masked = mask_literals_and_comments(line);
         for (check, re) in compiled {
-            if re.is_match(stripped) {
+            if re.is_match(&masked) {
                 issues.push(ScanIssue {
                     line: Some(line_num),
                     severity: check.severity,
@@ -309,6 +309,12 @@ fn scan_one(path: &Path, compiled: &[(&Check, Regex)]) -> FileScanResult {
     // De-duplicate: if a pattern check fires AND the parser also rejects for the
     // same reason, the parser error is more authoritative — keep both but avoid
     // pure duplicates from identical lines.
+    issues.sort_by(|a, b| {
+        a.code
+            .cmp(b.code)
+            .then(a.line.cmp(&b.line))
+            .then(a.message.cmp(&b.message))
+    });
     issues.dedup_by(|a, b| a.code == b.code && a.line == b.line && a.message == b.message);
 
     issues.sort_by_key(|i| (i.line.unwrap_or(0), i.severity));
@@ -339,6 +345,65 @@ fn strip_line_comment(line: &str) -> &str {
         i += 1;
     }
     line
+}
+
+/// Return a copy of `line` with the *contents* of string and char literals
+/// replaced by spaces, and `//` comments removed.
+///
+/// This prevents regex patterns from firing on keywords that appear only
+/// inside literal values (e.g. `System.out.println("native");`).
+fn mask_literals_and_comments(line: &str) -> String {
+    let mut result = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+    let mut in_string = false;
+    let mut in_char = false;
+
+    while let Some(ch) = chars.next() {
+        if in_string {
+            match ch {
+                '"' => {
+                    in_string = false;
+                    result.push('"');
+                }
+                '\\' => {
+                    result.push(' ');
+                    if chars.next().is_some() {
+                        result.push(' ');
+                    }
+                }
+                _ => result.push(' '),
+            }
+        } else if in_char {
+            match ch {
+                '\'' => {
+                    in_char = false;
+                    result.push('\'');
+                }
+                '\\' => {
+                    result.push(' ');
+                    if chars.next().is_some() {
+                        result.push(' ');
+                    }
+                }
+                _ => result.push(' '),
+            }
+        } else {
+            match ch {
+                '"' => {
+                    in_string = true;
+                    result.push('"');
+                }
+                '\'' => {
+                    in_char = true;
+                    result.push('\'');
+                }
+                // Line comment: discard the rest of the line
+                '/' if chars.peek() == Some(&'/') => break,
+                _ => result.push(ch),
+            }
+        }
+    }
+    result
 }
 
 /// Attempt a crude heuristic extraction of a line number from a parser error
@@ -373,13 +438,6 @@ pub fn print_report(report: &ScanReport, issues_only: bool) -> bool {
     );
 
     for result in &report.results {
-        let label = result
-            .path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("<unknown>");
-
-        // Keep full path context but anchor on filename for compact display.
         let display_path = result.path.display().to_string();
 
         if result.is_ok() {
@@ -425,8 +483,6 @@ pub fn print_report(report: &ScanReport, issues_only: bool) -> bool {
             println!("       {loc}[{sev}:{}] {}", issue.code, issue.message);
         }
         println!();
-
-        let _ = label; // used in display_path already
     }
 
     // ── Summary ──────────────────────────────────────────────────────
@@ -503,13 +559,16 @@ mod tests {
     use super::*;
 
     fn issues_for(source: &str) -> Vec<ScanIssue> {
+        use std::io::Write as _;
+
         let compiled: Vec<(&Check, Regex)> = CHECKS
             .iter()
             .map(|c| (c, Regex::new(c.pattern).expect("valid")))
             .collect();
 
-        let tmp = tempfile::NamedTempFile::new().unwrap();
-        std::fs::write(tmp.path(), source).unwrap();
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        tmp.write_all(source.as_bytes()).unwrap();
+        tmp.flush().unwrap();
         let result = scan_one(tmp.path(), &compiled);
         result.issues
     }
@@ -617,5 +676,27 @@ mod tests {
             strip_line_comment(line),
             r#"  String s = "http://example.com"; "#
         );
+    }
+
+    #[test]
+    fn no_false_positive_keyword_in_string_literal() {
+        // `native` appears only inside a string — must not trigger native-method check.
+        let src = r#"public class Foo { void f() { System.out.println("native"); } }"#;
+        let issues = issues_for(src);
+        assert!(
+            !has_code(&issues, "native-method"),
+            "false positive: {:?}",
+            issues
+        );
+    }
+
+    #[test]
+    fn mask_literals_and_comments_replaces_string_content() {
+        let line = r#"  foo("native"); // native"#;
+        let masked = mask_literals_and_comments(line);
+        // String content should be replaced; comment should be removed.
+        assert!(!masked.contains("native"), "masked: {masked:?}");
+        // Quotes should be preserved.
+        assert!(masked.contains('"'));
     }
 }
