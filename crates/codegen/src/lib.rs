@@ -486,7 +486,7 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
         map.clear();
         for decl in &module.decls {
             if let IrDecl::Class(cls) = decl {
-                if cls.name.contains('$') {
+                if cls.name.contains('$') && !cls.name.contains("__loc__") {
                     // Split at the LAST `$` to get the direct outer class.
                     if let Some(dollar_pos) = cls.name.rfind('$') {
                         let outer = cls.name[..dollar_pos].to_owned();
@@ -507,8 +507,9 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
                     main_class = Some(cls.name.clone());
                 }
                 // Build INNER_CLASS_MAP for this class:
-                // - inner class  "Outer$Inner"       → "Inner" → "Outer$Inner"
-                // - local class  "Outer__loc__Local" → "Local" → "Outer__loc__Local"
+                // - inner class  "Outer$Inner"          → "Inner"  → "Outer$Inner"
+                // - local class  "Outer__loc__N__Local" → "N__Local" → "Outer__loc__N__Local"
+                //                                       → "Local"  → "Outer__loc__N__Local" (alias)
                 {
                     let outer_prefix = format!("{}$", cls.name);
                     let loc_prefix = format!("{}__loc__", cls.name);
@@ -521,7 +522,14 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
                                 // `Inner$Nested` for `Outer$Inner$Nested`).
                                 imap.insert(rest.to_owned(), c.name.clone());
                             } else if let Some(rest) = c.name.strip_prefix(&loc_prefix) {
+                                // rest = "N__ClassName": insert full key and simple-name alias.
+                                // The alias lets `new Local()` resolve even when a counter was
+                                // appended for uniqueness (e.g. rest = "0__Local" → alias "Local").
                                 imap.insert(rest.to_owned(), c.name.clone());
+                                if let Some((_, simple)) = rest.split_once("__") {
+                                    imap.entry(simple.to_owned())
+                                        .or_insert_with(|| c.name.clone());
+                                }
                             }
                         }
                     }
@@ -5297,9 +5305,17 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             )
                         })
                     } else {
-                        // Anonymous class: append captured variable clones.
+                        // Anonymous / local class: append captured variable clones.
+                        // Look up by the mangled name (INNER_CLASS_MAP already resolved
+                        // short → mangled above), falling back to the original name for
+                        // anonymous classes whose full name is already in the IrExpr.
                         let cap_args: Vec<TokenStream> = ANON_CAPTURE_MAP
-                            .with(|m| m.borrow().get(class.as_str()).cloned())
+                            .with(|m| {
+                                let map = m.borrow();
+                                map.get(mangled.as_str())
+                                    .or_else(|| map.get(class.as_str()))
+                                    .cloned()
+                            })
                             .unwrap_or_default()
                             .iter()
                             .map(|cap_name| {
