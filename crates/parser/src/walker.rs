@@ -26,6 +26,13 @@ thread_local! {
     static ANON_COUNTER: Cell<u32> = const { Cell::new(0) };
 }
 
+// Counter for generating unique local-class name suffixes (prevents Rust struct
+// name collisions when the same local class name appears in multiple methods of
+// the same outer class, which is valid Java due to block scoping).
+thread_local! {
+    static LOC_COUNTER: Cell<u32> = const { Cell::new(0) };
+}
+
 // Classes to hoist to module level (anonymous, inner, local).
 thread_local! {
     static HOISTED_DECLS: RefCell<Vec<IrDecl>> = const { RefCell::new(Vec::new()) };
@@ -34,10 +41,6 @@ thread_local! {
 // Stack of enclosing class names (for mangling inner/local class names).
 thread_local! {
     static OUTER_CLASS_STACK: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
-}
-
-fn current_outer_class() -> String {
-    OUTER_CLASS_STACK.with(|s| s.borrow().last().cloned().unwrap_or_default())
 }
 
 /// Returns the full enclosing-class prefix by joining all stack entries with
@@ -509,6 +512,7 @@ pub fn parse_source(source: &str) -> Result<tree_sitter::Tree, ParseError> {
 pub fn parse_to_ir(source: &str) -> Result<IrModule, ParseError> {
     // Reset thread-locals so re-entrant calls (tests) start clean.
     ANON_COUNTER.with(|c| c.set(0));
+    LOC_COUNTER.with(|c| c.set(0));
     HOISTED_DECLS.with(|h| h.borrow_mut().clear());
     OUTER_CLASS_STACK.with(|s| s.borrow_mut().clear());
     clear_local_var_scopes();
@@ -2207,12 +2211,22 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
             }
         }
         // Local class declaration inside a method body: hoist to module level
-        // as "{Outer}__loc__{ClassName}" and emit no statements.
+        // as "{OuterPrefix}__loc__{N}__{ClassName}" and emit no statements.
+        // The counter N makes the mangled name unique even when two methods of
+        // the same outer class both declare a local class with the same name
+        // (valid Java due to block scoping).  The full enclosing-class prefix
+        // (joined with `$`) is used so deeply nested outer classes produce
+        // names like "Outer$Inner__loc__0__Local" rather than "Inner__loc__Local".
         "class_declaration" => {
-            let outer = current_outer_class();
+            let outer = full_outer_class_prefix();
+            let n = LOC_COUNTER.with(|c| {
+                let v = c.get();
+                c.set(v + 1);
+                v
+            });
             let (mut cls, sub_enums) = lower_class(node, src)?;
             let orig_name = cls.name.clone();
-            cls.name = format!("{}__loc__{}", outer, orig_name);
+            cls.name = format!("{}__loc__{}__{}", outer, n, orig_name);
             // Detect variables captured from the enclosing method scope,
             // exactly as anonymous classes do in Stage 16.  This allows local
             // named classes to reference outer final/effectively-final locals.
