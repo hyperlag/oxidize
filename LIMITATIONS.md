@@ -159,7 +159,8 @@ Map `keySet()`/`values()`/`entrySet()` iteration is supported on `HashMap`,
 - `forEach(biConsumer)` — iterate all entries with a lambda.
 - `replace(key, value)` — overwrite an existing mapping.
 - `replaceAll(biFunction)` — transform all values in-place.
-All methods are available on `HashMap`, `TreeMap`, and `LinkedHashMap`.
+All methods are available on `HashMap` and `TreeMap`.
+`LinkedHashMap` does not currently support this full mutation API.
 `Spliterator` has a minimal stub (`trySplit`, `estimateSize`,
 `characteristics`, `forEachRemaining`, `tryAdvance`).
 
