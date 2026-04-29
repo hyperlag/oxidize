@@ -359,6 +359,14 @@ mod tests {
     }
 
     #[test]
+    fn test_immutable_collections() {
+        check(
+            "ImmutableCollections.java",
+            "3\ntrue\nalpha\n0\n3\ntrue\nfalse\n2\n1\nkey\n42\n2\n10\n3\ngamma",
+        );
+    }
+
+    #[test]
     fn test_generic_class() {
         check("GenericClass.java", "42\nhello");
     }

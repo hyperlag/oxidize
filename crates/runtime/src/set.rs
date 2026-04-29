@@ -60,6 +60,16 @@ impl<T: Eq + std::hash::Hash + Clone> JSet<T> {
         self.inner.clear();
     }
 
+    /// Create a set from a `Vec<T>`, mirroring `Set.of(a, b, c)` /
+    /// `Set.copyOf(collection)`.
+    pub fn from_vec(v: Vec<T>) -> Self {
+        let mut set = JSet::new();
+        for item in v {
+            set.add(item);
+        }
+        set
+    }
+
     /// Iterator over set elements.
     pub fn iter(&self) -> std::collections::hash_set::Iter<'_, T> {
         self.inner.iter()
