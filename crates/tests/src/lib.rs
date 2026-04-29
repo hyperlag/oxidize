@@ -351,6 +351,14 @@ mod tests {
     }
 
     #[test]
+    fn test_map_mutation_api() {
+        check(
+            "MapMutationApi.java",
+            "10\n20\n2\n5\n3\n1\nant:1\nbee:2\ncat:3\n100\na=2\nb=4\nc=6",
+        );
+    }
+
+    #[test]
     fn test_generic_class() {
         check("GenericClass.java", "42\nhello");
     }

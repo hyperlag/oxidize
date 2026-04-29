@@ -150,6 +150,17 @@ with `LinkedList`, `ArrayDeque`, `PriorityQueue`, `TreeMap`, `TreeSet`,
 
 Map `keySet()`/`values()`/`entrySet()` iteration is supported on `HashMap`,
 `TreeMap`, and `LinkedHashMap` via `JMapEntry<K,V>` for entry pairs.
+
+**Stage 25 additions (Map mutation API):**
+- `putIfAbsent(key, value)` — insert only if absent.
+- `computeIfAbsent(key, fn)` — compute and cache on first access.
+- `compute(key, fn)` — always remap with old value as `Option`.
+- `merge(key, value, fn)` — insert or combine with existing value.
+- `forEach(biConsumer)` — iterate all entries with a lambda.
+- `replace(key, value)` — overwrite an existing mapping.
+- `replaceAll(biFunction)` — transform all values in-place.
+All methods are available on `HashMap` and `TreeMap`.
+`LinkedHashMap` does not currently support this full mutation API.
 `Spliterator` has a minimal stub (`trySplit`, `estimateSize`,
 `characteristics`, `forEachRemaining`, `tryAdvance`).
 

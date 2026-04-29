@@ -147,6 +147,92 @@ where
         }
         l
     }
+
+    /// Java `map.putIfAbsent(key, value)`.
+    /// Inserts `value` only if no mapping for `key` exists.
+    /// Returns the previous value if present, otherwise returns `None`.
+    #[allow(non_snake_case)]
+    pub fn putIfAbsent(&mut self, key: K, value: V) -> Option<V> {
+        match self.inner.entry(key) {
+            std::collections::hash_map::Entry::Occupied(e) => Some(e.get().clone()),
+            std::collections::hash_map::Entry::Vacant(e) => {
+                e.insert(value);
+                None
+            }
+        }
+    }
+
+    /// Java `map.computeIfAbsent(key, mappingFn)`.
+    /// If `key` is absent, calls `mapping_fn(key.clone())`, inserts the result,
+    /// and returns it.  If `key` is present, returns the existing value.
+    #[allow(non_snake_case)]
+    pub fn computeIfAbsent(&mut self, key: K, mut mapping_fn: impl FnMut(K) -> V) -> V {
+        match self.inner.entry(key) {
+            std::collections::hash_map::Entry::Occupied(e) => e.get().clone(),
+            std::collections::hash_map::Entry::Vacant(e) => {
+                let k = e.key().clone();
+                let v = mapping_fn(k);
+                e.insert(v.clone());
+                v
+            }
+        }
+    }
+
+    /// Java `map.compute(key, remappingFn)`.
+    /// Calls `remapping_fn(key.clone(), existing_option)`, stores the result,
+    /// and returns it.  The map is not modified if `remapping_fn` panics.
+    pub fn compute(&mut self, key: K, mut remapping_fn: impl FnMut(K, Option<V>) -> V) -> V {
+        let old = self.inner.get(&key).cloned();
+        let new_val = remapping_fn(key.clone(), old);
+        self.inner.insert(key, new_val.clone());
+        new_val
+    }
+
+    /// Java `map.merge(key, value, remappingFn)`.
+    /// If the key is absent, inserts `value`.  If present, calls
+    /// `remapping_fn(old, value)` and stores the result.  Returns the new value.
+    /// The map is not modified if `remapping_fn` panics.
+    pub fn merge(&mut self, key: K, value: V, mut remapping_fn: impl FnMut(V, V) -> V) -> V {
+        let new_val = if let Some(old) = self.inner.get(&key).cloned() {
+            remapping_fn(old, value)
+        } else {
+            value
+        };
+        self.inner.insert(key, new_val.clone());
+        new_val
+    }
+
+    /// Java `map.forEach(biConsumer)`.
+    /// Calls `consumer(key, value)` for every entry in the map.
+    #[allow(non_snake_case)]
+    pub fn forEach(&self, mut consumer: impl FnMut(K, V)) {
+        for (k, v) in &self.inner {
+            consumer(k.clone(), v.clone());
+        }
+    }
+
+    /// Java `map.replace(key, value)`.
+    /// Replaces the value for `key` if a mapping exists.  Returns the old value
+    /// if replaced, panics otherwise (mirrors Java NullPointerException on
+    /// auto-unboxing a null return).
+    pub fn replace(&mut self, key: K, value: V) -> V {
+        if let Some(slot) = self.inner.get_mut(&key) {
+            let old = slot.clone();
+            *slot = value;
+            old
+        } else {
+            panic!("NullPointerException: key not found in map for replace")
+        }
+    }
+
+    /// Java `map.replaceAll(biFunction)`.
+    /// Replaces each value with `f(key, old_value)`.
+    #[allow(non_snake_case)]
+    pub fn replaceAll(&mut self, mut f: impl FnMut(K, V) -> V) {
+        for (k, v) in self.inner.iter_mut() {
+            *v = f(k.clone(), v.clone());
+        }
+    }
 }
 
 impl<K, V> JMap<K, V>
