@@ -4366,7 +4366,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                 if args_ts.is_empty() {
                                     Ok(quote! { JMap::new() })
                                 } else {
-                                    if args_ts.len() % 2 != 0 {
+                                    if !args_ts.len().is_multiple_of(2) {
                                         return Err(CodegenError::Unsupported(
                                             "Map.of requires an even number of arguments (key/value pairs)".to_string()
                                         ));
