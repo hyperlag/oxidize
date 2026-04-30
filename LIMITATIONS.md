@@ -165,11 +165,12 @@ All methods are available on `HashMap` and `TreeMap`.
 **Stage 26 additions (Immutable factory methods):**
 - `List.of(...)` — create an immutable-style list (backed by `JList`).
 - `Set.of(...)` — create an immutable-style set (backed by `JSet`).
-  Unlike Java, duplicate-element validation is not currently enforced; duplicate
-  inputs may be dropped rather than causing `IllegalArgumentException`.
+  Duplicate elements cause a panic with an `IllegalArgumentException`-style
+  message, matching Java's `Set.of` / `Set.copyOf` specification.
 - `Map.of(k1, v1, k2, v2, ...)` — create a map from key/value pairs.
-  Unlike Java, duplicate-key validation is not currently enforced; later values
-  may overwrite earlier ones rather than causing `IllegalArgumentException`.
+  Duplicate keys cause a panic with an `IllegalArgumentException`-style
+  message, matching Java's `Map.of` / `Map.ofEntries` specification.
+  An odd number of arguments is rejected at compile time with a codegen error.
 - `Map.entry(key, value)` — create a `Map.Entry` / `JMapEntry` pair.
 - `Map.ofEntries(Map.entry(...), ...)` — create a map from entry objects.
 - `List.copyOf(c)`, `Set.copyOf(c)`, `Map.copyOf(m)` — shallow clone only.
