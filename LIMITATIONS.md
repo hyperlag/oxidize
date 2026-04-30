@@ -165,11 +165,20 @@ All methods are available on `HashMap` and `TreeMap`.
 **Stage 26 additions (Immutable factory methods):**
 - `List.of(...)` — create an immutable-style list (backed by `JList`).
 - `Set.of(...)` — create an immutable-style set (backed by `JSet`).
+  Unlike Java, duplicate-element validation is not currently enforced; duplicate
+  inputs may be dropped rather than causing `IllegalArgumentException`.
 - `Map.of(k1, v1, k2, v2, ...)` — create a map from key/value pairs.
+  Unlike Java, duplicate-key validation is not currently enforced; later values
+  may overwrite earlier ones rather than causing `IllegalArgumentException`.
 - `Map.entry(key, value)` — create a `Map.Entry` / `JMapEntry` pair.
 - `Map.ofEntries(Map.entry(...), ...)` — create a map from entry objects.
-- `List.copyOf(c)`, `Set.copyOf(c)`, `Map.copyOf(m)` — shallow clone.
-All factory-method results are mutable in the Rust translation (immutability enforcement is not implemented).
+- `List.copyOf(c)`, `Set.copyOf(c)`, `Map.copyOf(m)` — shallow clone only.
+  Current lowering only works when the input is already the corresponding
+  runtime collection type (for example, `JList` for `List.copyOf`,
+  `JSet` for `Set.copyOf`, `JMap` for `Map.copyOf`); this does not yet
+  implement full JDK `copyOf(...)` behavior for arbitrary collections/maps.
+All factory-method results are mutable in the Rust translation (immutability
+enforcement is not implemented).
 
 `Spliterator` has a minimal stub (`trySplit`, `estimateSize`,
 `characteristics`, `forEachRemaining`, `tryAdvance`).

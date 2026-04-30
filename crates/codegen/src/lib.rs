@@ -4331,7 +4331,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             }
                             "copyOf" => {
                                 let a = &args_ts[0];
-                                Ok(quote! { #a.clone() })
+                                Ok(quote! { JList::from_vec((#a).iter().cloned().collect()) })
                             }
                             _ => {
                                 let m = ident(method_name);
@@ -4351,7 +4351,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             }
                             "copyOf" => {
                                 let a = &args_ts[0];
-                                Ok(quote! { #a.clone() })
+                                Ok(quote! { JSet::from_vec((#a).iter().cloned().collect()) })
                             }
                             _ => {
                                 let m = ident(method_name);
@@ -4366,13 +4366,22 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                 if args_ts.is_empty() {
                                     Ok(quote! { JMap::new() })
                                 } else {
-                                    // args come in key/value pairs
+                                    if args_ts.len() % 2 != 0 {
+                                        return Err(CodegenError::Unsupported(
+                                            "Map.of requires an even number of arguments (key/value pairs)".to_string()
+                                        ));
+                                    }
+                                    // args come in key/value pairs; panic on duplicate keys
                                     let pairs: Vec<TokenStream> = args_ts
                                         .chunks(2)
                                         .map(|pair| {
                                             let k = &pair[0];
                                             let v = &pair[1];
-                                            quote! { __map.put(#k, #v); }
+                                            quote! {
+                                                if __map.put(#k, #v).is_some() {
+                                                    panic!("IllegalArgumentException: duplicate key in Map.of");
+                                                }
+                                            }
                                         })
                                         .collect();
                                     Ok(quote! { {
@@ -4390,13 +4399,22 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             "ofEntries" => Ok(quote! { {
                                 let mut __map = JMap::new();
                                 for __e in [#(#args_ts),*] {
-                                    __map.put(__e.getKey(), __e.getValue());
+                                    if __map.put(__e.getKey(), __e.getValue()).is_some() {
+                                        panic!("IllegalArgumentException: duplicate key in Map.ofEntries");
+                                    }
                                 }
                                 __map
                             } }),
                             "copyOf" => {
                                 let a = &args_ts[0];
-                                Ok(quote! { #a.clone() })
+                                Ok(quote! { {
+                                    let __src = &#a;
+                                    let mut __map = JMap::new();
+                                    for __e in __src.iter() {
+                                        __map.put(__e.0.clone(), __e.1.clone());
+                                    }
+                                    __map
+                                } })
                             }
                             _ => {
                                 let m = ident(method_name);

@@ -42,5 +42,15 @@ public class ImmutableCollections {
         List<String> copy = List.copyOf(list);
         System.out.println(copy.size());        // 3
         System.out.println(copy.get(2));        // gamma
+
+        // Set.copyOf(collection)
+        Set<Integer> setCopy = Set.copyOf(nums);
+        System.out.println(setCopy.size());     // 3
+        System.out.println(setCopy.contains(10)); // true
+
+        // Map.copyOf(map)
+        Map<String, Integer> mapCopy = Map.copyOf(m2);
+        System.out.println(mapCopy.size());     // 2
+        System.out.println(mapCopy.get("x"));   // 10
     }
 }
