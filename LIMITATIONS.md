@@ -161,6 +161,26 @@ Map `keySet()`/`values()`/`entrySet()` iteration is supported on `HashMap`,
 - `replaceAll(biFunction)` — transform all values in-place.
 All methods are available on `HashMap` and `TreeMap`.
 `LinkedHashMap` does not currently support this full mutation API.
+
+**Stage 26 additions (Immutable factory methods):**
+- `List.of(...)` — create an immutable-style list (backed by `JList`).
+- `Set.of(...)` — create an immutable-style set (backed by `JSet`).
+  Duplicate elements cause a panic with an `IllegalArgumentException`-style
+  message, matching Java's `Set.of` / `Set.copyOf` specification.
+- `Map.of(k1, v1, k2, v2, ...)` — create a map from key/value pairs.
+  Duplicate keys cause a panic with an `IllegalArgumentException`-style
+  message, matching Java's `Map.of` / `Map.ofEntries` specification.
+  An odd number of arguments is rejected at compile time with a codegen error.
+- `Map.entry(key, value)` — create a `Map.Entry` / `JMapEntry` pair.
+- `Map.ofEntries(Map.entry(...), ...)` — create a map from entry objects.
+- `List.copyOf(c)`, `Set.copyOf(c)`, `Map.copyOf(m)` — shallow clone only.
+  Current lowering only works when the input is already the corresponding
+  runtime collection type (for example, `JList` for `List.copyOf`,
+  `JSet` for `Set.copyOf`, `JMap` for `Map.copyOf`); this does not yet
+  implement full JDK `copyOf(...)` behavior for arbitrary collections/maps.
+All factory-method results are mutable in the Rust translation (immutability
+enforcement is not implemented).
+
 `Spliterator` has a minimal stub (`trySplit`, `estimateSize`,
 `characteristics`, `forEachRemaining`, `tryAdvance`).
 

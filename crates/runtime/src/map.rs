@@ -15,6 +15,11 @@ pub struct JMapEntry<K, V> {
 }
 
 impl<K: Clone, V: Clone> JMapEntry<K, V> {
+    /// Create a new `Map.Entry` pair, mirroring `Map.entry(key, value)`.
+    pub fn new(key: K, value: V) -> Self {
+        JMapEntry { key, value }
+    }
+
     #[allow(non_snake_case)]
     pub fn getKey(&self) -> K {
         self.key.clone()

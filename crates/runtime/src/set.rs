@@ -60,6 +60,23 @@ impl<T: Eq + std::hash::Hash + Clone> JSet<T> {
         self.inner.clear();
     }
 
+    /// Create a set from a `Vec<T>`, mirroring `Set.of(a, b, c)` /
+    /// `Set.copyOf(collection)`.
+    ///
+    /// # Panics
+    /// Panics with an `IllegalArgumentException`-style message if any
+    /// duplicate element is detected, matching Java's `Set.of` / `Set.copyOf`
+    /// specification.
+    pub fn from_vec(v: Vec<T>) -> Self {
+        let mut set = JSet::new();
+        for item in v {
+            if !set.add(item) {
+                panic!("IllegalArgumentException: duplicate element in Set.of / Set.copyOf");
+            }
+        }
+        set
+    }
+
     /// Iterator over set elements.
     pub fn iter(&self) -> std::collections::hash_set::Iter<'_, T> {
         self.inner.iter()

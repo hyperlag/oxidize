@@ -4319,6 +4319,109 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             }
                         };
                     }
+                    // List.of(...) / List.copyOf(c)
+                    if name == "List" {
+                        return match method_name.as_str() {
+                            "of" => {
+                                if args_ts.is_empty() {
+                                    Ok(quote! { JList::new() })
+                                } else {
+                                    Ok(quote! { JList::from_vec(vec![#(#args_ts),*]) })
+                                }
+                            }
+                            "copyOf" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JList::from_vec((#a).iter().cloned().collect()) })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JList::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // Set.of(...) / Set.copyOf(c)
+                    if name == "Set" {
+                        return match method_name.as_str() {
+                            "of" => {
+                                if args_ts.is_empty() {
+                                    Ok(quote! { JSet::new() })
+                                } else {
+                                    Ok(quote! { JSet::from_vec(vec![#(#args_ts),*]) })
+                                }
+                            }
+                            "copyOf" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { JSet::from_vec((#a).iter().cloned().collect()) })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JSet::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // Map.of(...) / Map.entry(k,v) / Map.ofEntries(...) / Map.copyOf(m)
+                    if name == "Map" {
+                        return match method_name.as_str() {
+                            "of" => {
+                                if args_ts.is_empty() {
+                                    Ok(quote! { JMap::new() })
+                                } else {
+                                    if !args_ts.len().is_multiple_of(2) {
+                                        return Err(CodegenError::Unsupported(
+                                            "Map.of requires an even number of arguments (key/value pairs)".to_string()
+                                        ));
+                                    }
+                                    // args come in key/value pairs; panic on duplicate keys
+                                    let pairs: Vec<TokenStream> = args_ts
+                                        .chunks(2)
+                                        .map(|pair| {
+                                            let k = &pair[0];
+                                            let v = &pair[1];
+                                            quote! {
+                                                if __map.put(#k, #v).is_some() {
+                                                    panic!("IllegalArgumentException: duplicate key in Map.of");
+                                                }
+                                            }
+                                        })
+                                        .collect();
+                                    Ok(quote! { {
+                                        let mut __map = JMap::new();
+                                        #(#pairs)*
+                                        __map
+                                    } })
+                                }
+                            }
+                            "entry" => {
+                                let k = &args_ts[0];
+                                let v = &args_ts[1];
+                                Ok(quote! { JMapEntry::new(#k, #v) })
+                            }
+                            "ofEntries" => Ok(quote! { {
+                                let mut __map = JMap::new();
+                                for __e in [#(#args_ts),*] {
+                                    if __map.put(__e.getKey(), __e.getValue()).is_some() {
+                                        panic!("IllegalArgumentException: duplicate key in Map.ofEntries");
+                                    }
+                                }
+                                __map
+                            } }),
+                            "copyOf" => {
+                                let a = &args_ts[0];
+                                Ok(quote! { {
+                                    let __src = &#a;
+                                    let mut __map = JMap::new();
+                                    for __e in __src.iter() {
+                                        __map.put(__e.0.clone(), __e.1.clone());
+                                    }
+                                    __map
+                                } })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JMap::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
                     // Arrays.asList / Arrays.sort / Arrays.fill / etc.
                     if name == "Arrays" {
                         return match method_name.as_str() {
