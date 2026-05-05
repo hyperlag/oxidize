@@ -1159,10 +1159,11 @@ fn resolve_method_return_type(
                 },
                 // Comparator instance methods all return Comparator
                 "Comparator" => match method_name {
-                    "reversed" | "thenComparing" | "thenComparingInt"
-                    | "thenComparingLong" | "thenComparingDouble" => {
-                        return IrType::Class("Comparator".to_owned())
-                    }
+                    "reversed"
+                    | "thenComparing"
+                    | "thenComparingInt"
+                    | "thenComparingLong"
+                    | "thenComparingDouble" => return IrType::Class("Comparator".to_owned()),
                     _ => {}
                 },
                 // File methods
