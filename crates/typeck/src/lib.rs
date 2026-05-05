@@ -1153,10 +1153,8 @@ fn resolve_method_return_type(
                     _ => {}
                 },
                 // ArrayList / List — stream() returns a JStream
-                "ArrayList" | "List" => {
-                    if method_name == "stream" {
-                        return IrType::Class("JStream".to_owned());
-                    }
+                "ArrayList" | "List" if method_name == "stream" => {
+                    return IrType::Class("JStream".to_owned());
                 }
                 // Comparator instance methods all return Comparator
                 "Comparator" => match method_name {
