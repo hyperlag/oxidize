@@ -39,8 +39,9 @@ class ComparatorApi {
         sorted.sort(Comparator.naturalOrder().reversed());
         System.out.println(sorted.get(0));  // date (from [apple, banana, cherry, date] reversed)
 
-        // thenComparing (key-extractor overload): naturalOrder then by length as secondary key
-        // All strings are distinct so secondary key is never reached here
+        // thenComparing (key-extractor overload): naturalOrder then by length as secondary key.
+        // All strings have distinct natural ordering so the secondary key does not change
+        // the final result, but the code path is still exercised during sorting.
         sorted.sort(Comparator.naturalOrder().thenComparing(s -> s.length()));
         System.out.println(sorted.get(0));  // apple
 

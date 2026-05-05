@@ -118,8 +118,11 @@ pub fn compare_reversed<T>(x: &T, y: &T, cmp: impl Fn(&T, &T) -> i32) -> i32 {
 pub fn compare_by_key_f64<T>(x: &T, y: &T, key: impl Fn(&T) -> f64) -> i32 {
     let kx = key(x);
     let ky = key(y);
-    kx.partial_cmp(&ky)
-        .unwrap_or(std::cmp::Ordering::Less) as i32
+    match kx.partial_cmp(&ky).unwrap_or(std::cmp::Ordering::Less) {
+        std::cmp::Ordering::Less => -1,
+        std::cmp::Ordering::Equal => 0,
+        std::cmp::Ordering::Greater => 1,
+    }
 }
 
 /// Compose two comparators: primary first, secondary key on tie.
