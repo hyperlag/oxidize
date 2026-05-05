@@ -39,8 +39,20 @@ class ComparatorApi {
         sorted.sort(Comparator.naturalOrder().reversed());
         System.out.println(sorted.get(0));  // date (from [apple, banana, cherry, date] reversed)
 
-        // thenComparing: naturalOrder then by length as secondary key
+        // thenComparing (key-extractor overload): naturalOrder then by length as secondary key
+        // All strings are distinct so secondary key is never reached here
         sorted.sort(Comparator.naturalOrder().thenComparing(s -> s.length()));
         System.out.println(sorted.get(0));  // apple
+
+        // thenComparing (comparator overload) tie-break exercised:
+        // "ab" and "ba" have equal length (primary key), so the
+        // secondary natural-order comparator determines "ab" < "ba".
+        List<String> ties = new ArrayList<>();
+        ties.add("ba");
+        ties.add("c");
+        ties.add("ab");
+        ties.sort(Comparator.comparing(s -> s.length()).thenComparing(Comparator.naturalOrder()));
+        System.out.println(ties.get(0));  // c   (length 1, shortest)
+        System.out.println(ties.get(1));  // ab  (length 2, "ab" < "ba" by natural order)
     }
 }

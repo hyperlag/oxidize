@@ -110,6 +110,18 @@ pub fn compare_reversed<T>(x: &T, y: &T, cmp: impl Fn(&T, &T) -> i32) -> i32 {
     cmp(y, x)
 }
 
+/// Compare two items by an f64 key function.
+/// Used by generated Comparator.comparingDouble(keyFn) code.
+/// Uses `partial_cmp` to handle f64 (which does not implement `Ord`).
+/// NaN is treated as less than any non-NaN value, matching Java's Double.compare semantics.
+#[inline]
+pub fn compare_by_key_f64<T>(x: &T, y: &T, key: impl Fn(&T) -> f64) -> i32 {
+    let kx = key(x);
+    let ky = key(y);
+    kx.partial_cmp(&ky)
+        .unwrap_or(std::cmp::Ordering::Less) as i32
+}
+
 /// Compose two comparators: primary first, secondary key on tie.
 /// Used by generated Comparator.thenComparing(keyFn) code.
 #[inline]
@@ -124,6 +136,23 @@ pub fn compare_then<T, K: Ord>(
         r
     } else {
         compare_by_key(x, y, key)
+    }
+}
+
+/// Compose two comparators: primary first, secondary comparator on tie.
+/// Used by generated Comparator.thenComparing(Comparator) code.
+#[inline]
+pub fn compare_then_cmp<T>(
+    x: &T,
+    y: &T,
+    primary: impl Fn(&T, &T) -> i32,
+    secondary: impl Fn(&T, &T) -> i32,
+) -> i32 {
+    let r = primary(x, y);
+    if r != 0 {
+        r
+    } else {
+        secondary(x, y)
     }
 }
 

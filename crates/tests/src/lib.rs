@@ -1712,7 +1712,7 @@ Expression calculator tests complete",
     fn test_comparator_api() {
         check(
             "ComparatorApi.java",
-            "apple\ndate\ndate\ndate\ndate\napple",
+            "apple\ndate\ndate\ndate\ndate\napple\nc\nab",
         );
     }
 }
