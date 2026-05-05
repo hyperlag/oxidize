@@ -93,6 +93,40 @@ pub use timer::{JTimer, JTimerTask};
 pub use tree_map::JTreeMap;
 pub use tree_set::JTreeSet;
 
+/// Compare two items by a key function. Used by generated Comparator.comparing(keyFn) code.
+/// The key function receives a reference to each element; Rust can infer `T` from the
+/// references `x` and `y`, which fixes the type-inference problem for inline closures.
+#[inline]
+pub fn compare_by_key<T, K: Ord>(x: &T, y: &T, key: impl Fn(&T) -> K) -> i32 {
+    let kx = key(x);
+    let ky = key(y);
+    kx.cmp(&ky) as i32
+}
+
+/// Reverse a comparator result. Used by generated Comparator.reversed() code.
+/// Rust infers `T` from `x: &T`, which then constrains the `cmp` closure's parameter types.
+#[inline]
+pub fn compare_reversed<T>(x: &T, y: &T, cmp: impl Fn(&T, &T) -> i32) -> i32 {
+    cmp(y, x)
+}
+
+/// Compose two comparators: primary first, secondary key on tie.
+/// Used by generated Comparator.thenComparing(keyFn) code.
+#[inline]
+pub fn compare_then<T, K: Ord>(
+    x: &T,
+    y: &T,
+    cmp: impl Fn(&T, &T) -> i32,
+    key: impl Fn(&T) -> K,
+) -> i32 {
+    let r = cmp(x, y);
+    if r != 0 {
+        r
+    } else {
+        compare_by_key(x, y, key)
+    }
+}
+
 /// Convenience re-export of all runtime types.
 pub mod prelude {
     pub use super::{

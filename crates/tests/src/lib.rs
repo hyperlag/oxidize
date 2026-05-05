@@ -1705,4 +1705,14 @@ Expression calculator tests complete",
     fn test_local_class_capture() {
         check("LocalClassCapture.java", "105\n142\nresult=107");
     }
+
+    // ── Stage 27 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_comparator_api() {
+        check(
+            "ComparatorApi.java",
+            "apple\ndate\ndate\ndate\ndate\napple",
+        );
+    }
 }

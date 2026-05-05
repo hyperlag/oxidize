@@ -4474,6 +4474,23 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             }
                         };
                     }
+                    // Comparator.naturalOrder() / reverseOrder() / comparing(keyFn)
+                    if name == "Comparator" {
+                        return match method_name.as_str() {
+                            "naturalOrder" => Ok(quote! { |a, b| a.cmp(b) as i32 }),
+                            "reverseOrder" => Ok(quote! { |a, b| b.cmp(a) as i32 }),
+                            "comparing" | "comparingInt" | "comparingLong" | "comparingDouble" => {
+                                let f = &args_ts[0];
+                                Ok(quote! {
+                                    |a, b| java_compat::compare_by_key(a, b, #f)
+                                })
+                            }
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JComparator::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
                     // Stream.of(...) / Stream.empty()
                     if name == "Stream" {
                         return match method_name.as_str() {
@@ -4722,6 +4739,34 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 }
 
                 // Handle method overloads that need special dispatch.
+
+                // stream.sorted(cmp) with 1 arg → sorted_with
+                if method_name == "sorted" && args_ts.len() == 1 {
+                    let cmp = &args_ts[0];
+                    return Ok(quote! { (#recv_ts).sorted_with(#cmp) });
+                }
+
+                // list.sort(cmp) with 1 arg → sort_with
+                if method_name == "sort" && args_ts.len() == 1 {
+                    let cmp = &args_ts[0];
+                    return Ok(quote! { (#recv_ts).sort_with(#cmp) });
+                }
+
+                // comparator.thenComparing(keyFn) — compose comparators
+                if method_name == "thenComparing" && args_ts.len() == 1 {
+                    let f2 = &args_ts[0];
+                    return Ok(quote! {
+                        move |a, b| java_compat::compare_then(a, b, #recv_ts, #f2)
+                    });
+                }
+
+                // comparator.reversed() — negate the comparator
+                if method_name == "reversed" && args_ts.is_empty() {
+                    return Ok(quote! {
+                        move |a, b| java_compat::compare_reversed(a, b, #recv_ts)
+                    });
+                }
+
                 if method_name == "substring" && args_ts.len() == 2 {
                     let a = &args_ts[0];
                     let b = &args_ts[1];
