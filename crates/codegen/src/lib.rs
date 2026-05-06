@@ -4474,6 +4474,28 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             }
                         };
                     }
+                    // Comparator.naturalOrder() / reverseOrder() / comparing(keyFn)
+                    if name == "Comparator" {
+                        return match method_name.as_str() {
+                            "naturalOrder" => Ok(quote! { |a, b| a.cmp(b) as i32 }),
+                            "reverseOrder" => Ok(quote! { |a, b| b.cmp(a) as i32 }),
+                            "comparing" | "comparingInt" | "comparingLong" => {
+                                let f = &args_ts[0];
+                                Ok(quote! {
+                                    |a, b| java_compat::compare_by_key(a, b, #f)
+                                })
+                            }
+                            "comparingDouble" => {
+                                let f = &args_ts[0];
+                                Ok(quote! {
+                                    |a, b| java_compat::compare_by_key_f64(a, b, #f)
+                                })
+                            }
+                            _ => Err(CodegenError::Unsupported(format!(
+                                "Comparator.{method_name} is not supported"
+                            ))),
+                        };
+                    }
                     // Stream.of(...) / Stream.empty()
                     if name == "Stream" {
                         return match method_name.as_str() {
@@ -4722,6 +4744,56 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 }
 
                 // Handle method overloads that need special dispatch.
+
+                // stream.sorted(cmp) with 1 arg → sorted_with (only for JStream receivers)
+                if method_name == "sorted"
+                    && args_ts.len() == 1
+                    && type_name_matches(recv.ty(), "JStream")
+                {
+                    let cmp = &args_ts[0];
+                    return Ok(quote! { (#recv_ts).sorted_with(#cmp) });
+                }
+
+                // list.sort(cmp) with 1 arg → sort_with (only for List/ArrayList receivers)
+                if method_name == "sort"
+                    && args_ts.len() == 1
+                    && (type_name_matches(recv.ty(), "ArrayList")
+                        || type_name_matches(recv.ty(), "List"))
+                {
+                    let cmp = &args_ts[0];
+                    return Ok(quote! { (#recv_ts).sort_with(#cmp) });
+                }
+
+                // comparator.thenComparing — only for Comparator receivers.
+                // Dispatches to compare_then_cmp when the argument is itself a
+                // comparator (typed as Comparator or a 2-param lambda), and to
+                // compare_then (key-extractor variant) otherwise.
+                if method_name == "thenComparing"
+                    && args_ts.len() == 1
+                    && type_name_matches(recv.ty(), "Comparator")
+                {
+                    let f2 = &args_ts[0];
+                    if args.first().map(is_comparator_expr).unwrap_or(false) {
+                        return Ok(quote! {
+                            move |a, b| java_compat::compare_then_cmp(a, b, #recv_ts, #f2)
+                        });
+                    } else {
+                        return Ok(quote! {
+                            move |a, b| java_compat::compare_then(a, b, #recv_ts, #f2)
+                        });
+                    }
+                }
+
+                // comparator.reversed() — only for Comparator receivers
+                if method_name == "reversed"
+                    && args_ts.is_empty()
+                    && type_name_matches(recv.ty(), "Comparator")
+                {
+                    return Ok(quote! {
+                        move |a, b| java_compat::compare_reversed(a, b, #recv_ts)
+                    });
+                }
+
                 if method_name == "substring" && args_ts.len() == 2 {
                     let a = &args_ts[0];
                     let b = &args_ts[1];
@@ -6350,6 +6422,18 @@ fn type_name_matches(ty: &IrType, name: &str) -> bool {
         IrType::Generic { base, .. } => type_name_matches(base, name),
         _ => false,
     }
+}
+
+/// Check if an IrExpr is a Comparator — either typed as Comparator (e.g. from a
+/// `Comparator.*` factory call) or a 2-parameter lambda (anonymous comparator).
+fn is_comparator_expr(expr: &IrExpr) -> bool {
+    if type_name_matches(expr.ty(), "Comparator") {
+        return true;
+    }
+    if let IrExpr::Lambda { params, .. } = expr {
+        return params.len() == 2;
+    }
+    false
 }
 
 fn ident(name: &str) -> Ident {

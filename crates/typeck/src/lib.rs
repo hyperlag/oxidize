@@ -968,6 +968,16 @@ fn resolve_enum_method_type(
     }
 }
 
+/// Extract the base class name from a type, handling both `Class(name)` and
+/// `Generic { base: Class(name), .. }`. Returns `None` for all other types.
+fn type_class_name(ty: &IrType) -> Option<&str> {
+    match ty {
+        IrType::Class(name) => Some(name.as_str()),
+        IrType::Generic { base, .. } => type_class_name(base),
+        _ => None,
+    }
+}
+
 fn resolve_method_return_type(
     receiver: Option<&IrExpr>,
     method_name: &str,
@@ -997,6 +1007,9 @@ fn resolve_method_return_type(
                 "of" | "ofNullable" | "empty" => IrType::Class("Optional".to_owned()),
                 _ => IrType::Unknown,
             };
+        }
+        if name == "Comparator" {
+            return IrType::Class("Comparator".to_owned());
         }
         if name == "Pattern" {
             return match method_name {
@@ -1037,8 +1050,8 @@ fn resolve_method_return_type(
 
     // java.util.concurrent / Thread method return types
     if let Some(recv) = receiver {
-        if let IrType::Class(class_name) = recv.ty() {
-            match class_name.as_str() {
+        if let Some(class_name) = type_class_name(recv.ty()) {
+            match class_name {
                 "AtomicInteger" => match method_name {
                     "get" | "getAndIncrement" | "incrementAndGet" | "getAndDecrement"
                     | "decrementAndGet" | "getAndAdd" | "addAndGet" | "intValue" => {
@@ -1137,6 +1150,19 @@ fn resolve_method_return_type(
                     }
                     "collect_to_list" | "toArray" => return IrType::Unknown,
                     "findFirst" => return IrType::Unknown,
+                    _ => {}
+                },
+                // ArrayList / List — stream() returns a JStream
+                "ArrayList" | "List" if method_name == "stream" => {
+                    return IrType::Class("JStream".to_owned());
+                }
+                // Comparator instance methods all return Comparator
+                "Comparator" => match method_name {
+                    "reversed"
+                    | "thenComparing"
+                    | "thenComparingInt"
+                    | "thenComparingLong"
+                    | "thenComparingDouble" => return IrType::Class("Comparator".to_owned()),
                     _ => {}
                 },
                 // File methods
@@ -1273,7 +1299,7 @@ fn resolve_method_return_type(
     // Qualified call — look in the receiver's class.
     if let Some(recv) = receiver {
         let recv_ty = recv.ty();
-        if let IrType::Class(class_name) = recv_ty {
+        if let Some(class_name) = type_class_name(recv_ty) {
             if let Some(recv_cls) = class_map.get(class_name) {
                 if let Some(ty) = lookup_method_return_type(method_name, recv_cls, class_map) {
                     return ty;

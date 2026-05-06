@@ -157,6 +157,27 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
     }
 }
 
+impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
+    /// Java `stream.sorted(Comparator)` — sort with a custom comparator closure.
+    /// The comparator follows Java convention: negative / zero / positive i32.
+    pub fn sorted_with<F>(mut self, cmp: F) -> Self
+    where
+        F: Fn(&T, &T) -> i32,
+    {
+        self.data.sort_by(|a, b| {
+            let r = cmp(a, b);
+            if r < 0 {
+                std::cmp::Ordering::Less
+            } else if r > 0 {
+                std::cmp::Ordering::Greater
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        });
+        self
+    }
+}
+
 impl<T: Clone + Default + std::fmt::Debug + Ord + 'static> JStream<T> {
     /// Java `stream.sorted()`.
     pub fn sorted(mut self) -> Self {
