@@ -71,6 +71,65 @@ impl<T: Clone + Default + std::fmt::Debug> JOptional<T> {
             inner: self.inner.clone().map(f),
         }
     }
+
+    /// Java `opt.flatMap(mapper)` — monadic bind.
+    pub fn flatMap<U, F>(&self, f: F) -> JOptional<U>
+    where
+        U: Clone + Default + std::fmt::Debug,
+        F: Fn(T) -> JOptional<U>,
+    {
+        match &self.inner {
+            Some(x) => f(x.clone()),
+            None => JOptional::empty(),
+        }
+    }
+
+    /// Java `opt.orElseGet(supplier)` — lazy default.
+    pub fn orElseGet<F: FnOnce() -> T>(&self, supplier: F) -> T {
+        self.inner.clone().unwrap_or_else(supplier)
+    }
+
+    /// Java `opt.orElseThrow()` (no-arg, Java 10+) — panics if empty.
+    pub fn orElseThrow(&self) -> T {
+        self.inner
+            .clone()
+            .unwrap_or_else(|| panic!("JException:NoSuchElementException:No value present"))
+    }
+
+    /// Java `opt.orElseThrow(exceptionSupplier)` — calls supplier to get a message, then panics.
+    ///
+    /// The supplier must return a `String` that becomes the exception message.
+    /// Codegen maps `opt.orElseThrow(supplier)` to this method.
+    pub fn orElseThrowWith<F: FnOnce() -> String>(&self, msg_fn: F) -> T {
+        self.inner
+            .clone()
+            .unwrap_or_else(|| panic!("JException:NoSuchElementException:{}", msg_fn()))
+    }
+
+    /// Java `opt.ifPresentOrElse(consumer, emptyAction)` (Java 9+).
+    pub fn ifPresentOrElse<F: Fn(&T), R: Fn()>(&self, consumer: F, empty_action: R) {
+        match &self.inner {
+            Some(x) => consumer(x),
+            None => empty_action(),
+        }
+    }
+
+    /// Java `opt.or(supplier)` — return self if present, otherwise call supplier (Java 9+).
+    pub fn or<F: FnOnce() -> JOptional<T>>(&self, supplier: F) -> JOptional<T> {
+        if self.inner.is_some() {
+            self.clone()
+        } else {
+            supplier()
+        }
+    }
+
+    /// Java `opt.stream()` — a stream of 0 or 1 elements (Java 9+).
+    pub fn stream(&self) -> crate::stream::JStream<T> {
+        match &self.inner {
+            Some(x) => crate::stream::JStream::new(vec![x.clone()]),
+            None => crate::stream::JStream::new(vec![]),
+        }
+    }
 }
 
 impl<T: Clone + Default + std::fmt::Debug + std::fmt::Display> std::fmt::Display for JOptional<T> {

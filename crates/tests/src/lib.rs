@@ -1715,4 +1715,14 @@ Expression calculator tests complete",
             "apple\ndate\ndate\ndate\ndate\napple\nc\nab",
         );
     }
+
+    // ── Stage 28 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_optional_chain() {
+        check(
+            "OptionalChain.java",
+            "HELLO\nhello world\nfalse\nlazy\nhello\nhello\ncaught empty\nhello\ncaught with msg\npresent: hello\nabsent\nfallback\nhello\n1\nhello\n0",
+        );
+    }
 }
