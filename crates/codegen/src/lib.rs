@@ -4766,7 +4766,11 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
 
                 // Optional.orElseThrow(supplier) with 1 arg → orElseThrowWith
                 // The 0-arg form goes through the default fallthrough unchanged.
-                if method_name == "orElseThrow" && args_ts.len() == 1 {
+                // Guard on receiver type to avoid accidental rewrites for other types.
+                if method_name == "orElseThrow"
+                    && args_ts.len() == 1
+                    && type_name_matches(recv.ty(), "Optional")
+                {
                     let supplier = &args_ts[0];
                     return Ok(quote! {
                         (#recv_ts).orElseThrowWith(|| format!("{}", (#supplier)()))

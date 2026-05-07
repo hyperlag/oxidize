@@ -115,6 +115,18 @@ impl JString {
         *self.0 == *other.0
     }
 
+    /// Java `String.toUpperCase()`.
+    #[allow(non_snake_case)]
+    pub fn toUpperCase(&self) -> JString {
+        JString(Arc::from(self.0.to_uppercase().into_boxed_str()))
+    }
+
+    /// Java `String.toLowerCase()`.
+    #[allow(non_snake_case)]
+    pub fn toLowerCase(&self) -> JString {
+        JString(Arc::from(self.0.to_lowercase().into_boxed_str()))
+    }
+
     // ── Java 11+ String methods ───────────────────────────────────────────
 
     /// Java `String.strip()` — Unicode-aware whitespace trimming.
@@ -132,18 +144,6 @@ impl JString {
     #[allow(non_snake_case)]
     pub fn stripTrailing(&self) -> JString {
         JString::from(self.0.trim_end())
-    }
-
-    /// Java `String.toUpperCase()`.
-    #[allow(non_snake_case)]
-    pub fn toUpperCase(&self) -> JString {
-        JString::from(self.0.to_uppercase().as_str())
-    }
-
-    /// Java `String.toLowerCase()`.
-    #[allow(non_snake_case)]
-    pub fn toLowerCase(&self) -> JString {
-        JString::from(self.0.to_lowercase().as_str())
     }
 
     /// Java `String.isBlank()` — true if empty or contains only whitespace.

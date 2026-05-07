@@ -98,9 +98,8 @@ impl<T: Clone + Default + std::fmt::Debug> JOptional<T> {
 
     /// Java `opt.orElseThrow(exceptionSupplier)` — calls supplier to get a message, then panics.
     ///
-    /// The supplier is expected to return a displayable value whose string form
-    /// becomes the exception message.  Codegen maps `opt.orElseThrow(supplier)`
-    /// to this method when the supplier produces a `JString` / printable type.
+    /// The supplier must return a `String` that becomes the exception message.
+    /// Codegen maps `opt.orElseThrow(supplier)` to this method.
     pub fn orElseThrowWith<F: FnOnce() -> String>(&self, msg_fn: F) -> T {
         self.inner
             .clone()

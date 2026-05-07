@@ -1722,7 +1722,7 @@ Expression calculator tests complete",
     fn test_optional_chain() {
         check(
             "OptionalChain.java",
-            "HELLO\nhello world\nfalse\nlazy\nhello\nhello\ncaught empty\npresent: hello\nabsent\nfallback\nhello\n1\nhello\n0",
+            "HELLO\nhello world\nfalse\nlazy\nhello\nhello\ncaught empty\nhello\ncaught with msg\npresent: hello\nabsent\nfallback\nhello\n1\nhello\n0",
         );
     }
 }

@@ -38,6 +38,18 @@ class OptionalChain {
             System.out.println("caught empty");  // caught empty
         }
 
+        // orElseThrow(supplier) on present — returns value, supplier not called
+        String throwWithPresent = opt.orElseThrow(() -> "should not be thrown");
+        System.out.println(throwWithPresent);  // hello
+
+        // orElseThrow(supplier) on empty — calls supplier for message, then throws
+        try {
+            empty.orElseThrow(() -> "custom message");
+            System.out.println("no throw");
+        } catch (Exception e) {
+            System.out.println("caught with msg");  // caught with msg
+        }
+
         // ifPresentOrElse — present branch
         opt.ifPresentOrElse(
             s -> System.out.println("present: " + s),
