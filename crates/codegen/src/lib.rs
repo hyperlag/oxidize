@@ -4764,6 +4764,15 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     return Ok(quote! { (#recv_ts).sort_with(#cmp) });
                 }
 
+                // Optional.orElseThrow(supplier) with 1 arg → orElseThrowWith
+                // The 0-arg form goes through the default fallthrough unchanged.
+                if method_name == "orElseThrow" && args_ts.len() == 1 {
+                    let supplier = &args_ts[0];
+                    return Ok(quote! {
+                        (#recv_ts).orElseThrowWith(|| format!("{}", (#supplier)()))
+                    });
+                }
+
                 // comparator.thenComparing — only for Comparator receivers.
                 // Dispatches to compare_then_cmp when the argument is itself a
                 // comparator (typed as Comparator or a 2-param lambda), and to

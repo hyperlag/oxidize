@@ -134,6 +134,18 @@ impl JString {
         JString::from(self.0.trim_end())
     }
 
+    /// Java `String.toUpperCase()`.
+    #[allow(non_snake_case)]
+    pub fn toUpperCase(&self) -> JString {
+        JString::from(self.0.to_uppercase().as_str())
+    }
+
+    /// Java `String.toLowerCase()`.
+    #[allow(non_snake_case)]
+    pub fn toLowerCase(&self) -> JString {
+        JString::from(self.0.to_lowercase().as_str())
+    }
+
     /// Java `String.isBlank()` — true if empty or contains only whitespace.
     #[allow(non_snake_case)]
     pub fn isBlank(&self) -> bool {
