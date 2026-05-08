@@ -207,7 +207,7 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             JConcurrentHashMap, JCopyOnWriteArrayList, JThreadLocal,
             JExecutorService, JExecutors, JFuture, JCompletableFuture, JTimeUnit,
             JOptional, JStringBuilder, JBigInteger, JPattern, JMatcher,
-            JLocalDate, JFile, JStream,
+            JLocalDate, JFile, JStream, JIntSummaryStatistics,
             JLocalTime, JLocalDateTime, JInstant, JDuration, JPeriod, JDateTimeFormatter,
             JLinkedList, JPriorityQueue, JTreeMap, JTreeSet,
             JLinkedHashMap, JLinkedHashSet, JIterator, JMapEntry,
@@ -4721,6 +4721,40 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             let gb_args = gb_args_result?;
                             let clf = &gb_args[0];
                             return Ok(quote! { (#recv_ts).collect_grouping_by(#clf) });
+                        }
+                        // Collectors.partitioningBy(pred)
+                        if let Some(pb_args_result) = collectors_one_fn_arg(arg, "partitioningBy") {
+                            let pb_args = pb_args_result?;
+                            let pred = &pb_args[0];
+                            return Ok(quote! { (#recv_ts).collect_partition_by(#pred) });
+                        }
+                        // Collectors.toUnmodifiableMap(keyFn, valFn) — same as toMap
+                        if let Some(um_args_result) =
+                            collectors_two_fn_args(arg, "toUnmodifiableMap")
+                        {
+                            let um_args = um_args_result?;
+                            let kf = &um_args[0];
+                            let vf = &um_args[1];
+                            return Ok(quote! { (#recv_ts).collect_to_map(#kf, #vf) });
+                        }
+                        // Collectors.averagingInt(mapper)
+                        if let Some(ai_args_result) = collectors_one_fn_arg(arg, "averagingInt") {
+                            let ai_args = ai_args_result?;
+                            let mapper = &ai_args[0];
+                            return Ok(quote! { (#recv_ts).collect_averaging_int(#mapper) });
+                        }
+                        // Collectors.averagingDouble(mapper)
+                        if let Some(ad_args_result) = collectors_one_fn_arg(arg, "averagingDouble")
+                        {
+                            let ad_args = ad_args_result?;
+                            let mapper = &ad_args[0];
+                            return Ok(quote! { (#recv_ts).collect_averaging_double(#mapper) });
+                        }
+                        // Collectors.summarizingInt(mapper)
+                        if let Some(si_args_result) = collectors_one_fn_arg(arg, "summarizingInt") {
+                            let si_args = si_args_result?;
+                            let mapper = &si_args[0];
+                            return Ok(quote! { (#recv_ts).collect_summarizing_int(#mapper) });
                         }
                     }
                 }

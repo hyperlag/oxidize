@@ -181,6 +181,28 @@ All methods are available on `HashMap` and `TreeMap`.
 All factory-method results are mutable in the Rust translation (immutability
 enforcement is not implemented).
 
+**Stage 27 additions (Comparator API):**
+- `Comparator.naturalOrder()` / `Comparator.reverseOrder()` — natural-order and reverse-order closures.
+- `Comparator.comparing(keyFn)` / `Comparator.comparingInt(keyFn)` / `Comparator.comparingDouble(keyFn)` — key-extraction comparators.
+- `.reversed()` — flips an existing comparator.
+- `.thenComparing(otherCmp)` / `.thenComparing(keyFn)` — chained tie-breaking.
+- `stream.sorted(comparator)` / `list.sort(comparator)` — sort with a custom `Comparator`.
+
+**Stage 28 additions (Optional completeness):**
+- `Optional.orElseGet(supplier)` — lazy default.
+- `Optional.orElseThrow()` — throws `NoSuchElementException` if empty (catchable via `catch (Exception e)`).
+- `Optional.orElseThrow(exceptionSupplier)` — throws with a custom message.
+- `Optional.flatMap(mapper)` — monadic bind to another `Optional`.
+- `Optional.ifPresentOrElse(consumer, emptyAction)` — branch on presence or absence.
+- `Optional.or(supplier)` — fall back to another `Optional` if empty.
+- `Optional.stream()` — 0- or 1-element `Stream`.
+
+**Stage 29 additions (Collectors completeness):**
+- `Collectors.partitioningBy(pred)` — splits into `Map<Boolean, List<T>>` with `true`/`false` keys.
+- `Collectors.toUnmodifiableMap(keyFn, valFn)` — alias to `toMap` (immutability not enforced at runtime).
+- `Collectors.averagingInt(mapper)` / `Collectors.averagingDouble(mapper)` — return `double`.
+- `Collectors.summarizingInt(mapper)` — returns `IntSummaryStatistics` with `getCount()`, `getSum()`, `getMin()`, `getMax()`, `getAverage()`.
+
 `Spliterator` has a minimal stub (`trySplit`, `estimateSize`,
 `characteristics`, `forEachRemaining`, `tryAdvance`).
 
@@ -269,7 +291,8 @@ reads `.properties`-formatted content. Methods: `getString(key)`,
 
 Additionally supported: `String.format()` (specifiers: `%s`, `%d`, `%f`, `%e`, `%x`, `%o`,
 `%b`, `%n`, `%%`; limited support for width, precision, and flags `-` and `0`),
-`String.join()`, `System.out.printf()`, `Properties` (`load_string`, `getProperty`,
+`String.join()`, `String.toUpperCase()`, `String.toLowerCase()`, `System.out.printf()`,
+`Properties` (`load_string`, `getProperty`,
 `getProperty` with default, `setProperty`, `containsKey`, `stringPropertyNames`, `size`,
 `isEmpty`), `Timer` / `TimerTask` (one-shot and
 repeating scheduled tasks with cancel/purge).

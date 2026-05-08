@@ -881,8 +881,12 @@ try-with-resources (desugared to `finally` + `close()`).
 
 ### Standard library
 
-`Math`, `StringBuilder`, `Optional<T>`, `Stream<T>`, regex `Pattern`/`Matcher`,
+`Math`, `StringBuilder`, `Optional<T>` (full API incl. `orElseGet`, `orElseThrow`, `flatMap`, `or`, `stream`),
+`Stream<T>`, `Collectors` (`toList/toSet/joining/toMap/toUnmodifiableMap/groupingBy/partitioningBy/counting/averagingInt/averagingDouble/summarizingInt`),
+`Comparator` (`naturalOrder`, `reverseOrder`, `comparing`, `comparingInt`, `reversed`, `thenComparing`),
+regex `Pattern`/`Matcher`,
 `BigInteger`, `BigDecimal`, `MathContext`, `String.format()`, `String.join()`,
+`String.toUpperCase()`, `String.toLowerCase()`,
 `System.out.printf()`, `System.exit/currentTimeMillis/nanoTime/getenv/getProperty`,
 `LocalDate/Time/DateTime`, `Instant`, `Duration`, `Period`, `DateTimeFormatter`,
 `ZonedDateTime`, `ZoneId`, `Clock`, `Properties`, `ResourceBundle`,
@@ -1030,7 +1034,7 @@ Rust source (.rs)
 | `codegen` | Converts the annotated IR into Rust token streams using `proc-macro2` and `quote!` |
 | `runtime` | `java-compat` crate — Rust implementations of Java standard library types |
 | `cli` | The `jtrans` binary — argument parsing, watch loop, incremental cache, source map writer |
-| `tests` | 179 differential integration tests (translate + compile + compare stdout) |
+| `tests` | 183 differential integration tests (translate + compile + compare stdout) |
 
 ### IR design
 

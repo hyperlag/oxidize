@@ -1115,15 +1115,40 @@ the result-carrying handle.
 
 ### Optional
 
-| Java                            | Rust                               |
-|---------------------------------|--------------------------------------|
-| `Optional.of(x)`               | `JOptional::of(x)`                  |
-| `Optional.empty()`             | `JOptional::empty()`                |
-| `Optional.ofNullable(x)`       | `JOptional::ofNullable(x)`          |
-| `opt.isPresent()`              | `opt.isPresent()`                    |
-| `opt.get()`                    | `opt.get()`                          |
-| `opt.orElse(default)`          | `opt.orElse(default)`                |
-| `opt.ifPresent(consumer)`      | `opt.ifPresent(consumer)`            |
+| Java                                          | Rust                                              |
+|-----------------------------------------------|---------------------------------------------------|
+| `Optional.of(x)`                             | `JOptional::of(x)`                               |
+| `Optional.empty()`                           | `JOptional::empty()`                             |
+| `Optional.ofNullable(x)`                     | `JOptional::ofNullable(x)`                       |
+| `opt.isPresent()`                            | `opt.isPresent()`                                |
+| `opt.isEmpty()`                              | `opt.isEmpty()`                                  |
+| `opt.get()`                                  | `opt.get()`                                      |
+| `opt.orElse(default)`                        | `opt.orElse(default)`                            |
+| `opt.orElseGet(supplier)`                    | `opt.orElseGet(supplier)`                        |
+| `opt.orElseThrow()`                          | `opt.orElseThrow()`                              |
+| `opt.orElseThrow(exceptionSupplier)`         | `opt.orElseThrowWith(\|\| msg)`                  |
+| `opt.ifPresent(consumer)`                    | `opt.ifPresent(consumer)`                        |
+| `opt.ifPresentOrElse(consumer, emptyAction)` | `opt.ifPresentOrElse(consumer, emptyAction)`     |
+| `opt.filter(predicate)`                      | `opt.filter(predicate)`                          |
+| `opt.map(mapper)`                            | `opt.map(mapper)`                                |
+| `opt.flatMap(mapper)`                        | `opt.flatMap(mapper)`                            |
+| `opt.or(supplier)`                           | `opt.or(supplier)`                               |
+| `opt.stream()`                               | `opt.stream()`                                   |
+
+### Comparator
+
+| Java                                            | Rust                                                         |
+|-------------------------------------------------|--------------------------------------------------------------|
+| `Comparator.naturalOrder()`                    | `\|a, b\| a.cmp(b) as i32`                                  |
+| `Comparator.reverseOrder()`                    | `\|a, b\| b.cmp(a) as i32`                                  |
+| `Comparator.comparing(keyFn)`                  | `\|a, b\| java_compat::compare_by_key(a, b, keyFn)`         |
+| `Comparator.comparingInt(keyFn)`               | `\|a, b\| java_compat::compare_by_key(a, b, keyFn)`         |
+| `Comparator.comparingDouble(keyFn)`            | `\|a, b\| java_compat::compare_by_key_f64(a, b, keyFn)`     |
+| `cmp.reversed()`                               | `move \|a, b\| java_compat::compare_reversed(a, b, cmp)`    |
+| `cmp.thenComparing(other)`                     | `move \|a, b\| java_compat::compare_then(a, b, cmp, other)` |
+| `cmp.thenComparing(keyFn)`                     | `move \|a, b\| java_compat::compare_then_cmp(a, b, cmp, keyFn)` |
+| `list.sort(cmp)`                               | `list.sort_with(cmp)`                                        |
+| `stream.sorted(cmp)`                           | `stream.sorted_with(cmp)`                                    |
 
 ### Stream API
 
@@ -1133,9 +1158,21 @@ the result-carrying handle.
 | `.filter(predicate)`           | `.filter(predicate)`                 |
 | `.map(function)`               | `.map(function)`                     |
 | `.sorted()`                    | `.sorted()`                          |
+| `.sorted(comparator)`          | `.sorted_with(comparator)`           |
 | `.distinct()`                  | `.distinct()`                        |
 | `.limit(n)`                    | `.limit(n)`                          |
 | `.collect(Collectors.toList())` | `.collect_to_list()`                |
+| `.collect(Collectors.toSet())`  | `.collect_to_set()`                 |
+| `.collect(Collectors.joining(sep))` | `.collect_joining(sep)`        |
+| `.collect(Collectors.joining(sep,pre,suf))` | `.collect_joining_full(sep,pre,suf)` |
+| `.collect(Collectors.toMap(kFn,vFn))` | `.collect_to_map(kFn,vFn)`   |
+| `.collect(Collectors.toUnmodifiableMap(kFn,vFn))` | `.collect_to_map(kFn,vFn)` |
+| `.collect(Collectors.groupingBy(fn))` | `.collect_grouping_by(fn)`   |
+| `.collect(Collectors.partitioningBy(pred))` | `.collect_partition_by(pred)` |
+| `.collect(Collectors.averagingInt(fn))` | `.collect_averaging_int(fn)` |
+| `.collect(Collectors.averagingDouble(fn))` | `.collect_averaging_double(fn)` |
+| `.collect(Collectors.summarizingInt(fn))` | `.collect_summarizing_int(fn)` |
+| `.collect(Collectors.counting())` | `.count()`                        |
 | `.forEach(consumer)`           | `.forEach(consumer)`                 |
 
 ### Regex (Pattern / Matcher)

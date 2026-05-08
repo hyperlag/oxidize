@@ -1725,4 +1725,14 @@ Expression calculator tests complete",
             "HELLO\nhello world\nfalse\nlazy\nhello\nhello\ncaught empty\nhello\ncaught with msg\npresent: hello\nabsent\nfallback\nhello\n1\nhello\n0",
         );
     }
+
+    // ── Stage 29 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_collectors_extra() {
+        check(
+            "CollectorsExtra.java",
+            "3\n3\n2\n1\n3.5\n9\n25\n6\n21\n1\n6",
+        );
+    }
 }

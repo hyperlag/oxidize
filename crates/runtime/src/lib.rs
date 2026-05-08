@@ -80,6 +80,7 @@ pub use regex_support::{JMatcher, JPattern};
 pub use resource_bundle::JResourceBundle;
 pub use set::JSet;
 pub use spliterator::JSpliterator;
+pub use stream::JIntSummaryStatistics;
 pub use stream::JStream;
 pub use string::jformat;
 pub use string::JString;
