@@ -80,6 +80,7 @@ pub use regex_support::{JMatcher, JPattern};
 pub use resource_bundle::JResourceBundle;
 pub use set::JSet;
 pub use spliterator::JSpliterator;
+pub use stream::JIntSummaryStatistics;
 pub use stream::JStream;
 pub use string::jformat;
 pub use string::JString;
@@ -168,13 +169,13 @@ pub mod prelude {
         JCondition, JCopyOnWriteArrayList, JCountDownLatch, JDateTimeFormatter, JDuration,
         JEnumMap, JEnumSet, JException, JExecutorService, JExecutors, JFile, JFileInputStream,
         JFileOutputStream, JFileReader, JFileWriter, JFiles, JFuture, JHttpClient, JHttpRequest,
-        JHttpRequestBuilder, JHttpResponse, JHttpURLConnection, JInstant, JIterator,
-        JLinkedHashMap, JLinkedHashSet, JLinkedList, JList, JLocalDate, JLocalDateTime, JLocalTime,
-        JMap, JMapEntry, JMatcher, JMathContext, JNull, JObject, JOptional, JPath, JPaths,
-        JPattern, JPeriod, JPrintWriter, JPriorityQueue, JProcess, JProcessBuilder, JProperties,
-        JReadLock, JReentrantLock, JReentrantReadWriteLock, JRoundingMode, JScanner, JSemaphore,
-        JServerSocket, JSet, JSocket, JSpliterator, JStream, JString, JStringBuilder, JThread,
-        JThreadLocal, JTimeUnit, JTimer, JTimerTask, JTreeMap, JTreeSet, JWriteLock, JZoneId,
-        JZonedDateTime, JURL,
+        JHttpRequestBuilder, JHttpResponse, JHttpURLConnection, JInstant, JIntSummaryStatistics,
+        JIterator, JLinkedHashMap, JLinkedHashSet, JLinkedList, JList, JLocalDate, JLocalDateTime,
+        JLocalTime, JMap, JMapEntry, JMatcher, JMathContext, JNull, JObject, JOptional, JPath,
+        JPaths, JPattern, JPeriod, JPrintWriter, JPriorityQueue, JProcess, JProcessBuilder,
+        JProperties, JReadLock, JReentrantLock, JReentrantReadWriteLock, JRoundingMode, JScanner,
+        JSemaphore, JServerSocket, JSet, JSocket, JSpliterator, JStream, JString, JStringBuilder,
+        JThread, JThreadLocal, JTimeUnit, JTimer, JTimerTask, JTreeMap, JTreeSet, JWriteLock,
+        JZoneId, JZonedDateTime, JURL,
     };
 }

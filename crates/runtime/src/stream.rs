@@ -8,6 +8,49 @@ use crate::map::JMap;
 use crate::set::JSet;
 use crate::string::JString;
 
+/// Java `IntSummaryStatistics` — produced by `Collectors.summarizingInt(fn)`.
+#[derive(Debug, Clone)]
+pub struct JIntSummaryStatistics {
+    count: i64,
+    sum: i64,
+    min: i32,
+    max: i32,
+}
+
+impl Default for JIntSummaryStatistics {
+    /// Match Java's `IntSummaryStatistics` default: `min = Integer.MAX_VALUE`, `max = Integer.MIN_VALUE`.
+    fn default() -> Self {
+        Self {
+            count: 0,
+            sum: 0,
+            min: i32::MAX,
+            max: i32::MIN,
+        }
+    }
+}
+
+impl JIntSummaryStatistics {
+    pub fn getCount(&self) -> i64 {
+        self.count
+    }
+    pub fn getSum(&self) -> i64 {
+        self.sum
+    }
+    pub fn getMin(&self) -> i32 {
+        self.min
+    }
+    pub fn getMax(&self) -> i32 {
+        self.max
+    }
+    pub fn getAverage(&self) -> f64 {
+        if self.count == 0 {
+            0.0
+        } else {
+            self.sum as f64 / self.count as f64
+        }
+    }
+}
+
 /// An ordered sequence supporting aggregate operations.
 ///
 /// Mapping: `java.util.stream.Stream<T>` → `JStream<T>`.
@@ -265,6 +308,74 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
             map.put(key, group);
         }
         map
+    }
+
+    /// Java `stream.collect(Collectors.partitioningBy(pred))`.
+    ///
+    /// Returns a `JMap<bool, JList<T>>` where `true` maps to elements that
+    /// satisfy the predicate and `false` maps to elements that do not.
+    pub fn collect_partition_by<F: FnMut(T) -> bool>(self, mut pred: F) -> JMap<bool, JList<T>> {
+        let mut trues: JList<T> = JList::new();
+        let mut falses: JList<T> = JList::new();
+        for item in self.data {
+            if pred(item.clone()) {
+                trues.add(item);
+            } else {
+                falses.add(item);
+            }
+        }
+        let mut map = JMap::new();
+        map.put(true, trues);
+        map.put(false, falses);
+        map
+    }
+
+    /// Java `stream.collect(Collectors.averagingInt(mapper))`.
+    pub fn collect_averaging_int<F: FnMut(T) -> i32>(self, mut mapper: F) -> f64 {
+        let count = self.data.len();
+        if count == 0 {
+            return 0.0;
+        }
+        let sum: i64 = self.data.into_iter().map(|x| mapper(x) as i64).sum();
+        sum as f64 / count as f64
+    }
+
+    /// Java `stream.collect(Collectors.averagingDouble(mapper))`.
+    pub fn collect_averaging_double<F: FnMut(T) -> f64>(self, mapper: F) -> f64 {
+        let count = self.data.len();
+        if count == 0 {
+            return 0.0;
+        }
+        let sum: f64 = self.data.into_iter().map(mapper).sum();
+        sum / count as f64
+    }
+
+    /// Java `stream.collect(Collectors.summarizingInt(mapper))`.
+    pub fn collect_summarizing_int<F: FnMut(T) -> i32>(
+        self,
+        mut mapper: F,
+    ) -> JIntSummaryStatistics {
+        let mut count = 0i64;
+        let mut sum = 0i64;
+        let mut min = i32::MAX;
+        let mut max = i32::MIN;
+        for item in self.data {
+            let v = mapper(item);
+            count += 1;
+            sum += v as i64;
+            if v < min {
+                min = v;
+            }
+            if v > max {
+                max = v;
+            }
+        }
+        JIntSummaryStatistics {
+            count,
+            sum,
+            min,
+            max,
+        }
     }
 }
 
