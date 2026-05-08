@@ -174,7 +174,7 @@ pub mod prelude {
         JMap, JMapEntry, JMatcher, JMathContext, JNull, JObject, JOptional, JPath, JPaths,
         JPattern, JPeriod, JPrintWriter, JPriorityQueue, JProcess, JProcessBuilder, JProperties,
         JReadLock, JReentrantLock, JReentrantReadWriteLock, JRoundingMode, JScanner, JSemaphore,
-        JServerSocket, JSet, JSocket, JSpliterator, JStream, JString, JStringBuilder, JThread,
+        JServerSocket, JSet, JSocket, JSpliterator, JIntSummaryStatistics, JStream, JString, JStringBuilder, JThread,
         JThreadLocal, JTimeUnit, JTimer, JTimerTask, JTreeMap, JTreeSet, JWriteLock, JZoneId,
         JZonedDateTime, JURL,
     };

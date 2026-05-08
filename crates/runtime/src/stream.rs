@@ -9,12 +9,24 @@ use crate::set::JSet;
 use crate::string::JString;
 
 /// Java `IntSummaryStatistics` — produced by `Collectors.summarizingInt(fn)`.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct JIntSummaryStatistics {
     count: i64,
     sum: i64,
     min: i32,
     max: i32,
+}
+
+impl Default for JIntSummaryStatistics {
+    /// Match Java's `IntSummaryStatistics` default: `min = Integer.MAX_VALUE`, `max = Integer.MIN_VALUE`.
+    fn default() -> Self {
+        Self {
+            count: 0,
+            sum: 0,
+            min: i32::MAX,
+            max: i32::MIN,
+        }
+    }
 }
 
 impl JIntSummaryStatistics {
@@ -357,10 +369,6 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
             if v > max {
                 max = v;
             }
-        }
-        if count == 0 {
-            min = 0;
-            max = 0;
         }
         JIntSummaryStatistics {
             count,

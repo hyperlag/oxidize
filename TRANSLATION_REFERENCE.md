@@ -1119,7 +1119,7 @@ the result-carrying handle.
 |-----------------------------------------------|---------------------------------------------------|
 | `Optional.of(x)`                             | `JOptional::of(x)`                               |
 | `Optional.empty()`                           | `JOptional::empty()`                             |
-| `Optional.ofNullable(x)`                     | `JOptional::ofNullable(x)`                       |
+| `Optional.ofNullable(x)`                     | `JOptional::of_nullable(x)`                      |
 | `opt.isPresent()`                            | `opt.isPresent()`                                |
 | `opt.isEmpty()`                              | `opt.isEmpty()`                                  |
 | `opt.get()`                                  | `opt.get()`                                      |
@@ -1145,8 +1145,8 @@ the result-carrying handle.
 | `Comparator.comparingInt(keyFn)`               | `\|a, b\| java_compat::compare_by_key(a, b, keyFn)`         |
 | `Comparator.comparingDouble(keyFn)`            | `\|a, b\| java_compat::compare_by_key_f64(a, b, keyFn)`     |
 | `cmp.reversed()`                               | `move \|a, b\| java_compat::compare_reversed(a, b, cmp)`    |
-| `cmp.thenComparing(other)`                     | `move \|a, b\| java_compat::compare_then(a, b, cmp, other)` |
-| `cmp.thenComparing(keyFn)`                     | `move \|a, b\| java_compat::compare_then_cmp(a, b, cmp, keyFn)` |
+| `cmp.thenComparing(other)`                     | `move \|a, b\| java_compat::compare_then_cmp(a, b, cmp, other)` |
+| `cmp.thenComparing(keyFn)`                     | `move \|a, b\| java_compat::compare_then(a, b, cmp, keyFn)` |
 | `list.sort(cmp)`                               | `list.sort_with(cmp)`                                        |
 | `stream.sorted(cmp)`                           | `stream.sorted_with(cmp)`                                    |
 
