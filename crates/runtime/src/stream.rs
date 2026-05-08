@@ -341,12 +341,12 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
     }
 
     /// Java `stream.collect(Collectors.averagingDouble(mapper))`.
-    pub fn collect_averaging_double<F: FnMut(T) -> f64>(self, mut mapper: F) -> f64 {
+    pub fn collect_averaging_double<F: FnMut(T) -> f64>(self, mapper: F) -> f64 {
         let count = self.data.len();
         if count == 0 {
             return 0.0;
         }
-        let sum: f64 = self.data.into_iter().map(|x| mapper(x)).sum();
+        let sum: f64 = self.data.into_iter().map(mapper).sum();
         sum / count as f64
     }
 
