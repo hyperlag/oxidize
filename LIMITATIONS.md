@@ -210,6 +210,11 @@ enforcement is not implemented).
 - `Math.random()` — now returns a real pseudo-random `double` in `[0.0, 1.0)` (was a `0.0` stub).
 - `ints(n, origin, bound)` — returns a `Stream<Integer>` of `n` values in `[origin, bound)`.
 
+**Stage 31 additions (String.formatted + StringJoiner):**
+- `String.formatted(args...)` — Java 15+ instance-method form of `String.format(this, args...)`; rewrites to `java_compat::jformat`.
+- `new StringJoiner(delimiter)` / `new StringJoiner(delimiter, prefix, suffix)` — full constructor support.
+- `StringJoiner.add(s)`, `merge(other)`, `setEmptyValue(s)`, `length()`, `toString()` — complete API.
+
 `Spliterator` has a minimal stub (`trySplit`, `estimateSize`,
 `characteristics`, `forEachRemaining`, `tryAdvance`).
 

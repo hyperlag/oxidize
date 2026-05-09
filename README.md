@@ -36,7 +36,7 @@ Rust source (.rs)
 | `codegen` | Lowers annotated IR to Rust token streams via `proc-macro2` / `quote` |
 | `runtime` | `java-compat` crate: runtime types (`JString`, `JArray`, `JList`, `JMap`, `JOptional`, `JStream`, `JThread`, etc.) |
 | `cli` | `jtrans` binary: CLI driver with `translate`, `scan`, `init-maven`, `init-gradle` subcommands, watch mode, incremental cache, and source map generation |
-| `tests` | Differential test suite (184 tests: translated Rust output vs. expected output) |
+| `tests` | Differential test suite (185 tests: translated Rust output vs. expected output) |
 
 ## Requirements
 
@@ -271,7 +271,7 @@ cargo test
 
 The differential integration tests in `crates/tests` compile and run each translated Rust
 program, then assert that stdout matches the expected output. No JDK is required to run
-the tests. The suite currently contains **184 differential tests**:
+the tests. The suite currently contains **185 differential tests**:
 
 ```bash
 cargo test -p tests -- --test-threads=4
@@ -355,12 +355,13 @@ cargo test -p tests -- --test-threads=4
 - `Math` static methods, `StringBuilder`, `Optional<T>` (full API: `of`, `empty`, `isPresent`, `isEmpty`, `get`, `orElse`, `orElseGet`, `orElseThrow`, `ifPresent`, `ifPresentOrElse`, `filter`, `map`, `flatMap`, `or`, `stream`), `Stream<T>` API
 - `Collectors`: `toList()`, `toSet()`, `toUnmodifiableList()`, `toMap()`, `toUnmodifiableMap()`, `groupingBy()`, `partitioningBy()`, `joining()`, `counting()`, `averagingInt()`, `averagingDouble()`, `summarizingInt()` (returns `IntSummaryStatistics`)
 - `Random` (seeded / unseeded, `nextInt()`, `nextInt(bound)`, `nextLong()`, `nextDouble()`, `nextBoolean()`, `nextGaussian()`), `ThreadLocalRandom.current()`, `Math.random()`
+- `StringJoiner` (delimiter, prefix/suffix, `add`, `merge`, `setEmptyValue`, `length`, `toString`)
 - `Pattern` / `Matcher` regex, `BigInteger`, `BigDecimal`, `MathContext`, `LocalDate`, `File`
 - `LocalTime`, `LocalDateTime`, `Instant`, `Duration`, `Period`, `DateTimeFormatter`
 - `ZonedDateTime`, `ZoneId`, `Clock`
 - `Properties` (`load_string`, `getProperty`, `getProperty` with default, `setProperty`, `stringPropertyNames`, `containsKey`, `size`, `isEmpty`)
 - `Timer` / `TimerTask` (one-shot and repeating scheduled tasks)
-- `String.format()`, `String.join()`, `String.toUpperCase()`, `String.toLowerCase()`, `System.out.printf()`
+- `String.format()`, `String.join()`, `String.formatted()` (Java 15+), `String.toUpperCase()`, `String.toLowerCase()`, `System.out.printf()`
 - `System.exit()`, `System.currentTimeMillis()`, `System.nanoTime()`, `System.getenv()`, `System.getProperty()`, `System.lineSeparator()`
 - Lambda expressions → Rust closures (including multi-statement block bodies)
 - Method references: static (`Class::method`), constructor (`Class::new`), bound instance (`obj::method`, `System.out::println`), multi-argument (`Integer::sum`, `Math::max`, user-defined binary method refs)

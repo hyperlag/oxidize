@@ -1745,4 +1745,14 @@ Expression calculator tests complete",
             "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue",
         );
     }
+
+    // ── Stage 31 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_string_joiner() {
+        check(
+            "StringJoinerTest.java",
+            "Hello, World!\nPi is 3.14\na, b, c\n[x, y]\nempty\n1-2-3-4\n7",
+        );
+    }
 }

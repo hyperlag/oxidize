@@ -1120,6 +1120,19 @@ the result-carrying handle.
 | `ThreadLocalRandom.current()`                | `JRandom::thread_local_current()`                |
 | `ThreadLocalRandom.current().nextInt(bound)` | `JRandom::thread_local_current().nextInt_bound(bound)` |
 
+### StringJoiner
+
+| Java                                          | Rust                                              |
+|-----------------------------------------------|---------------------------------------------------|
+| `new StringJoiner(delim)`                     | `JStringJoiner::new(delim)`                       |
+| `new StringJoiner(delim, prefix, suffix)`     | `JStringJoiner::new_with_fix(delim, prefix, suffix)` |
+| `sj.add(s)`                                   | `sj.add(s)`                                       |
+| `sj.merge(other)`                             | `sj.merge(other)`                                 |
+| `sj.setEmptyValue(s)`                         | `sj.setEmptyValue(s)`                             |
+| `sj.length()`                                 | `sj.length()`                                     |
+| `sj.toString()`                               | `sj.toString()`                                   |
+| `"fmt".formatted(a, b)`                       | `java_compat::jformat(fmt, &[format!("{}", a), format!("{}", b)])` |
+
 ### StringBuilder
 
 | Java                            | Rust                               |

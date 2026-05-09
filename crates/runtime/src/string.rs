@@ -397,6 +397,98 @@ pub fn jformat(fmt: JString, args: &[String]) -> JString {
     JString::from(result.as_str())
 }
 
+// ── StringJoiner ─────────────────────────────────────────────────────────────
+
+/// `java.util.StringJoiner` — joins strings with a delimiter and optional
+/// prefix/suffix.
+#[allow(non_snake_case)]
+#[derive(Debug, Clone)]
+pub struct JStringJoiner {
+    delimiter: String,
+    prefix: String,
+    suffix: String,
+    parts: Vec<String>,
+    empty_value: Option<String>,
+}
+
+#[allow(non_snake_case)]
+impl JStringJoiner {
+    /// `new StringJoiner(delimiter)`.
+    pub fn new(delim: JString) -> Self {
+        Self {
+            delimiter: delim.as_str().to_owned(),
+            prefix: String::new(),
+            suffix: String::new(),
+            parts: Vec::new(),
+            empty_value: None,
+        }
+    }
+
+    /// `new StringJoiner(delimiter, prefix, suffix)`.
+    pub fn new_with_fix(delim: JString, prefix: JString, suffix: JString) -> Self {
+        Self {
+            delimiter: delim.as_str().to_owned(),
+            prefix: prefix.as_str().to_owned(),
+            suffix: suffix.as_str().to_owned(),
+            parts: Vec::new(),
+            empty_value: None,
+        }
+    }
+
+    /// `add(element)` — appends a string element; returns `&mut Self` for
+    /// chaining (Java returns `this`).
+    pub fn add(&mut self, s: JString) -> &mut Self {
+        self.parts.push(s.as_str().to_owned());
+        self
+    }
+
+    /// `merge(other)` — appends all parts from `other` without its
+    /// prefix/suffix.
+    pub fn merge(&mut self, other: JStringJoiner) -> &mut Self {
+        for p in other.parts {
+            self.parts.push(p);
+        }
+        self
+    }
+
+    /// `setEmptyValue(s)` — value returned by `toString()` when no elements
+    /// have been added.
+    pub fn setEmptyValue(&mut self, s: JString) {
+        self.empty_value = Some(s.as_str().to_owned());
+    }
+
+    /// `length()` — length of the current `toString()` result.
+    pub fn length(&self) -> i32 {
+        self.toString().length()
+    }
+
+    /// `toString()` — produce the joined string.
+    pub fn toString(&self) -> JString {
+        if self.parts.is_empty() {
+            let empty = self
+                .empty_value
+                .as_deref()
+                .unwrap_or_else(|| &self.prefix)
+                .to_owned()
+                + if self.empty_value.is_none() {
+                    &self.suffix
+                } else {
+                    ""
+                };
+            return JString::from(empty.as_str());
+        }
+        let body = self.parts.join(&self.delimiter);
+        let result = format!("{}{}{}", self.prefix, body, self.suffix);
+        JString::from(result.as_str())
+    }
+}
+
+impl std::fmt::Display for JStringJoiner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.toString().as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

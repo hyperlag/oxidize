@@ -228,6 +228,7 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             JResourceBundle,
             JStampedLock, JForkJoinPool, JForkJoinHandle, JMonitor,
             JRandom,
+            JStringJoiner,
         };
     });
 
@@ -4822,6 +4823,16 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     });
                 }
 
+                // String.formatted(args...) — Java 15+ instance-method form of
+                // String.format(this, args...).  Rewrite to jformat().
+                if method_name == "formatted" {
+                    let rest_strs: Vec<TokenStream> = args_ts
+                        .iter()
+                        .map(|a| quote! { format!("{}", #a) })
+                        .collect();
+                    return Ok(quote! { java_compat::jformat(#recv_ts, &[#(#rest_strs),*]) });
+                }
+
                 // Random.nextInt() arity dispatch:
                 //   0 args → nextInt()
                 //   1 arg  → nextInt_bound(bound)
@@ -5512,6 +5523,21 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 // Stage 13: StampedLock and ForkJoinPool constructors
                 "StampedLock" => Ok(quote! { JStampedLock::new() }),
                 "ForkJoinPool" => Ok(quote! { JForkJoinPool::new() }),
+                // Stage 31: StringJoiner
+                "StringJoiner" => {
+                    if args_ts.len() >= 3 {
+                        let d = &args_ts[0];
+                        let p = &args_ts[1];
+                        let s = &args_ts[2];
+                        Ok(quote! { JStringJoiner::new_with_fix(#d, #p, #s) })
+                    } else {
+                        let d = args_ts
+                            .first()
+                            .cloned()
+                            .unwrap_or_else(|| quote! { JString::from("") });
+                        Ok(quote! { JStringJoiner::new(#d) })
+                    }
+                }
                 "StringWriter" => Ok(quote! { JStringWriter::new() }),
                 "StringReader" => {
                     let a = args_ts
@@ -6357,6 +6383,7 @@ fn emit_type(ty: &IrType) -> TokenStream {
                 "Timer" => quote! { JTimer },
                 "TimerTask" => quote! { JTimerTask },
                 "Random" | "ThreadLocalRandom" => quote! { JRandom },
+                "StringJoiner" => quote! { JStringJoiner },
                 "ZonedDateTime" => quote! { JZonedDateTime },
                 "ZoneId" => quote! { JZoneId },
                 "Clock" => quote! { JClock },
