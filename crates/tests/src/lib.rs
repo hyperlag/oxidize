@@ -1735,4 +1735,14 @@ Expression calculator tests complete",
             "3\n3\n2\n1\n3.5\n9\n25\n6\n21\n1\n6",
         );
     }
+
+    // ── Stage 30 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_random() {
+        check(
+            "RandomTest.java",
+            "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue",
+        );
+    }
 }
