@@ -26,9 +26,9 @@ const MASK: u64 = (1u64 << 48) - 1;
 #[derive(Clone, Debug)]
 pub struct JRandom {
     seed: Rc<Cell<u64>>,
-    /// Cached second Gaussian value (Java `haveNextNextGaussian`).
+    /// Whether a cached Gaussian value is available (Java `haveNextNextGaussian`).
     have_next_gaussian: Cell<bool>,
-    /// Cached second Gaussian value (Java `nextNextGaussian`).
+    /// The cached second Gaussian value (Java `nextNextGaussian`).
     next_next_gaussian: Cell<f64>,
 }
 
