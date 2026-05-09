@@ -4822,15 +4822,26 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     });
                 }
 
-                // Random.nextInt() arity dispatch: 0 args → nextInt(), 1 arg → nextInt_bound(n)
-                // No type-guard: nextInt(bound) is unique to Random/ThreadLocalRandom; the
-                // receiver type after ThreadLocalRandom.current() is not reliably tracked.
+                // Random.nextInt() arity dispatch:
+                //   0 args → nextInt()
+                //   1 arg  → nextInt_bound(bound)
+                //   2 args → nextInt_origin_bound(origin, bound)
+                // No type-guard: nextInt overloads are unique to Random/ThreadLocalRandom.
                 if method_name == "nextInt" {
-                    return if args_ts.is_empty() {
-                        Ok(quote! { (#recv_ts).nextInt() })
-                    } else {
-                        let n = &args_ts[0];
-                        Ok(quote! { (#recv_ts).nextInt_bound(#n) })
+                    return match args_ts.len() {
+                        0 => Ok(quote! { (#recv_ts).nextInt() }),
+                        1 => {
+                            let n = &args_ts[0];
+                            Ok(quote! { (#recv_ts).nextInt_bound(#n) })
+                        }
+                        2 => {
+                            let origin = &args_ts[0];
+                            let bound = &args_ts[1];
+                            Ok(quote! { (#recv_ts).nextInt_origin_bound(#origin, #bound) })
+                        }
+                        n => Err(CodegenError::Unsupported(format!(
+                            "nextInt with {n} arguments is not supported"
+                        ))),
                     };
                 }
 
