@@ -227,6 +227,7 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             JStringWriter, JStringReader, JByteArrayOutputStream, JByteArrayInputStream,
             JResourceBundle,
             JStampedLock, JForkJoinPool, JForkJoinHandle, JMonitor,
+            JRandom,
         };
     });
 
@@ -3431,7 +3432,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                                 let a = &args_ts[0];
                                 Ok(quote! { (#a as f64).exp() })
                             }
-                            "random" => Ok(quote! { 0.0_f64 }),
+                            "random" => Ok(quote! { JRandom::math_random() }),
                             "PI" => Ok(quote! { std::f64::consts::PI }),
                             "E" => Ok(quote! { std::f64::consts::E }),
                             "signum" => {
@@ -3504,6 +3505,16 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             _ => {
                                 let m = ident(method_name);
                                 Ok(quote! { JOptional::#m(#(#args_ts),*) })
+                            }
+                        };
+                    }
+                    // ThreadLocalRandom.current() → JRandom::thread_local_current()
+                    if name == "ThreadLocalRandom" {
+                        return match method_name.as_str() {
+                            "current" => Ok(quote! { JRandom::thread_local_current() }),
+                            _ => {
+                                let m = ident(method_name);
+                                Ok(quote! { JRandom::#m(#(#args_ts),*) })
                             }
                         };
                     }
@@ -4811,6 +4822,29 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     });
                 }
 
+                // Random.nextInt() arity dispatch:
+                //   0 args → nextInt()
+                //   1 arg  → nextInt_bound(bound)
+                //   2 args → nextInt_origin_bound(origin, bound)
+                // No type-guard: nextInt overloads are unique to Random/ThreadLocalRandom.
+                if method_name == "nextInt" {
+                    return match args_ts.len() {
+                        0 => Ok(quote! { (#recv_ts).nextInt() }),
+                        1 => {
+                            let n = &args_ts[0];
+                            Ok(quote! { (#recv_ts).nextInt_bound(#n) })
+                        }
+                        2 => {
+                            let origin = &args_ts[0];
+                            let bound = &args_ts[1];
+                            Ok(quote! { (#recv_ts).nextInt_origin_bound(#origin, #bound) })
+                        }
+                        n => Err(CodegenError::Unsupported(format!(
+                            "nextInt with {n} arguments is not supported"
+                        ))),
+                    };
+                }
+
                 // comparator.thenComparing — only for Comparator receivers.
                 // Dispatches to compare_then_cmp when the argument is itself a
                 // comparator (typed as Comparator or a 2-param lambda), and to
@@ -5467,6 +5501,14 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 }
                 "Properties" => Ok(quote! { JProperties::new() }),
                 "Timer" => Ok(quote! { JTimer::new() }),
+                "Random" => {
+                    if args_ts.is_empty() {
+                        Ok(quote! { JRandom::new() })
+                    } else {
+                        let seed = &args_ts[0];
+                        Ok(quote! { JRandom::new_seed(#seed as i64) })
+                    }
+                }
                 // Stage 13: StampedLock and ForkJoinPool constructors
                 "StampedLock" => Ok(quote! { JStampedLock::new() }),
                 "ForkJoinPool" => Ok(quote! { JForkJoinPool::new() }),
@@ -6314,6 +6356,7 @@ fn emit_type(ty: &IrType) -> TokenStream {
                 "Properties" => quote! { JProperties },
                 "Timer" => quote! { JTimer },
                 "TimerTask" => quote! { JTimerTask },
+                "Random" | "ThreadLocalRandom" => quote! { JRandom },
                 "ZonedDateTime" => quote! { JZonedDateTime },
                 "ZoneId" => quote! { JZoneId },
                 "Clock" => quote! { JClock },

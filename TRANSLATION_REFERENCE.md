@@ -1101,7 +1101,24 @@ the result-carrying handle.
 | `Math.log(x)`           | `(x).ln()`                       |
 | `Math.sin(x)`           | `(x).sin()`                      |
 | `Math.cos(x)`           | `(x).cos()`                      |
-| `Math.random()`         | `rand::random::<f64>()`          |
+| `Math.random()`         | `JRandom::math_random()`         |
+
+### Random
+
+| Java                                          | Rust                                              |
+|-----------------------------------------------|---------------------------------------------------|
+| `new Random()`                               | `JRandom::new()`                                 |
+| `new Random(seed)`                           | `JRandom::new_seed(seed as i64)`                 |
+| `r.nextInt()`                                | `r.nextInt()`                                    |
+| `r.nextInt(bound)`                           | `r.nextInt_bound(bound)`                         |
+| `r.nextInt(origin, bound)`                   | `r.nextInt_origin_bound(origin, bound)`          |
+| `r.nextLong()`                               | `r.nextLong()`                                   |
+| `r.nextDouble()`                             | `r.nextDouble()`                                 |
+| `r.nextBoolean()`                            | `r.nextBoolean()`                                |
+| `r.nextGaussian()`                           | `r.nextGaussian()`                               |
+| `r.ints(n, origin, bound)`                   | `r.ints(n, origin, bound)`                       |
+| `ThreadLocalRandom.current()`                | `JRandom::thread_local_current()`                |
+| `ThreadLocalRandom.current().nextInt(bound)` | `JRandom::thread_local_current().nextInt_bound(bound)` |
 
 ### StringBuilder
 

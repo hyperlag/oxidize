@@ -890,6 +890,8 @@ regex `Pattern`/`Matcher`,
 `System.out.printf()`, `System.exit/currentTimeMillis/nanoTime/getenv/getProperty`,
 `LocalDate/Time/DateTime`, `Instant`, `Duration`, `Period`, `DateTimeFormatter`,
 `ZonedDateTime`, `ZoneId`, `Clock`, `Properties`, `ResourceBundle`,
+`Random` (`new Random()`, `new Random(seed)`, `nextInt`, `nextInt(bound)`, `nextLong`, `nextDouble`, `nextBoolean`, `nextGaussian`, `ints`),
+`ThreadLocalRandom.current()`, `Math.random()`,
 `ProcessBuilder`/`Process`, `Timer`/`TimerTask`, class literals (`Foo.class`),
 lambda expressions, text blocks (Java 13+).
 
@@ -1034,7 +1036,7 @@ Rust source (.rs)
 | `codegen` | Converts the annotated IR into Rust token streams using `proc-macro2` and `quote!` |
 | `runtime` | `java-compat` crate — Rust implementations of Java standard library types |
 | `cli` | The `jtrans` binary — argument parsing, watch loop, incremental cache, source map writer |
-| `tests` | 183 differential integration tests (translate + compile + compare stdout) |
+| `tests` | 184 differential integration tests (translate + compile + compare stdout) |
 
 ### IR design
 

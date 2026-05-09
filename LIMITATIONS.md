@@ -203,6 +203,13 @@ enforcement is not implemented).
 - `Collectors.averagingInt(mapper)` / `Collectors.averagingDouble(mapper)` — return `double`.
 - `Collectors.summarizingInt(mapper)` — returns `IntSummaryStatistics` with `getCount()`, `getSum()`, `getMin()`, `getMax()`, `getAverage()`.
 
+**Stage 30 additions (Random number generation):**
+- `new Random()` / `new Random(seed)` — 48-bit LCG matching Java's algorithm exactly.
+- `nextInt()`, `nextInt(bound)`, `nextLong()`, `nextDouble()`, `nextBoolean()`, `nextGaussian()` (Box-Muller).
+- `ThreadLocalRandom.current()` — returns a per-thread `JRandom` instance.
+- `Math.random()` — now returns a real pseudo-random `double` in `[0.0, 1.0)` (was a `0.0` stub).
+- `ints(n, origin, bound)` — returns a `Stream<Integer>` of `n` values in `[origin, bound)`.
+
 `Spliterator` has a minimal stub (`trySplit`, `estimateSize`,
 `characteristics`, `forEachRemaining`, `tryAdvance`).
 
@@ -253,7 +260,7 @@ with `getSimpleName()`, `getName()`, and `getCanonicalName()` methods;
   `asin()`, `acos()`, `atan()`, `sinh()`, `cosh()`, `tanh()`, `toDegrees()`,
   `toRadians()`, `cbrt()`, `copySign()` (in addition to the previously supported
   `abs`, `ceil`, `floor`, `pow`, `sqrt`, `log`, `log10`, `round`, `max`, `min`,
-  `random`).
+  `random` — now a real PRNG, no longer a stub).
 
 ### java.io / java.nio
 
