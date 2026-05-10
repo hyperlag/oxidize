@@ -179,6 +179,12 @@ or emit a `TODO` stub.
 | `"a" + "b"`                 | `JString::from("a") + JString::from("b")` |
 | `"val=" + x` (mixed types)  | `format!("val={}", x)` via `JString::from(...)` |
 
+### String Methods
+
+| Java                        | Rust                                 |
+|-----------------------------|--------------------------------------|
+| `fmt.formatted(a, b)`       | `java_compat::jformat(fmt, &[format!("{}", a), format!("{}", b)])` |
+
 ## Control Flow
 
 ### If / Else
@@ -1125,13 +1131,12 @@ the result-carrying handle.
 | Java                                          | Rust                                              |
 |-----------------------------------------------|---------------------------------------------------|
 | `new StringJoiner(delim)`                     | `JStringJoiner::new(delim)`                       |
-| `new StringJoiner(delim, prefix, suffix)`     | `JStringJoiner::new_with_fix(delim, prefix, suffix)` |
+| `new StringJoiner(delim, prefix, suffix)`     | `JStringJoiner::new_with_prefix_suffix(delim, prefix, suffix)` |
 | `sj.add(s)`                                   | `sj.add(s)`                                       |
-| `sj.merge(other)`                             | `sj.merge(other)`                                 |
+| `sj.merge(other)`                             | `sj.merge(&other)`                                |
 | `sj.setEmptyValue(s)`                         | `sj.setEmptyValue(s)`                             |
 | `sj.length()`                                 | `sj.length()`                                     |
 | `sj.toString()`                               | `sj.toString()`                                   |
-| `"fmt".formatted(a, b)`                       | `java_compat::jformat(fmt, &[format!("{}", a), format!("{}", b)])` |
 
 ### StringBuilder
 

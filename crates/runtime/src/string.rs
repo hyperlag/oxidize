@@ -425,7 +425,7 @@ impl JStringJoiner {
     }
 
     /// `new StringJoiner(delimiter, prefix, suffix)`.
-    pub fn new_with_fix(delim: JString, prefix: JString, suffix: JString) -> Self {
+    pub fn new_with_prefix_suffix(delim: JString, prefix: JString, suffix: JString) -> Self {
         Self {
             delimiter: delim.as_str().to_owned(),
             prefix: prefix.as_str().to_owned(),
@@ -444,9 +444,9 @@ impl JStringJoiner {
 
     /// `merge(other)` — appends all parts from `other` without its
     /// prefix/suffix.
-    pub fn merge(&mut self, other: JStringJoiner) -> &mut Self {
-        for p in other.parts {
-            self.parts.push(p);
+    pub fn merge(&mut self, other: &JStringJoiner) -> &mut Self {
+        for p in &other.parts {
+            self.parts.push(p.clone());
         }
         self
     }
