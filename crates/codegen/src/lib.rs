@@ -228,6 +228,7 @@ pub fn generate(module: &IrModule) -> Result<String, CodegenError> {
             JResourceBundle,
             JStampedLock, JForkJoinPool, JForkJoinHandle, JMonitor,
             JRandom,
+            JStringJoiner,
         };
     });
 
@@ -4822,6 +4823,27 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                     });
                 }
 
+                // String.formatted(args...) — Java 15+ instance-method form of
+                // String.format(this, args...).  Rewrite to jformat().
+                // Guard on receiver type: only String has `formatted`.
+                if method_name == "formatted" && *recv.ty() == IrType::String {
+                    let rest_strs: Vec<TokenStream> = args_ts
+                        .iter()
+                        .map(|a| quote! { format!("{}", #a) })
+                        .collect();
+                    return Ok(quote! { java_compat::jformat(#recv_ts, &[#(#rest_strs),*]) });
+                }
+
+                // StringJoiner.merge(other) — runtime takes `&JStringJoiner`,
+                // so pass a reference to preserve Java's by-value-but-reusable semantics.
+                if method_name == "merge"
+                    && args_ts.len() == 1
+                    && type_name_matches(recv.ty(), "StringJoiner")
+                {
+                    let other = &args_ts[0];
+                    return Ok(quote! { (#recv_ts).merge(&#other) });
+                }
+
                 // Random.nextInt() arity dispatch:
                 //   0 args → nextInt()
                 //   1 arg  → nextInt_bound(bound)
@@ -5512,6 +5534,22 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 // Stage 13: StampedLock and ForkJoinPool constructors
                 "StampedLock" => Ok(quote! { JStampedLock::new() }),
                 "ForkJoinPool" => Ok(quote! { JForkJoinPool::new() }),
+                // Stage 31: StringJoiner
+                "StringJoiner" => match args_ts.len() {
+                    1 => {
+                        let d = &args_ts[0];
+                        Ok(quote! { JStringJoiner::new(#d) })
+                    }
+                    3 => {
+                        let d = &args_ts[0];
+                        let p = &args_ts[1];
+                        let s = &args_ts[2];
+                        Ok(quote! { JStringJoiner::new_with_prefix_suffix(#d, #p, #s) })
+                    }
+                    n => Err(CodegenError::Unsupported(format!(
+                        "new StringJoiner() with {n} arguments is not supported (expected 1 or 3)"
+                    ))),
+                },
                 "StringWriter" => Ok(quote! { JStringWriter::new() }),
                 "StringReader" => {
                     let a = args_ts
@@ -6357,6 +6395,7 @@ fn emit_type(ty: &IrType) -> TokenStream {
                 "Timer" => quote! { JTimer },
                 "TimerTask" => quote! { JTimerTask },
                 "Random" | "ThreadLocalRandom" => quote! { JRandom },
+                "StringJoiner" => quote! { JStringJoiner },
                 "ZonedDateTime" => quote! { JZonedDateTime },
                 "ZoneId" => quote! { JZoneId },
                 "Clock" => quote! { JClock },

@@ -86,6 +86,7 @@ pub use stream::JIntSummaryStatistics;
 pub use stream::JStream;
 pub use string::jformat;
 pub use string::JString;
+pub use string::JStringJoiner;
 pub use string_builder::JStringBuilder;
 pub use thread::JThread;
 pub use time::JLocalDate;
