@@ -36,7 +36,7 @@ Rust source (.rs)
 | `codegen` | Lowers annotated IR to Rust token streams via `proc-macro2` / `quote` |
 | `runtime` | `java-compat` crate: runtime types (`JString`, `JArray`, `JList`, `JMap`, `JOptional`, `JStream`, `JThread`, etc.) |
 | `cli` | `jtrans` binary: CLI driver with `translate`, `scan`, `init-maven`, `init-gradle` subcommands, watch mode, incremental cache, and source map generation |
-| `tests` | Differential test suite (185 tests: translated Rust output vs. expected output) |
+| `tests` | Differential test suite (186 tests: translated Rust output vs. expected output) |
 
 ## Requirements
 
@@ -271,7 +271,7 @@ cargo test
 
 The differential integration tests in `crates/tests` compile and run each translated Rust
 program, then assert that stdout matches the expected output. No JDK is required to run
-the tests. The suite currently contains **185 differential tests**:
+the tests. The suite currently contains **186 differential tests**:
 
 ```bash
 cargo test -p tests -- --test-threads=4
@@ -368,6 +368,7 @@ cargo test -p tests -- --test-threads=4
 - Text blocks (Java 13+ `"""..."""`) with indent stripping per JEP 378
 - Switch expressions (Java 14+) with arrow syntax, multi-label arms, and `yield` blocks
 - Pattern switch expressions (Java 21+): `switch(obj) { case Type binding -> expr; }` used as a value; emits Rust if-else chain block
+- Colon-form pattern switch statements (Java 21+): `switch(obj) { case Type binding: stmts; break; }` — lowers to the same if-else chain as arrow-form
 - Multiple classes per file: package-private helper classes alongside the public class; cross-class static method calls (`Helper.method(args)` → `Helper::method(args)`)
 - Local class variable capture: named classes declared inside method bodies can reference effectively-final locals from the enclosing scope (hoisted as `__cap_X` fields, mirroring anonymous class capture)
 

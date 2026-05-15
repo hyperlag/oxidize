@@ -807,6 +807,162 @@ fn build_pattern_if_chain(
     }
 }
 
+/// Remove a trailing unlabelled `break` from a switch arm body.  Colon-form
+/// switch arms use explicit `break;` for fall-through prevention; those
+/// breaks are meaningless once the arm is lifted into an `if` branch.
+///
+/// Also handles the case where the arm body is a single `IrStmt::Block` (e.g.
+/// `case T x: { ...; break; }`): the trailing `break` is stripped from inside
+/// the block so that it does not appear in the emitted `if` branch.
+fn strip_trailing_break(stmts: &mut Vec<IrStmt>) {
+    if matches!(stmts.last(), Some(IrStmt::Break(None))) {
+        stmts.pop();
+        return;
+    }
+    // Check for a trailing block whose last statement is a bare break.
+    if let Some(IrStmt::Block(inner)) = stmts.last_mut() {
+        if matches!(inner.last(), Some(IrStmt::Break(None))) {
+            inner.pop();
+        }
+    }
+}
+
+/// Transform a *colon-form* pattern-matching switch into an if-else chain.
+///
+/// ```java
+/// switch (obj) {
+///     case String s:
+///         System.out.println(s.length());
+///         break;
+///     case Integer i:
+///         System.out.println(i * 2);
+///         break;
+///     default:
+///         System.out.println("other");
+/// }
+/// ```
+fn lower_pattern_colon_switch(
+    scrutinee: IrExpr,
+    flat_children: &[(String, usize, Node<'_>)],
+    src: &[u8],
+) -> Result<Vec<IrStmt>, ParseError> {
+    // Accumulated arms: (type, binding, body).  `None` type/binding = default.
+    let mut arms: Vec<(Option<IrType>, Option<String>, Vec<IrStmt>)> = Vec::new();
+
+    let mut current_ty: Option<IrType> = None;
+    let mut current_bind: Option<String> = None;
+    let mut current_stmts: Vec<IrStmt> = Vec::new();
+    let mut in_arm = false;
+
+    for (kind, _, child) in flat_children {
+        match kind.as_str() {
+            "switch_label" => {
+                // Flush the arm we were collecting.
+                if in_arm {
+                    strip_trailing_break(&mut current_stmts);
+                    arms.push((
+                        current_ty.take(),
+                        current_bind.take(),
+                        std::mem::take(&mut current_stmts),
+                    ));
+                }
+                in_arm = true;
+
+                let label_text = text(*child, src);
+                if label_text.contains("default") {
+                    // default arm — no type/binding
+                    current_ty = None;
+                    current_bind = None;
+                } else {
+                    // Look for a `pattern` node inside the label.
+                    let pattern_node = named_children(*child)
+                        .into_iter()
+                        .find(|n| n.kind() == "pattern");
+
+                    if let Some(pat) = pattern_node {
+                        // pattern > type_pattern > (type, identifier)
+                        if let Some(type_pat) = pat.named_child(0) {
+                            if type_pat.kind() == "type_pattern" {
+                                let ir_type = type_pat
+                                    .named_child(0)
+                                    .map(|n| lower_type(n, src))
+                                    .unwrap_or_else(|| IrType::Class("Object".to_owned()));
+                                let binding = type_pat
+                                    .named_child(1)
+                                    .map(|n| text(n, src).to_owned())
+                                    .unwrap_or_else(|| "_unused".to_owned());
+                                current_ty = Some(ir_type);
+                                current_bind = Some(binding);
+                            } else {
+                                // Only simple type patterns (`case Type name:`) are
+                                // supported in colon-form switches; guarded patterns
+                                // and other pattern kinds are not yet lowered.
+                                return Err(ParseError::Unsupported(format!(
+                                    "unsupported colon-form switch label: only simple type \
+                                     patterns are supported, got '{}'",
+                                    type_pat.kind()
+                                )));
+                            }
+                        } else {
+                            return Err(ParseError::Unsupported(
+                                "unsupported colon-form switch label: type pattern must have \
+                                 both a type and a binding name"
+                                    .into(),
+                            ));
+                        }
+                    } else {
+                        // Constant or null labels are not yet supported in
+                        // pattern colon-form switch lowering.
+                        return Err(ParseError::Unsupported(format!(
+                            "unsupported colon-form switch label (no pattern): {}",
+                            text(*child, src)
+                        )));
+                    }
+                }
+            }
+            _ if in_arm => {
+                // Any statement (or break) belonging to the current arm.
+                if let Ok(stmts) = lower_stmt(*child, src) {
+                    current_stmts.extend(stmts);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Flush the final arm.
+    if in_arm {
+        strip_trailing_break(&mut current_stmts);
+        arms.push((current_ty.take(), current_bind.take(), current_stmts));
+    }
+
+    // Split into pattern arms and optional default.
+    let mut pattern_arms: Vec<(IrType, String, Vec<IrStmt>)> = Vec::new();
+    let mut default_body: Option<Vec<IrStmt>> = None;
+
+    for (ty_opt, bind_opt, stmts) in arms {
+        match (ty_opt, bind_opt) {
+            (Some(ty), Some(bind)) => pattern_arms.push((ty, bind, stmts)),
+            _ => default_body = Some(stmts),
+        }
+    }
+
+    let tmp_name = "__pattern_switch_tmp__".to_owned();
+    let tmp_expr = IrExpr::Var {
+        name: tmp_name.clone(),
+        ty: IrType::Unknown,
+    };
+
+    Ok(vec![
+        IrStmt::LocalVar {
+            name: tmp_name,
+            ty: IrType::Unknown,
+            init: Some(scrutinee),
+        },
+        build_pattern_if_chain(&tmp_expr, &pattern_arms, default_body),
+    ])
+}
+
 // ─── record ─────────────────────────────────────────────────────────────────
 
 fn lower_record(node: Node<'_>, src: &[u8]) -> Result<IrClass, ParseError> {
@@ -1771,10 +1927,7 @@ fn lower_stmt(node: Node<'_>, src: &[u8]) -> Result<Vec<IrStmt>, ParseError> {
             }
 
             if has_pattern_colon_labels(&flat_children) {
-                return Err(ParseError::Unsupported(
-                    "pattern matching in colon-form switch labels (`case T v:`) is not yet supported"
-                        .into(),
-                ));
+                return lower_pattern_colon_switch(expr, &flat_children, src);
             }
 
             // Java 21+ arrow-form pattern-matching switch: transform to if-else chain.
@@ -3231,7 +3384,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_colon_form_pattern_switch_statement() {
+    fn lowers_colon_form_pattern_switch_statement() {
         let src = r#"
             class Demo {
                 static void run(Object o) {
@@ -3245,14 +3398,8 @@ mod tests {
                 }
             }
         "#;
-        let err = parse_to_ir(src).expect_err("colon-form pattern switch should be rejected");
-        assert!(
-            matches!(
-                err,
-                ParseError::Unsupported(ref msg) if msg.contains("colon-form switch labels")
-            ),
-            "expected unsupported colon-form pattern switch error, got: {err}"
-        );
+        // Colon-form pattern switch is now supported and should lower without error.
+        parse_to_ir(src).expect("colon-form pattern switch should be lowered successfully");
     }
 
     #[test]

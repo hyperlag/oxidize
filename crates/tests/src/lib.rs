@@ -1755,4 +1755,14 @@ Expression calculator tests complete",
             "Hello, World!\nPi is 3.14\na, b, c\n[x, y]\nempty\n1-2-3-4\n7",
         );
     }
+
+    // ── Stage 32 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_colon_pattern_switch() {
+        check(
+            "ColonPatternSwitch.java",
+            "add=1\nmul=7\n10\n6\nSUB:4\nDIV=2",
+        );
+    }
 }

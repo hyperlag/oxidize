@@ -337,7 +337,6 @@ Summary
 | `nio-channels-import` | `java.nio.channels` |
 | `object-streams` | `ObjectInputStream` / `ObjectOutputStream` |
 | `instrument-import` | `java.lang.instrument` |
-| `colon-form-pattern-switch` | `case Type var:` pattern label — use arrow form |
 | `dynamic-proxy` | `Proxy.newProxyInstance()` |
 | `module-info` | `module-info.java` file |
 | `parse-error` | File rejected by the parser itself |
@@ -852,6 +851,7 @@ You have two options:
 - Non-static inner classes, anonymous inner classes (with limitations)
   — including `OuterClass.this.field` / `OuterClass.this.method()` access
 - `instanceof` pattern matching with binding variable (Java 16+)
+- Pattern switch statements: both arrow-form (`case Type x ->`) and colon-form (`case Type x:`) Java 21+ syntax
 
 ### Enums
 
@@ -922,7 +922,6 @@ lambda expressions, text blocks (Java 13+).
 | `module-info.java` (Java 9+ modules) | Not parsed |
 | `java.nio.channels` (NIO selectors) | Not implemented |
 | Java serialization (`Serializable`, `ObjectInputStream`, `ObjectOutputStream`) | Not implemented |
-| Colon-form pattern labels in switch statements (`case String s:`) | Use arrow form instead |
 | Lambda closures sharing mutable state across executor tasks | Use `Runnable` implementations instead |
 
 ### Partially supported
@@ -1037,7 +1036,7 @@ Rust source (.rs)
 | `codegen` | Converts the annotated IR into Rust token streams using `proc-macro2` and `quote!` |
 | `runtime` | `java-compat` crate — Rust implementations of Java standard library types |
 | `cli` | The `jtrans` binary — argument parsing, watch loop, incremental cache, source map writer |
-| `tests` | 185 differential integration tests (translate + compile + compare stdout) |
+| `tests` | 186 differential integration tests (translate + compile + compare stdout) |
 
 ### IR design
 

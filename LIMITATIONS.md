@@ -215,6 +215,10 @@ enforcement is not implemented).
 - `new StringJoiner(delimiter)` / `new StringJoiner(delimiter, prefix, suffix)` — full constructor support.
 - `StringJoiner.add(s)`, `merge(other)`, `setEmptyValue(s)`, `length()`, `toString()` — complete API.
 
+**Stage 32 additions (Colon-form pattern switch):**
+- `switch(expr) { case TypeName binding: stmts; break; default: stmts; }` — colon-form pattern switch statements now lower to an if-else chain, matching the existing arrow-form behaviour.
+- `break;` at the end of each arm is stripped; `default:` becomes the final `else` branch.
+
 `Spliterator` has a minimal stub (`trySplit`, `estimateSize`,
 `characteristics`, `forEachRemaining`, `tryAdvance`).
 

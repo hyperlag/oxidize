@@ -323,6 +323,30 @@ switch (obj) {
 }
 ```
 
+### Colon-Form Pattern Switch (Java 21)
+
+```java
+switch (obj) {
+    case MyType x:
+        System.out.println(x.field);
+        break;
+    default:
+        System.out.println("other");
+}
+```
+```rust
+// Same if-else chain transformation as arrow-form; trailing break is stripped:
+{
+    let __pattern_switch_tmp__ = obj;
+    if __pattern_switch_tmp__._instanceof("MyType") {
+        let mut x: MyType = __pattern_switch_tmp__.clone();
+        println!("{}", (x).field);
+    } else {
+        println!("{}", "other");
+    }
+}
+```
+
 ### Break / Continue
 
 ```java
