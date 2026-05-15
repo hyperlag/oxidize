@@ -894,16 +894,19 @@ fn lower_pattern_colon_switch(
                                 current_ty = Some(ir_type);
                                 current_bind = Some(binding);
                             } else {
-                                // Guarded patterns and other pattern kinds are
-                                // not yet supported in colon-form switches.
+                                // Only simple type patterns (`case Type name:`) are
+                                // supported in colon-form switches; guarded patterns
+                                // and other pattern kinds are not yet lowered.
                                 return Err(ParseError::Unsupported(format!(
-                                    "unsupported colon-form switch label pattern kind: {}",
+                                    "unsupported colon-form switch label: only simple type \
+                                     patterns are supported, got '{}'",
                                     type_pat.kind()
                                 )));
                             }
                         } else {
                             return Err(ParseError::Unsupported(
-                                "unsupported colon-form switch label: pattern with no children"
+                                "unsupported colon-form switch label: type pattern must have \
+                                 both a type and a binding name"
                                     .into(),
                             ));
                         }
