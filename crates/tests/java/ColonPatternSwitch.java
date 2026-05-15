@@ -44,11 +44,29 @@ public class ColonPatternSwitch {
         return msg;
     }
 
+    // Colon-form with a block-statement arm body (break nested inside braces).
+    static String blocked(Token t) {
+        String out;
+        switch (t) {
+            case Token x: {
+                String p = x.kind.toUpperCase();
+                out = p + "=" + x.value;
+                break;
+            }
+            default: {
+                out = "other";
+                break;
+            }
+        }
+        return out;
+    }
+
     public static void main(String[] args) {
         System.out.println(describe(new Token("add", 1)));   // add=1
         System.out.println(describe(new Token("mul", 7)));   // mul=7
         System.out.println(doubled(new Token("x", 5)));      // 10
         System.out.println(doubled(new Token("y", 3)));      // 6
         System.out.println(summary(new Token("sub", 4)));    // SUB:4
+        System.out.println(blocked(new Token("div", 2)));    // DIV=2
     }
 }

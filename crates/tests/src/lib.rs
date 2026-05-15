@@ -1762,7 +1762,7 @@ Expression calculator tests complete",
     fn test_colon_pattern_switch() {
         check(
             "ColonPatternSwitch.java",
-            "add=1\nmul=7\n10\n6\nSUB:4",
+            "add=1\nmul=7\n10\n6\nSUB:4\nDIV=2",
         );
     }
 }
