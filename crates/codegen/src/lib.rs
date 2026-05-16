@@ -5291,14 +5291,20 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             match class.as_str() {
                 "ArrayList" => {
                     if args_ts.len() == 1 {
-                        // new ArrayList<>(collection) — copy elements from a Set, List, etc.
-                        let src = &args_ts[0];
-                        Ok(quote! { {
-                            let _src = #src;
-                            let mut _tmp = JList::new();
-                            for _item in _src.iter() { _tmp.add(_item.clone()); }
-                            _tmp
-                        } })
+                        let arg_ty = args.first().map(|e| e.ty());
+                        if arg_ty.map_or(false, |t| t.is_primitive()) {
+                            // new ArrayList<>(int initialCapacity) — ignore capacity, create empty list
+                            Ok(quote! { JList::new() })
+                        } else {
+                            // new ArrayList<>(collection) — copy elements from a Set, List, etc.
+                            let src = &args_ts[0];
+                            Ok(quote! { {
+                                let _src = #src;
+                                let mut _tmp = JList::new();
+                                for _item in _src.iter() { _tmp.add(_item.clone()); }
+                                _tmp
+                            } })
+                        }
                     } else {
                         Ok(quote! { JList::new() })
                     }
