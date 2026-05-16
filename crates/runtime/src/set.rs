@@ -81,6 +81,14 @@ impl<T: Eq + std::hash::Hash + Clone> JSet<T> {
     pub fn iter(&self) -> std::collections::hash_set::Iter<'_, T> {
         self.inner.iter()
     }
+
+    /// Java `set.forEach(consumer)` — calls `consumer` for every element.
+    #[allow(non_snake_case)]
+    pub fn forEach(&self, mut consumer: impl FnMut(T)) {
+        for item in &self.inner {
+            consumer(item.clone());
+        }
+    }
 }
 
 #[cfg(test)]

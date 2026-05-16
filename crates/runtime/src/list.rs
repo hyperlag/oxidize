@@ -200,6 +200,14 @@ impl<T: Clone + PartialEq> JList<T> {
     pub fn disjoint(&self, other: &JList<T>) -> bool {
         self.inner.iter().all(|x| !other.inner.contains(x))
     }
+
+    /// Java `list.forEach(consumer)` — calls `consumer` for every element.
+    #[allow(non_snake_case)]
+    pub fn forEach(&self, mut consumer: impl FnMut(T)) {
+        for item in &self.inner {
+            consumer(item.clone());
+        }
+    }
 }
 
 impl<T: Clone + Default + std::fmt::Debug + 'static> JList<T> {

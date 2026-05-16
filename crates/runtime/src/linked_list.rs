@@ -146,6 +146,14 @@ impl<T: Clone + PartialEq> JLinkedList<T> {
     pub fn contains(&self, item: T) -> bool {
         self.inner.contains(&item)
     }
+
+    /// Java `list.forEach(consumer)` — calls `consumer` for every element.
+    #[allow(non_snake_case)]
+    pub fn forEach(&self, mut consumer: impl FnMut(T)) {
+        for item in &self.inner {
+            consumer(item.clone());
+        }
+    }
 }
 
 impl<T: Clone + Default + std::fmt::Debug + 'static> JLinkedList<T> {

@@ -681,6 +681,7 @@ Trailing `break` statements are stripped (Rust match arms do not fall through).
 | Java                          | Rust                          |
 |-------------------------------|-------------------------------|
 | `new ArrayList<>()`           | `JList::new()`                |
+| `new ArrayList<>(collection)` | inline copy loop → `JList`  |
 | `list.add(x)`                | `list.add(x)`                |
 | `list.get(i)`                | `list.get(i)`                |
 | `list.set(i, x)`             | `list.set(i, x)`             |
@@ -690,6 +691,7 @@ Trailing `break` statements are stripped (Rust match arms do not fall through).
 | `list.indexOf(x)`            | `list.indexOf(&x)`           |
 | `list.isEmpty()`             | `list.isEmpty()`             |
 | `list.clear()`               | `list.clear()`               |
+| `list.forEach(x -> ...)`     | `list.forEach(\|x\| { ... })`|
 
 ### Map
 

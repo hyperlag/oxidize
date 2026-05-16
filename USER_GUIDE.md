@@ -1036,7 +1036,7 @@ Rust source (.rs)
 | `codegen` | Converts the annotated IR into Rust token streams using `proc-macro2` and `quote!` |
 | `runtime` | `java-compat` crate — Rust implementations of Java standard library types |
 | `cli` | The `jtrans` binary — argument parsing, watch loop, incremental cache, source map writer |
-| `tests` | 186 differential integration tests (translate + compile + compare stdout) |
+| `tests` | 188 differential integration tests (translate + compile + compare stdout) |
 
 ### IR design
 

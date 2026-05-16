@@ -1765,4 +1765,14 @@ Expression calculator tests complete",
             "add=1\nmul=7\n10\n6\nSUB:4\nDIV=2",
         );
     }
+
+    // ── Stage 33 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_for_each_lambda() {
+        check(
+            "ForEachLambda.java",
+            "Hello, Alice\nHello, Bob\nHello, Carol\n2\n4\n6\nAlice=90\nBob=85\nX\nY",
+        );
+    }
 }
