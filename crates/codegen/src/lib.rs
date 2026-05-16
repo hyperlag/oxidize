@@ -5292,7 +5292,7 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 "ArrayList" => {
                     if args_ts.len() == 1 {
                         let arg_ty = args.first().map(|e| e.ty());
-                        if arg_ty.map_or(false, |t| t.is_primitive()) {
+                        if arg_ty.is_some_and(|t| t.is_primitive()) {
                             // new ArrayList<>(int initialCapacity) — ignore capacity, create empty list
                             Ok(quote! { JList::new() })
                         } else {
