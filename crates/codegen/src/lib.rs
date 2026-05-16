@@ -5289,7 +5289,26 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
             let args_ts: Vec<TokenStream> = args.iter().map(emit_expr).collect::<Result<_, _>>()?;
             // Map Java constructors to their runtime equivalents.
             match class.as_str() {
-                "ArrayList" => Ok(quote! { JList::new() }),
+                "ArrayList" => {
+                    if args_ts.len() == 1 {
+                        let arg_ty = args.first().map(|e| e.ty());
+                        if arg_ty.is_some_and(|t| t.is_primitive()) {
+                            // new ArrayList<>(int initialCapacity) — ignore capacity, create empty list
+                            Ok(quote! { JList::new() })
+                        } else {
+                            // new ArrayList<>(collection) — copy elements from a Set, List, etc.
+                            let src = &args_ts[0];
+                            Ok(quote! { {
+                                let _src = #src;
+                                let mut _tmp = JList::new();
+                                for _item in _src.iter() { _tmp.add(_item.clone()); }
+                                _tmp
+                            } })
+                        }
+                    } else {
+                        Ok(quote! { JList::new() })
+                    }
+                }
                 "LinkedList" | "ArrayDeque" => Ok(quote! { JLinkedList::new() }),
                 "HashMap" | "Hashtable" => Ok(quote! { JMap::new() }),
                 "LinkedHashMap" => Ok(quote! { JLinkedHashMap::new() }),

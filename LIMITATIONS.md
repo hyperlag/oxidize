@@ -219,6 +219,14 @@ enforcement is not implemented).
 - `switch(expr) { case TypeName binding: stmts; break; default: stmts; }` — colon-form pattern switch statements now lower to an if-else chain, matching the existing arrow-form behaviour.
 - `break;` at the end of each arm is stripped; `default:` becomes the final `else` branch.
 
+**Stage 33 additions (`forEach` lambda dispatch and `ArrayList` copy-constructor):**
+- `list.forEach(item -> ...)` — `JList.forEach` dispatches the lambda over every element.
+- `set.forEach(item -> ...)` — `JSet.forEach` supported.
+- `linkedList.forEach(item -> ...)` — `JLinkedList.forEach` supported.
+- `map.forEach((k, v) -> ...)` — `JMap.forEach` (was already present) confirmed working with two-argument BiConsumer lambdas.
+- `new ArrayList<>(collection)` — copy-constructor pattern (e.g. `new ArrayList<>(map.keySet())`) now emits an inline loop that copies elements into a new `JList`.
+- `String.compareTo(other)` now accepts both owned and borrowed `JString` via `impl Into<JString>`, fixing sort-lambda type mismatches.
+
 `Spliterator` has a minimal stub (`trySplit`, `estimateSize`,
 `characteristics`, `forEachRemaining`, `tryAdvance`).
 

@@ -36,7 +36,7 @@ Rust source (.rs)
 | `codegen` | Lowers annotated IR to Rust token streams via `proc-macro2` / `quote` |
 | `runtime` | `java-compat` crate: runtime types (`JString`, `JArray`, `JList`, `JMap`, `JOptional`, `JStream`, `JThread`, etc.) |
 | `cli` | `jtrans` binary: CLI driver with `translate`, `scan`, `init-maven`, `init-gradle` subcommands, watch mode, incremental cache, and source map generation |
-| `tests` | Differential test suite (186 tests: translated Rust output vs. expected output) |
+| `tests` | Differential test suite (188 tests: translated Rust output vs. expected output) |
 
 ## Requirements
 
@@ -271,7 +271,7 @@ cargo test
 
 The differential integration tests in `crates/tests` compile and run each translated Rust
 program, then assert that stdout matches the expected output. No JDK is required to run
-the tests. The suite currently contains **186 differential tests**:
+the tests. The suite currently contains **188 differential tests**:
 
 ```bash
 cargo test -p tests -- --test-threads=4
@@ -323,6 +323,8 @@ cargo test -p tests -- --test-threads=4
 - `Iterator` with `hasNext()`/`next()`/`remove()`
 - Map `keySet()`/`values()`/`entrySet()` iteration with `JMapEntry<K,V>`
 - Map mutation API: `putIfAbsent()`, `computeIfAbsent()`, `compute()`, `merge()`, `forEach()`, `replace()`, `replaceAll()`
+- `List.forEach(lambda)`, `Set.forEach(lambda)`, `LinkedList.forEach(lambda)`, `Map.forEach((k,v)->lambda)` — full lambda dispatch on all collection types
+- `new ArrayList<>(collection)` — copy-constructor from any iterable (e.g. `keySet()`)
 - Immutable factory methods: `List.of()`, `Set.of()`, `Map.of()`, `Map.entry()`, `Map.ofEntries()`, `List.copyOf()`, `Set.copyOf()`, `Map.copyOf()`
 - `Comparator` API: `naturalOrder()`, `reverseOrder()`, `comparing()`, `comparingInt()`, `comparingDouble()`, `.reversed()`, `.thenComparing()`; `stream.sorted(cmp)` and `list.sort(cmp)`
 - `Spliterator` stub (`trySplit`, `estimateSize`, `forEachRemaining`, `tryAdvance`, `characteristics()`)

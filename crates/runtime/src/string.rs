@@ -181,12 +181,19 @@ impl JString {
 
     /// Java `String.compareTo(other)` — returns negative, zero, or positive.
     #[allow(non_snake_case)]
-    pub fn compareTo(&self, other: JString) -> i32 {
+    pub fn compareTo(&self, other: impl Into<JString>) -> i32 {
+        let other = other.into();
         match self.cmp(&other) {
             std::cmp::Ordering::Less => -1,
             std::cmp::Ordering::Equal => 0,
             std::cmp::Ordering::Greater => 1,
         }
+    }
+}
+
+impl From<&JString> for JString {
+    fn from(s: &JString) -> Self {
+        s.clone()
     }
 }
 
