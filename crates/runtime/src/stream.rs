@@ -105,8 +105,9 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
     }
 
     /// Java `stream.findFirst()`.
-    pub fn findFirst(self) -> Option<T> {
-        self.data.into_iter().next()
+    #[allow(non_snake_case)]
+    pub fn findFirst(self) -> crate::optional::JOptional<T> {
+        crate::optional::JOptional::of_nullable(self.data.into_iter().next())
     }
 
     /// Java `stream.findAny()` — returns any element (same as findFirst for sequential streams).
@@ -116,7 +117,6 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
     }
 
     /// Java `stream.min(comparator)` — returns the minimum element according to the comparator.
-    #[allow(non_snake_case)]
     pub fn min_by<F: Fn(&T, &T) -> i32>(self, cmp: F) -> crate::optional::JOptional<T> {
         let result = self
             .data
@@ -126,7 +126,6 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
     }
 
     /// Java `stream.max(comparator)` — returns the maximum element according to the comparator.
-    #[allow(non_snake_case)]
     pub fn max_by<F: Fn(&T, &T) -> i32>(self, cmp: F) -> crate::optional::JOptional<T> {
         let result = self
             .data
