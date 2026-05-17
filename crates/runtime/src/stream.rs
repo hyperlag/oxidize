@@ -105,13 +105,11 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
     }
 
     /// Java `stream.findFirst()`.
-    #[allow(non_snake_case)]
     pub fn findFirst(self) -> crate::optional::JOptional<T> {
         crate::optional::JOptional::of_nullable(self.data.into_iter().next())
     }
 
     /// Java `stream.findAny()` — returns any element (same as findFirst for sequential streams).
-    #[allow(non_snake_case)]
     pub fn findAny(self) -> crate::optional::JOptional<T> {
         crate::optional::JOptional::of_nullable(self.data.into_iter().next())
     }
