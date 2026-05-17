@@ -219,6 +219,13 @@ enforcement is not implemented).
 - `switch(expr) { case TypeName binding: stmts; break; default: stmts; }` — colon-form pattern switch statements now lower to an if-else chain, matching the existing arrow-form behaviour.
 - `break;` at the end of each arm is stripped; `default:` becomes the final `else` branch.
 
+**Stage 34 additions (Stream Enhancements):**
+- `stream.min(Comparator)` — dispatches to `JStream::min_by`, returns `JOptional<T>`.
+- `stream.max(Comparator)` — dispatches to `JStream::max_by`, returns `JOptional<T>`.
+- `stream.findAny()` — returns any element as `JOptional<T>` (alias to `findFirst` for sequential streams).
+- `stream.toList()` (Java 16+) — maps to `collect_to_list()`, works on chained pipelines.
+- `Stream.concat(s1, s2)` — static method concatenates two streams into one.
+
 **Stage 33 additions (`forEach` lambda dispatch and `ArrayList` copy-constructor):**
 - `list.forEach(item -> ...)` — `JList.forEach` dispatches the lambda over every element.
 - `set.forEach(item -> ...)` — `JSet.forEach` supported.
