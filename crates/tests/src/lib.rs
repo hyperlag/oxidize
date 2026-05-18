@@ -1785,4 +1785,14 @@ Expression calculator tests complete",
             "1\n9\nap\nbanana\n8\n10\n18\n12\ntrue\nfalse\na\nb\nc\nd",
         );
     }
+
+    // ── Stage 35 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_abstract_class_template() {
+        check(
+            "AbstractClassTemplate.java",
+            "78.53975\n8.75\ntrue\nCircle area=78.53975\nRectangle area=8.75",
+        );
+    }
 }

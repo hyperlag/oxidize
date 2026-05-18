@@ -219,6 +219,11 @@ enforcement is not implemented).
 - `switch(expr) { case TypeName binding: stmts; break; default: stmts; }` — colon-form pattern switch statements now lower to an if-else chain, matching the existing arrow-form behaviour.
 - `break;` at the end of each arm is stripped; `default:` becomes the final `else` branch.
 
+**Stage 35 additions (Abstract Class Completeness):**
+- Abstract methods in `abstract` classes now emit `unimplemented!("abstract method: ClassName::method")` stubs instead of being silently dropped. Concrete subclasses that override abstract methods compile and run correctly via the existing `_super` delegation chain.
+- `IrClass.is_abstract` flag is already set by the parser when the `abstract` modifier is present; codegen does not currently read this flag, so abstract-vs-concrete is inferred solely from whether `IrMethod.body` is `None`.
+- Inherited concrete methods and fields from abstract parent classes continue to work via the existing `_super` struct field and delegation mechanism.
+
 **Stage 34 additions (Stream Enhancements):**
 - `stream.min(Comparator)` — dispatches to `JStream::min_by`, returns `JOptional<T>`.
 - `stream.max(Comparator)` — dispatches to `JStream::max_by`, returns `JOptional<T>`.

@@ -436,6 +436,46 @@ impl Dog {
 Parent fields are accessed through the `_super` composition field:
 `dog._super.name`.
 
+### Abstract Classes
+
+```java
+abstract class Shape {
+    String name;
+    Shape(String name) { this.name = name; }
+    abstract double area();          // no body
+    String label() { return name; }  // concrete method
+}
+class Circle extends Shape {
+    double radius;
+    Circle(double r) { super("Circle"); this.radius = r; }
+    @Override double area() { return 3.14159 * radius * radius; }
+}
+```
+
+Abstract methods are emitted as `unimplemented!("abstract method: …")` stubs in
+the parent struct's `impl` block. Concrete subclasses emit their own `impl` with
+the real body. **However, there is no virtual dispatch** in the `_super`-composition
+model: parent concrete methods always call `self.field` / `self.method()` on the
+parent impl, so any parent code that calls an abstract method will hit the
+`unimplemented!` stub even when a concrete subclass overrides it. Callers must
+invoke the method on the concrete subclass type directly (or via the child's own
+`describe()`-style wrapper) to reach the override. This is a known limitation of
+the struct-composition approach; see `LIMITATIONS.md` for details.
+
+```rust
+impl Shape {
+    pub fn area(&mut self) -> f64 {
+        unimplemented!("abstract method: Shape::area")
+    }
+    pub fn label(&mut self) -> JString { ... }
+}
+impl Circle {
+    pub fn area(&mut self) -> f64 {
+        return 3.14159_f64 * (self).radius * (self).radius;
+    }
+}
+```
+
 ### Interfaces
 
 ```java
