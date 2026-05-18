@@ -453,8 +453,14 @@ class Circle extends Shape {
 ```
 
 Abstract methods are emitted as `unimplemented!("abstract method: …")` stubs in
-the parent struct's `impl` block. Subclass overrides replace the delegation stub
-with their own body, so the stub is never reached at runtime.
+the parent struct's `impl` block. Concrete subclasses emit their own `impl` with
+the real body. **However, there is no virtual dispatch** in the `_super`-composition
+model: parent concrete methods always call `self.field` / `self.method()` on the
+parent impl, so any parent code that calls an abstract method will hit the
+`unimplemented!` stub even when a concrete subclass overrides it. Callers must
+invoke the method on the concrete subclass type directly (or via the child's own
+`describe()`-style wrapper) to reach the override. This is a known limitation of
+the struct-composition approach; see `LIMITATIONS.md` for details.
 
 ```rust
 impl Shape {

@@ -2,9 +2,9 @@ abstract class Shape {
     String name;
     Shape(String name) { this.name = name; }
     abstract double area();
-    // Concrete method calling the abstract method: tests that this compiles
-    // even in the abstract class.  Not invoked through the abstract reference
-    // (virtual dispatch would need the override), but through concrete refs.
+    // Concrete method in the abstract class that does NOT call the abstract
+    // method.  Tests that a body-bearing method in an abstract class compiles
+    // and is reachable from subclass instances via _super delegation.
     String label() { return name; }
 }
 

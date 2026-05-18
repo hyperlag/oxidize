@@ -221,7 +221,7 @@ enforcement is not implemented).
 
 **Stage 35 additions (Abstract Class Completeness):**
 - Abstract methods in `abstract` classes now emit `unimplemented!("abstract method: ClassName::method")` stubs instead of being silently dropped. Concrete subclasses that override abstract methods compile and run correctly via the existing `_super` delegation chain.
-- `IrClass.is_abstract` flag is set by the parser when the `abstract` modifier is present; codegen uses it for better error messages.
+- `IrClass.is_abstract` flag is already set by the parser when the `abstract` modifier is present; codegen does not currently read this flag, so abstract-vs-concrete is inferred solely from whether `IrMethod.body` is `None`.
 - Inherited concrete methods and fields from abstract parent classes continue to work via the existing `_super` struct field and delegation mechanism.
 
 **Stage 34 additions (Stream Enhancements):**

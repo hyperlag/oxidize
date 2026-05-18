@@ -1937,9 +1937,12 @@ fn emit_method_with_pub(method: &IrMethod, pub_vis: bool) -> Result<TokenStream,
         None => {
             IN_STATIC_METHOD.with(|c| c.set(prev));
             SYNC_MONITOR_EXPR.with(|m| *m.borrow_mut() = prev_sync_mon);
-            // Abstract method: emit a stub with unimplemented!() so that
-            // concrete methods in the same abstract class can call it.
-            // If a subclass properly overrides, the stub is never invoked.
+            // Abstract method: emit an unimplemented!() stub so the method
+            // appears in the parent impl block and compilation succeeds.
+            // Note: there is no virtual dispatch in the _super-delegation
+            // model; concrete parent methods (and any _super.method() calls)
+            // always resolve to this parent impl, so the stub CAN still be
+            // reached even when a concrete subclass defines its own override.
             let class_name = CURRENT_CLASS_NAME.with(|cn| cn.borrow().clone());
             let msg = format!("abstract method: {}::{}", class_name, method.name);
             let ret_clause = if method.return_ty == IrType::Void {
