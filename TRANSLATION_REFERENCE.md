@@ -1234,6 +1234,11 @@ the result-carrying handle.
 | `.collect(Collectors.averagingDouble(fn))` | `.collect_averaging_double(fn)` |
 | `.collect(Collectors.summarizingInt(fn))` | `.collect_summarizing_int(fn)` |
 | `.collect(Collectors.counting())` | `.count()`                        |
+| `.toList()` (Java 16+)         | `.collect_to_list()`                 |
+| `.min(comparator)`             | `.min_by(comparator)`                |
+| `.max(comparator)`             | `.max_by(comparator)`                |
+| `.findAny()`                   | `.findAny()`                         |
+| `Stream.concat(s1, s2)`        | `s1.concat(s2)`                      |
 | `.forEach(consumer)`           | `.forEach(consumer)`                 |
 
 ### Regex (Pattern / Matcher)

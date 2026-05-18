@@ -1775,4 +1775,14 @@ Expression calculator tests complete",
             "Hello, Alice\nHello, Bob\nHello, Carol\n2\n4\n6\nAlice=90\nBob=85\nX\nY",
         );
     }
+
+    // ── Stage 34 ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_stream_enhancements() {
+        check(
+            "StreamEnhancements.java",
+            "1\n9\nap\nbanana\n8\n10\n18\n12\ntrue\nfalse\na\nb\nc\nd",
+        );
+    }
 }

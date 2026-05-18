@@ -105,8 +105,38 @@ impl<T: Clone + Default + std::fmt::Debug + 'static> JStream<T> {
     }
 
     /// Java `stream.findFirst()`.
-    pub fn findFirst(self) -> Option<T> {
-        self.data.into_iter().next()
+    pub fn findFirst(self) -> crate::optional::JOptional<T> {
+        crate::optional::JOptional::of_nullable(self.data.into_iter().next())
+    }
+
+    /// Java `stream.findAny()` — returns any element (same as findFirst for sequential streams).
+    pub fn findAny(self) -> crate::optional::JOptional<T> {
+        crate::optional::JOptional::of_nullable(self.data.into_iter().next())
+    }
+
+    /// Java `stream.min(comparator)` — returns the minimum element according to the comparator.
+    pub fn min_by<F: Fn(&T, &T) -> i32>(self, cmp: F) -> crate::optional::JOptional<T> {
+        let result = self
+            .data
+            .into_iter()
+            .reduce(|a, b| if cmp(&a, &b) <= 0 { a } else { b });
+        crate::optional::JOptional::of_nullable(result)
+    }
+
+    /// Java `stream.max(comparator)` — returns the maximum element according to the comparator.
+    pub fn max_by<F: Fn(&T, &T) -> i32>(self, cmp: F) -> crate::optional::JOptional<T> {
+        let result = self
+            .data
+            .into_iter()
+            .reduce(|a, b| if cmp(&a, &b) >= 0 { a } else { b });
+        crate::optional::JOptional::of_nullable(result)
+    }
+
+    /// Java `Stream.concat(s1, s2)` — concatenates two streams into one.
+    pub fn concat(self, other: JStream<T>) -> JStream<T> {
+        let mut data = self.data;
+        data.extend(other.data);
+        JStream { data }
     }
 
     /// Java `stream.forEach(consumer)`.

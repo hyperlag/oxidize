@@ -4508,11 +4508,16 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                             ))),
                         };
                     }
-                    // Stream.of(...) / Stream.empty()
+                    // Stream.of(...) / Stream.empty() / Stream.concat(s1, s2)
                     if name == "Stream" {
                         return match method_name.as_str() {
                             "of" => Ok(quote! { JStream::new(vec![#(#args_ts),*]) }),
                             "empty" => Ok(quote! { JStream::new(vec![]) }),
+                            "concat" => {
+                                let a = &args_ts[0];
+                                let b = &args_ts[1];
+                                Ok(quote! { (#a).concat(#b) })
+                            }
                             _ => {
                                 let m = ident(method_name);
                                 Ok(quote! { JStream::#m(#(#args_ts),*) })
@@ -4798,6 +4803,27 @@ fn emit_expr(expr: &IrExpr) -> Result<TokenStream, CodegenError> {
                 {
                     let cmp = &args_ts[0];
                     return Ok(quote! { (#recv_ts).sorted_with(#cmp) });
+                }
+
+                // stream.min(cmp) / stream.max(cmp) → min_by / max_by
+                // Guard on is_comparator_expr so JBigDecimal.max/min are not affected.
+                if (method_name == "min" || method_name == "max")
+                    && args.len() == 1
+                    && is_comparator_expr(&args[0])
+                {
+                    let cmp = &args_ts[0];
+                    let m = if method_name == "min" {
+                        quote! { min_by }
+                    } else {
+                        quote! { max_by }
+                    };
+                    return Ok(quote! { (#recv_ts).#m(#cmp) });
+                }
+
+                // stream.toList() (Java 16+) → collect_to_list()
+                // No type guard: chained stream calls may not resolve to JStream type.
+                if method_name == "toList" && args_ts.is_empty() {
+                    return Ok(quote! { (#recv_ts).collect_to_list() });
                 }
 
                 // list.sort(cmp) with 1 arg → sort_with (only for List/ArrayList receivers)
