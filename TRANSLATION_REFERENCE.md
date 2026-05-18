@@ -436,6 +436,40 @@ impl Dog {
 Parent fields are accessed through the `_super` composition field:
 `dog._super.name`.
 
+### Abstract Classes
+
+```java
+abstract class Shape {
+    String name;
+    Shape(String name) { this.name = name; }
+    abstract double area();          // no body
+    String label() { return name; }  // concrete method
+}
+class Circle extends Shape {
+    double radius;
+    Circle(double r) { super("Circle"); this.radius = r; }
+    @Override double area() { return 3.14159 * radius * radius; }
+}
+```
+
+Abstract methods are emitted as `unimplemented!("abstract method: …")` stubs in
+the parent struct's `impl` block. Subclass overrides replace the delegation stub
+with their own body, so the stub is never reached at runtime.
+
+```rust
+impl Shape {
+    pub fn area(&mut self) -> f64 {
+        unimplemented!("abstract method: Shape::area")
+    }
+    pub fn label(&mut self) -> JString { ... }
+}
+impl Circle {
+    pub fn area(&mut self) -> f64 {
+        return 3.14159_f64 * (self).radius * (self).radius;
+    }
+}
+```
+
 ### Interfaces
 
 ```java
